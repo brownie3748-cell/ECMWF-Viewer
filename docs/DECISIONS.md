@@ -15,3 +15,7 @@ where the implementation deliberately differs from it.
 | 2026-11-14 | WPSH run hours | The red line is drawn only for 00/12Z runs; 06/18Z overlays show "line: 00/12 UTC runs only". | M4: 06/18Z H about 16 gpm lower than 00/12Z on average. |
 | 2026-11-14 | WPSH centre moves | Centre moves between far-apart candidates of similar height are accepted (H = max, computation continues); only H changes > 40 gpm between consecutive 00/12Z runs are flagged. The weak secondary maximum inside the box when the core is east of 180E is accepted. | Owner review of M4. |
 | 2026-11-14 | Attribution | NOTICE checked against the ECMWF Terms of Use (CC BY 4.0 for public content, disclaimer); Natural Earth credit and a borders note added. | Owner supplied the Terms of Use text. |
+| 2026-11-14 | Manifest | Rule-based `index.json` (schema_version 1): image URLs from a path pattern; runs list steps and per-step WPSH [H, H-50]. | Owner choice; about 10 KB for 10 runs (estimated). |
+| 2026-11-14 | First deploy | Back-fill the newest 10 complete runs on the first publish run. | Owner choice. |
+| 2026-11-14 | Schedule | Poll every 30 minutes (cron 7,37 * * * *). | Owner choice. |
+| 2026-11-14 | Sources | Download order google -> ecmwf portal -> azure; aws not used. | M1: aws 503 on every download. |
