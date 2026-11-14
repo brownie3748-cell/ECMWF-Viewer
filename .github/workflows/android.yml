@@ -1,0 +1,112 @@
+name: android
+
+# Builds the Capacitor Android app.
+# - Branches / PRs: debug APK as an artifact (debug key generated on the runner, never stored).
+# - main + Run workflow with "release" ticked: release APK signed with the keystore from
+#   repository secrets, published as a GitHub Release.
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Build the signed release APK and publish a GitHub Release (main only)"
+        type: boolean
+        default: false
+  pull_request:
+    paths: ["app/**", ".github/workflows/android.yml"]
+  push:
+    branches-ignore: [main]
+    paths: ["app/**", ".github/workflows/android.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}-${{ inputs.release || false }}
+  cancel-in-progress: true
+
+jobs:
+  debug:
+    if: ${{ !inputs.release }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - run: npm ci
+      - run: npx cap sync android
+      - name: Build debug APK
+        env:
+          APP_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          export APP_VERSION_NAME="$(node -p "require('./package.json').version")-debug"
+          cd android && ./gradlew --no-daemon assembleDebug
+          ls -l app/build/outputs/apk/debug/
+          echo "Debug APK: $(du -h app/build/outputs/apk/debug/app-debug.apk | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ecmwf-viewer-debug-apk
+          path: app/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+  release:
+    if: ${{ inputs.release && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - run: npm ci
+      - run: npx cap sync android
+      - name: Build, verify and publish the signed release APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          APP_VERSION_CODE: ${{ github.run_number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for v in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!v}" ]; then echo "::error::Repository secret $v is not set (see docs/STAGE2.md)"; exit 1; fi
+          done
+          export APP_VERSION_NAME="$(node -p "require('./package.json').version")"
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/release.jks"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$ANDROID_KEYSTORE_PATH"
+          trap 'rm -f "$ANDROID_KEYSTORE_PATH"' EXIT
+          (cd android && ./gradlew --no-daemon assembleRelease)
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$BT/apksigner" verify --print-certs "$APK" | grep -v -i "sha-1"
+          TAG="v${APP_VERSION_NAME}-${APP_VERSION_CODE}"
+          OUT="$RUNNER_TEMP/ecmwf-viewer-${APP_VERSION_NAME}-${APP_VERSION_CODE}.apk"
+          cp "$APK" "$OUT"
+          gh release create "$TAG" "$OUT" --target "$GITHUB_SHA" --title "ECMWF 뷰어 $TAG" \
+            --notes "Android APK built from ${GITHUB_SHA}. Install on Android: download the .apk and allow installs from this source. Data: ECMWF open data, CC BY 4.0 (see NOTICE)."
+          echo "Released $TAG ($(du -h "$OUT" | cut -f1))" >> "$GITHUB_STEP_SUMMARY"

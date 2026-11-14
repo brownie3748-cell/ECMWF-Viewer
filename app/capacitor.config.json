@@ -1,0 +1,11 @@
+{
+  "appId": "io.github.brownie3748cell.ecmwfviewer",
+  "appName": "ECMWF 뷰어",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

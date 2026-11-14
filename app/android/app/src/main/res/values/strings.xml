@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ECMWF 뷰어</string>
+    <string name="title_activity_main">ECMWF 뷰어</string>
+    <string name="package_name">io.github.brownie3748cell.ecmwfviewer</string>
+    <string name="custom_url_scheme">io.github.brownie3748cell.ecmwfviewer</string>
+</resources>

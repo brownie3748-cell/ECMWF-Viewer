@@ -61,7 +61,7 @@ jobs:
         id: poll
         run: |
           echo "Site restored from cache: ${{ steps.restore.outputs.cache-matched-key || 'none (runs will be re-rendered from the mirrors)' }}" >> "$GITHUB_STEP_SUMMARY"
-          python -m render poll --site site --work work --time-budget-min "${{ inputs.time_budget_min || '150' }}"
+          python -m render poll --site site --work work --app-dir app/www --time-budget-min "${{ inputs.time_budget_min || '150' }}"
 
       - name: Save site
         if: steps.poll.outputs.changed == 'true'

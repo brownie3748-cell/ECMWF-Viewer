@@ -19,3 +19,7 @@ where the implementation deliberately differs from it.
 | 2026-11-14 | First deploy | Back-fill the newest 10 complete runs on the first publish run. | Owner choice. |
 | 2026-11-14 | Schedule | Poll every 30 minutes (cron 7,37 * * * *). | Owner choice. |
 | 2026-11-14 | Sources | Download order google -> ecmwf portal -> azure; aws not used. | M1: aws 503 on every download. |
+| 2026-11-14 | App identity | App name "ECMWF 뷰어", package `io.github.brownie3748cell.ecmwfviewer`. | Owner choice (name); package id default. |
+| 2026-11-14 | Web preview | The same viewer is published at `<site>/app/`. | Owner choice. |
+| 2026-11-14 | APK delivery | Signed release APK as a GitHub Release, built only from main on manual run. | Owner choice. |
+| 2026-11-14 | Past-run playback | Included in the first app version. | Owner choice. |

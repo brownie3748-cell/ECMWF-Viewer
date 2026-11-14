@@ -36,6 +36,21 @@ def prune(site: pathlib.Path, keep: set[str]) -> list[str]:
     return removed
 
 
+def sync_app(src: pathlib.Path, site: pathlib.Path) -> bool:
+    """Mirror the web app (app/www) into site/app/. Returns True if anything changed."""
+    dst = site / "app"
+    want = {p.relative_to(src): p.read_bytes() for p in src.rglob("*") if p.is_file()}
+    have = {p.relative_to(dst): p.read_bytes() for p in dst.rglob("*") if p.is_file()} if dst.exists() else {}
+    if want == have:
+        return False
+    if dst.exists():
+        shutil.rmtree(dst)
+    for rel, data in want.items():
+        (dst / rel).parent.mkdir(parents=True, exist_ok=True)
+        (dst / rel).write_bytes(data)
+    return True
+
+
 def manifest(cfg: dict) -> dict:
     return {
         "schema_version": cfg["site"]["schema_version"],
@@ -60,6 +75,7 @@ def write_manifest(cfg: dict, site: pathlib.Path) -> dict:
     (site / "NOTICE.txt").write_text((ROOT / "NOTICE").read_text())
     (site / "index.html").write_text(
         "<!doctype html><meta charset=utf-8><title>ECMWF chart viewer data</title>"
-        "<p>Static chart data for the ECMWF chart viewer app. Manifest: <a href=index.json>index.json</a>. "
+        "<p>Static chart data for the ECMWF chart viewer app. Open the viewer: <a href=app/>app/</a>. "
+        "Manifest: <a href=index.json>index.json</a>. "
         f"Latest run: {m['latest']}.</p><p>{cfg['style']['credit']} See <a href=NOTICE.txt>NOTICE</a>.</p>")
     return m
