@@ -12,7 +12,7 @@ import statistics
 
 import requests
 
-from measure.common import CFG, guarded, md_table, now_utc, save
+from measure.common import guarded, md_table, now_utc, save
 from measure.m1_sources import TIMEOUT, file_url
 
 SOURCES = ["ecmwf", "google", "azure", "aws"]
