@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f8f80">
+  <title>ECMWF 뷰어</title>
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>ECMWF 뷰어</h1>
+    <label class="run-select">
+      <span class="sr">발표 런</span>
+      <select id="run"></select>
+    </label>
+    <button id="reload" class="icon-btn" aria-label="새로고침" title="새로고침">⟳</button>
+  </header>
+
+  <nav id="charts" class="chips" aria-label="차트 선택"></nav>
+
+  <main>
+    <div id="status" class="status" hidden></div>
+
+    <section class="viewer" id="viewer">
+      <div class="zoom" id="zoom">
+        <img id="img-base" alt="" draggable="false">
+        <img id="img-overlay" alt="" draggable="false" hidden>
+      </div>
+      <div class="loading" id="loading" hidden>불러오는 중…</div>
+    </section>
+
+    <section class="timebar">
+      <div class="valid">
+        <div class="valid-kst" id="valid-kst">–</div>
+        <div class="valid-sub" id="valid-sub">–</div>
+      </div>
+      <div class="controls">
+        <button id="prev" class="btn" aria-label="6시간 전">◀</button>
+        <button id="play" class="btn primary" aria-label="재생">▶ 재생</button>
+        <button id="next" class="btn" aria-label="6시간 후">▶</button>
+      </div>
+      <input id="slider" type="range" min="0" max="0" value="0" aria-label="예보 시간">
+    </section>
+
+    <section class="toggles">
+      <label class="switch" id="wpsh-wrap">
+        <input type="checkbox" id="wpsh" checked>
+        <span>북태평양고기압선 (H−50)</span>
+      </label>
+      <div class="wpsh-info" id="wpsh-info"></div>
+      <button id="compare" class="btn wide">과거 런 비교 (같은 시각)</button>
+    </section>
+
+    <section class="help">
+      <details>
+        <summary>이 앱은?</summary>
+        <p>ECMWF(유럽중기예보센터) IFS 0.25° 공개 예보자료로 자동 생성한 예상일기도입니다.
+          공식 예보가 아니며, 자료 처리 과정에서 오류가 있을 수 있습니다.
+          새 런은 발표 후 약 7시간 뒤에 모든 예보시간이 갖춰지고, 그 뒤 30분 안팎에 반영됩니다.</p>
+      </details>
+      <details>
+        <summary>차트 설명</summary>
+        <ul>
+          <li><b>지상</b>: 해면기압 등압선(4 hPa 간격), 고기압 H·저기압 L 중심값.</li>
+          <li><b>강수</b>: 직전 3시간 누적 강수(+144h 이후는 6시간), 0.5 mm부터 표시.
+            원자료 정밀도 때문에 +117h 이후 약 0.5 mm 단위로 끊깁니다.</li>
+          <li><b>925–200</b>: 지위고도(검정 실선, gpm), 기온(°C), 바람 깃(kt).
+            500 hPa는 기온을 색으로, 나머지는 빨간 점선으로 표시합니다.</li>
+          <li><b>700 습도</b>: 상대습도 60% 이상 음영 + 지위고도.</li>
+          <li><b>수분속</b>: 수증기 수송(빨간 화살표, m/s)과 수렴(음영, 10⁻⁸ s⁻¹). 회색 실선은 발산.</li>
+        </ul>
+      </details>
+      <details>
+        <summary>북태평양고기압선이란?</summary>
+        <p>500 hPa에서 북위 10–40°, 동경 120–180° 안의 가장 높은 국지 고도 중심값 H를 찾고,
+          그보다 50 gpm 낮은 등고선을 빨간 선으로 그린 것입니다. 기상청 공식 정의가 아닌 이 앱의 작업 정의이며,
+          00·12 UTC 런에만 표시합니다(06·18 UTC 런은 고도가 체계적으로 낮게 나와 제외).</p>
+      </details>
+      <details>
+        <summary>시간 표시</summary>
+        <p>큰 글씨는 한국시간(KST), 작은 글씨는 UTC와 예보시간(+h)입니다.
+          런 이름도 한국시간으로 보여주고 괄호에 UTC를 씁니다.</p>
+      </details>
+      <details>
+        <summary>자료 출처</summary>
+        <p id="attribution">Adapted from 'ECMWF IFS 15-day Forecast Data' by ECMWF, licensed under CC BY 4.0.</p>
+        <p><a id="notice-link" href="#" target="_blank" rel="noopener">라이선스·고지 전문 보기</a></p>
+      </details>
+    </section>
+  </main>
+
+  <dialog id="compare-dlg" class="sheet">
+    <div class="sheet-head">
+      <div>
+        <div class="sheet-title" id="cmp-title">과거 런 비교</div>
+        <div class="sheet-sub" id="cmp-sub"></div>
+      </div>
+      <button class="icon-btn" id="cmp-close" aria-label="닫기">✕</button>
+    </div>
+    <div class="viewer small">
+      <div class="zoom" id="cmp-zoom">
+        <img id="cmp-base" alt="" draggable="false">
+        <img id="cmp-overlay" alt="" draggable="false" hidden>
+      </div>
+    </div>
+    <div class="cmp-label" id="cmp-label">–</div>
+    <div class="controls">
+      <button id="cmp-prev" class="btn" aria-label="이전 런">◀</button>
+      <button id="cmp-play" class="btn primary">▶ 재생</button>
+      <button id="cmp-next" class="btn" aria-label="다음 런">▶</button>
+    </div>
+    <div class="dots" id="cmp-dots"></div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

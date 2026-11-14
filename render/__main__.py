@@ -66,11 +66,13 @@ def cmd_poll(args, cfg):
         meta = pipeline.render_run(cfg, src, c, sitedir, work, cfg_path=args.config)
         rendered.append(meta)
     m = site.write_manifest(cfg, sitedir)
-    changed = bool(rendered or removed)
+    app_changed = site.sync_app(pathlib.Path(args.app_dir), sitedir) if args.app_dir else False
+    changed = bool(rendered or removed or app_changed)
     _gh_output(changed=str(changed).lower())
     lines = ["## Poll result", "",
              f"Complete runs in window: {sorted(target)}", f"Removed: {removed or 'none'}",
              f"Skipped (time budget, next poll): {skipped or 'none'}",
+             f"Web app updated: {app_changed}",
              f"Runs on site: {[r['run'] for r in m['runs']]}", ""]
     if rendered:
         lines += ["| run | images | MB | download s | wall s | render s (sum over workers) | sources |",
@@ -112,6 +114,7 @@ def main(argv=None):
     p.add_argument("--site", default="site")
     p.add_argument("--work", default="work")
     p.add_argument("--time-budget-min", type=float, default=150)
+    p.add_argument("--app-dir", default=None, help="web app to mirror into <site>/app/ (e.g. app/www)")
     p = sub.add_parser("render-run", help="render one run (optionally selected steps)")
     p.add_argument("--run", required=True)
     p.add_argument("--steps", default=None, help="comma-separated, e.g. 0,6,150")

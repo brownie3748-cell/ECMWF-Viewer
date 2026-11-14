@@ -68,5 +68,18 @@ class SiteOps(unittest.TestCase):
             self.assertEqual([r["run"] for r in m["runs"]], ["2026111300", "2026111306", "2026111312"])
 
 
+class AppSync(unittest.TestCase):
+    def test_sync_app_detects_changes(self):
+        with tempfile.TemporaryDirectory() as t:
+            src, s = pathlib.Path(t) / "www", pathlib.Path(t) / "site"
+            src.mkdir()
+            (src / "index.html").write_text("a")
+            self.assertTrue(site.sync_app(src, s))
+            self.assertFalse(site.sync_app(src, s))
+            (src / "index.html").write_text("b")
+            self.assertTrue(site.sync_app(src, s))
+            self.assertEqual((s / "app" / "index.html").read_text(), "b")
+
+
 if __name__ == "__main__":
     unittest.main()
