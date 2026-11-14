@@ -1,0 +1,30 @@
+ECMWF chart viewer
+==================
+
+Weather charts produced by this project are derived from ECMWF open data.
+
+Data source
+-----------
+ECMWF IFS open data (HRES, 0.25 deg), https://data.ecmwf.int/forecasts/
+and its cloud mirrors (AWS, Azure, Google Cloud).
+
+Copyright: European Centre for Medium-Range Weather Forecasts (ECMWF).
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0),
+https://creativecommons.org/licenses/by/4.0/ , together with the ECMWF Terms of Use.
+
+Attribution (shown on every chart):
+  Adapted from 'ECMWF IFS 15-day Forecast Data' by ECMWF, licensed under CC BY 4.0,
+  available at https://data.ecmwf.int/forecasts/
+
+Modifications
+-------------
+The data have been modified: fields are cropped to regional domains, derived
+quantities are computed (precipitation accumulated over 3 h / 6 h windows from the
+cumulative total precipitation, moisture-flux divergence, a working definition of
+the west-Pacific subtropical-high edge), and the results are rendered as images.
+These derived products are not produced, checked or endorsed by ECMWF.
+
+No warranty: the charts are provided "as is" without any warranty.
+
+TODO (Stage 0 open item): re-check the exact attribution and disclaimer wording
+against the current ECMWF Terms of Use before the first public deploy.

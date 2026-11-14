@@ -1,0 +1,9 @@
+# Top-level runtime dependencies (pinned). Full lock: requirements.lock
+ecmwf-opendata==0.3.35
+eccodes==2.50.1
+numpy==2.5.4
+scipy==1.18.1
+matplotlib==3.11.2
+Cartopy==0.26.0
+pillow==13.0.0
+requests==2.34.2

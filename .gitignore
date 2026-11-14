@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+work/
+site/
+*.grib2
+*.idx
