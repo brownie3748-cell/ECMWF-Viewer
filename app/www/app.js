@@ -10,7 +10,7 @@ const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 
 // Korean tab labels; charts not listed here fall back to the manifest title.
 const LABELS = {
-  msl: "지상", tp: "강수", gz925: "925", gz850: "850", gz700: "700", gz500: "500",
+  msl: "지상·강수", gz925: "925", gz850: "850", gz700: "700", gz500: "500",
   gz300: "300", gz200: "200", rh700: "700 습도", mfc925: "925 수분속", mfc850: "850 수분속",
   gz500_wide: "500 광역",
 };

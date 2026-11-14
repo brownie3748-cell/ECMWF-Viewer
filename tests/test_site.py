@@ -36,10 +36,11 @@ class Steps(unittest.TestCase):
         self.assertEqual([x.hour for x in c], [12, 6, 0])
 
     def test_image_count_per_run(self):
-        # 14 charts per step, no tp at step 0 -> 573 / 349 images
+        # 13 charts per step (precipitation is part of msl) -> 533 / 325 images
         n_charts = len(CFG["site"]["charts"])
-        self.assertEqual(n_charts, 14)
-        self.assertEqual(41 * n_charts - 1, 573)
+        self.assertEqual(n_charts, 13)
+        self.assertNotIn("tp", [c["id"] for c in CFG["site"]["charts"]])
+        self.assertEqual(41 * n_charts, 533)
 
 
 class SiteOps(unittest.TestCase):

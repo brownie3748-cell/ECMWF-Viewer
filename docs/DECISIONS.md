@@ -23,3 +23,6 @@ where the implementation deliberately differs from it.
 | 2026-11-14 | Web preview | The same viewer is published at `<site>/app/`. | Owner choice. |
 | 2026-11-14 | APK delivery | Signed release APK as a GitHub Release, built only from main on manual run. | Owner choice. |
 | 2026-11-14 | Past-run playback | Included in the first app version. | Owner choice. |
+| 2026-11-14 | 925/850/700 temperature | Style C: fixed rainbow colour scale (same colour for the same temperature at every level), white isotherms every 3 deg C, black coastlines/borders; gh contours and barbs unchanged. gz500 keeps style A. | Owner request with a public reference chart (colour reference only, not committed). |
+| 2026-11-14 | Surface + precipitation | `msl` now shades the 3 h / 6 h precipitation under the MSLP contours; the separate `tp` chart is no longer published (13 charts per step). `render_version` 2 re-renders the runs already on the site. | Owner request. |
+| 2026-11-14 | 700 hPa RH | Continuous brown (dry) -> white (~50 %) -> teal (moist) shading over 0-100 % in 5 % steps, black coastlines; gh contours unchanged. | Owner request with a public reference chart (colour reference only, not committed). |

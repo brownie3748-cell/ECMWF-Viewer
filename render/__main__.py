@@ -51,7 +51,10 @@ def cmd_poll(args, cfg):
         if len(complete) >= cfg["site"]["retention_runs"]:
             break
     target = {f"{c:%Y%m%d%H}" for c in complete}
-    have = site.complete_runs(sitedir)
+    rv = cfg["site"]["render_version"]
+    all_runs = site.complete_runs(sitedir)
+    have = {r: m for r, m in all_runs.items() if m.get("render_version", 1) == rv}
+    outdated = sorted(set(all_runs) - set(have))
     # 1) prune first (runs that left the window and partial leftovers)
     removed = site.prune(sitedir, target & set(have))
     # 2) render missing runs, newest first, within the time budget
@@ -70,7 +73,7 @@ def cmd_poll(args, cfg):
     changed = bool(rendered or removed or app_changed)
     _gh_output(changed=str(changed).lower())
     lines = ["## Poll result", "",
-             f"Complete runs in window: {sorted(target)}", f"Removed: {removed or 'none'}",
+             f"Complete runs in window: {sorted(target)}", f"Removed: {removed or 'none'} (outdated render_version: {outdated or 'none'})",
              f"Skipped (time budget, next poll): {skipped or 'none'}",
              f"Web app updated: {app_changed}",
              f"Runs on site: {[r['run'] for r in m['runs']]}", ""]

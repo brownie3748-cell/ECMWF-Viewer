@@ -43,8 +43,9 @@ def kst(t: dt.datetime, cfg) -> dt.datetime:
 class Frame:
     """One chart image of a given domain with the standard header/footer."""
 
-    def __init__(self, cfg: dict, domain: str, transparent: bool = False):
+    def __init__(self, cfg: dict, domain: str, transparent: bool = False, strong_coast: bool = False):
         self.cfg = cfg
+        self.strong_coast = strong_coast
         self.dom = cfg["domains"][domain]
         self.domain = domain
         lay = cfg["layout"]
@@ -78,8 +79,10 @@ class Frame:
         st = self.cfg["style"]
         d = self.dom
         coast, borders = _features(st["coast_resolution"])
-        self.ax.add_feature(coast, edgecolor=st["coast_color"], linewidth=st["coast_width"], zorder=3)
-        self.ax.add_feature(borders, edgecolor=st["border_color"], linewidth=st["border_width"], zorder=3)
+        sfx = "_strong" if self.strong_coast else ""
+        self.ax.add_feature(coast, edgecolor=st["coast_color" + sfx], linewidth=st["coast_width" + sfx], zorder=3)
+        self.ax.add_feature(borders, edgecolor=st["border_color" + sfx], linewidth=st["border_width" + sfx],
+                            zorder=3)
         g = d["grid_step_deg"]
         xt = np.arange(np.ceil(d["lon_min"] / g) * g, d["lon_max"] + 1e-6, g)
         yt = np.arange(np.ceil(d["lat_min"] / g) * g, d["lat_max"] + 1e-6, g)
@@ -147,32 +150,9 @@ def _underground(F, level):
 
 
 # ---------------------------------------------------------------------- charts
-def chart_msl(cfg, F, run, step):
-    c = cfg["charts"]["msl"]
-    fr = Frame(cfg, "default")
-    S = _sub(F, fr)
-    p = S[("msl", 0)] / 100.0
-    lv = _levels(p, c["interval"])
-    widths = [1.6 if (v % c["bold_every"] == 0) else 0.8 for v in lv]
-    cs = fr.ax.contour(S.lon, S.lat, p, levels=lv, colors="k", linewidths=widths, transform=PC, zorder=4)
-    fr.ax.clabel(cs, fmt="%d", fontsize=8, inline_spacing=2)
-    d = fr.dom
-    for kind, sym, col in (("max", "H", "#0033cc"), ("min", "L", "#cc0000")):
-        ext = derive.local_extrema(p, S.lat, S.lon, c["hl_window_deg"], cfg["data"]["grid_deg"], kind=kind,
-                                   edge_exclude_deg=c["hl_edge_exclude_deg"], box=d)
-        for la, lo, val in ext:
-            fr.ax.text(lo, la, sym, color=col, fontsize=16, fontweight="bold", ha="center", va="center",
-                       transform=PC, zorder=6)
-            fr.ax.text(lo, la - 0.9, f"{val:.0f}", color=col, fontsize=9, fontweight="bold", ha="center",
-                       va="center", transform=PC, zorder=6)
-    fr.header(c["title"], run, step)
-    return fr
-
-
-def chart_tp(cfg, F_now, F_prev, run, step, window_h):
+def _tp_fill(cfg, fr, S, P):
+    """Shade precipitation accumulated between P and S (mm) with the tp colour table + colour bar."""
     c = cfg["charts"]["tp"]
-    fr = Frame(cfg, "default")
-    S, P = _sub(F_now, fr), _sub(F_prev, fr)
     acc = derive.tp_accum_mm(S[("tp", 0)], P[("tp", 0)])
     cmap = mcolors.ListedColormap(c["colors"][:-1])
     cmap.set_over(c["colors"][-1])
@@ -180,9 +160,53 @@ def chart_tp(cfg, F_now, F_prev, run, step, window_h):
     cf = fr.ax.contourf(S.lon, S.lat, acc, levels=c["levels"], cmap=cmap, norm=norm, extend="max",
                         transform=PC, zorder=1)
     fr.colorbar(cf, label="mm", ticks=c["levels"])
+    return acc
+
+
+def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
+    """MSLP contours + H/L centres; with F_prev also the precipitation of the preceding window."""
+    c = cfg["charts"]["msl"]
+    fr = Frame(cfg, "default")
+    S = _sub(F, fr)
+    if F_prev is not None:
+        _tp_fill(cfg, fr, S, _sub(F_prev, fr))
+    p = S[("msl", 0)] / 100.0
+    lv = _levels(p, c["interval"])
+    widths = [1.6 if (v % c["bold_every"] == 0) else 0.8 for v in lv]
+    cs = fr.ax.contour(S.lon, S.lat, p, levels=lv, colors="k", linewidths=widths, transform=PC, zorder=4)
+    fr.ax.clabel(cs, fmt="%d", fontsize=8, inline_spacing=2)
+    halo = [patheffects.withStroke(linewidth=3, foreground="white")]
+    d = fr.dom
+    for kind, sym, col in (("max", "H", "#0033cc"), ("min", "L", "#cc0000")):
+        ext = derive.local_extrema(p, S.lat, S.lon, c["hl_window_deg"], cfg["data"]["grid_deg"], kind=kind,
+                                   edge_exclude_deg=c["hl_edge_exclude_deg"], box=d)
+        for la, lo, val in ext:
+            fr.ax.text(lo, la, sym, color=col, fontsize=16, fontweight="bold", ha="center", va="center",
+                       transform=PC, zorder=6, path_effects=halo)
+            fr.ax.text(lo, la - 0.9, f"{val:.0f}", color=col, fontsize=9, fontweight="bold", ha="center",
+                       va="center", transform=PC, zorder=6, path_effects=halo)
+    title = c["title_with_tp"].format(window=window_h) if F_prev is not None else c["title"]
+    fr.header(title, run, step)
+    return fr
+
+
+def chart_tp(cfg, F_now, F_prev, run, step, window_h):
+    """Precipitation only (kept for measurements; the published msl chart includes it)."""
+    c = cfg["charts"]["tp"]
+    fr = Frame(cfg, "default")
+    acc = _tp_fill(cfg, fr, _sub(F_now, fr), _sub(F_prev, fr))
     title = c["title_short"] if window_h == cfg["data"]["tp_short_accum_h"] else c["title_long"]
     fr.header(title, run, step)
     return fr, acc
+
+
+def temp_colormap(cfg):
+    """Fixed temperature colour scale (style C): returns (cmap, norm)."""
+    a = cfg["charts"]["gz"]["fill_c"]["anchors"]
+    lo, hi = a[0][0], a[-1][0]
+    cmap = mcolors.LinearSegmentedColormap.from_list(
+        "temp_c", [((t - lo) / (hi - lo), col) for t, col in a], N=512)
+    return cmap, mcolors.Normalize(vmin=lo, vmax=hi)
 
 
 def temp_style_for(cfg, level):
@@ -194,7 +218,7 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
     c = cfg["charts"]["gz"]
     temp_style = temp_style or temp_style_for(cfg, level)
     lvkey = str(level)
-    fr = Frame(cfg, domain)
+    fr = Frame(cfg, domain, strong_coast=(temp_style == "C"))
     S = _sub(F, fr)
     gh = S[("gh", level)].copy()
     t = S[("t", level)] - 273.15
@@ -205,7 +229,20 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
         for a in (gh, t, u, v):
             a[m] = np.nan
     ti = c["t_interval"][lvkey]
-    if temp_style == "A":
+    barb_color = "#1f3d7a"
+    if temp_style == "C":
+        fc = c["fill_c"]
+        lo, hi = c["t_fill_range"][lvkey]
+        cmap, norm = temp_colormap(cfg)
+        tl = np.arange(lo, hi + fc["step"] / 2, fc["step"])
+        cf = fr.ax.contourf(S.lon, S.lat, t, levels=tl, cmap=cmap, norm=norm, extend="both", transform=PC,
+                            zorder=1)
+        fr.colorbar(cf, label="deg C", ticks=[x for x in tl if x % 5 == 0])
+        iso = _levels(t, ti)
+        fr.ax.contour(S.lon, S.lat, t, levels=iso, colors=fc["isotherm_color"], linewidths=fc["isotherm_width"],
+                      transform=PC, zorder=2)
+        barb_color = fc["barb_color"]
+    elif temp_style == "A":
         lo, hi = c["t_fill_range"][lvkey]
         tl = np.arange(lo, hi + ti / 2, ti)
         cf = fr.ax.contourf(S.lon, S.lat, t, levels=tl, cmap=c["t_cmap"], extend="both", transform=PC,
@@ -221,7 +258,7 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
     fr.ax.clabel(cs, fmt="%d", fontsize=8)
     n = fr.dom["barb_every"]
     sl = (slice(None, None, n), slice(None, None, n))
-    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color="#1f3d7a",
+    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=barb_color,
                 transform=PC, zorder=6)
     ttl = f"{level}hPa Geopotential Height (gpm), Temperature (C), Wind (kt)"
     fr.header(ttl, run, step)
@@ -230,12 +267,14 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
 
 def chart_rh700(cfg, F, run, step):
     c = cfg["charts"]["rh700"]
-    fr = Frame(cfg, "default")
+    fr = Frame(cfg, "default", strong_coast=True)
     S = _sub(F, fr)
     rh = np.clip(S[("r", 700)], 0, 100)   # IFS r can be <0 or >100 (ice saturation)
-    cf = fr.ax.contourf(S.lon, S.lat, rh, levels=c["levels"], colors=c["colors"], extend="neither",
-                        transform=PC, zorder=1)
-    fr.colorbar(cf, label="%", ticks=c["levels"])
+    a = c["anchors"]
+    cmap = mcolors.LinearSegmentedColormap.from_list("rh", [(v / 100, col) for v, col in a], N=256)
+    lv = np.arange(0, 100 + c["step"] / 2, c["step"])
+    cf = fr.ax.contourf(S.lon, S.lat, rh, levels=lv, cmap=cmap, vmin=0, vmax=100, transform=PC, zorder=1)
+    fr.colorbar(cf, label="%", ticks=lv[::2])
     gh = S[("gh", 700)]
     cs = fr.ax.contour(S.lon, S.lat, gh, levels=_levels(gh, cfg["charts"]["gz"]["gh_interval"]["700"]),
                        colors="k", linewidths=1.0, transform=PC, zorder=5)
