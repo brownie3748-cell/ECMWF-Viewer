@@ -31,7 +31,7 @@ runs/<YYYYMMDDHH>/<chart>_<SSS>.png
 runs/<YYYYMMDDHH>/meta.json      per-run steps, WPSH values, timings
 ```
 
-Images are palette PNG (PNG8). `tp` has no image at step 0. 573 images per 00/12Z run, 349 per 06/18Z run.
+Images are palette PNG (PNG8). 13 charts per step (precipitation is drawn in `msl` since render_version 2): 533 images per 00/12Z run, 325 per 06/18Z run. Runs whose `meta.json` has an older `render_version` are deleted and re-rendered by the next poll.
 
 ## Manifest `index.json` (schema_version 1)
 
@@ -44,8 +44,7 @@ Images are palette PNG (PNG8). `tp` has no image at step 0. 573 images per 00/12
   "kst_offset_h": 9,
   "path": "runs/{run}/{chart}_{step:03d}.png",
   "charts": [
-    {"id": "msl", "title": "MSLP", "domain": "default"},
-    {"id": "tp", "title": "Precipitation", "domain": "default", "min_step": 6},
+    {"id": "msl", "title": "MSLP + precipitation", "domain": "default"},
     {"id": "wpsh500", "title": "WPSH line", "level": 500, "domain": "default", "overlay_of": "gz500"}
   ],
   "runs": [
@@ -58,7 +57,7 @@ Images are palette PNG (PNG8). `tp` has no image at step 0. 573 images per 00/12
 
 - `runs` is sorted oldest → newest. Image URL = `path` with `run`, `chart`, `step`.
 - Past-run playback for a chart at valid time V: every run R with `(V - R) in steps`
-  (and `step >= min_step`), oldest to newest.
+  (and `step >= min_step` when a chart defines it), oldest to newest.
 - `wpsh`: per step `[H, H-50]` in gpm, `null` for "no centre"; the whole field is `null` for
   06/18Z runs (no red line is drawn for them).
 

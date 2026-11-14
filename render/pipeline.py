@@ -28,9 +28,10 @@ def _init_worker(cfg_path: str | None):
 
 
 def chart_jobs(cfg, F, P, run, step):
-    """{chart_id: callable returning a plot.Frame} for one step (tp only when P is given)."""
+    """{chart_id: callable returning a plot.Frame} for one step (msl includes precipitation when P is given)."""
+    window = fetch.tp_window(step, cfg)
     jobs = {
-        "msl": lambda: plot.chart_msl(cfg, F, run, step),
+        "msl": lambda: plot.chart_msl(cfg, F, run, step, P, window if P is not None else None),
         "rh700": lambda: plot.chart_rh700(cfg, F, run, step),
         "mfc925": lambda: plot.chart_mfc(cfg, F, 925, run, step)[0],
         "mfc850": lambda: plot.chart_mfc(cfg, F, 850, run, step)[0],
@@ -38,8 +39,6 @@ def chart_jobs(cfg, F, P, run, step):
     }
     for lv in (925, 850, 700, 500, 300, 200):
         jobs[f"gz{lv}"] = (lambda lv=lv: plot.chart_gz(cfg, F, lv, run, step))
-    if P is not None:
-        jobs["tp"] = lambda: plot.chart_tp(cfg, F, P, run, step, fetch.tp_window(step, cfg))[0]
     return jobs
 
 
@@ -114,6 +113,7 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
         "run": run_s,
         "steps": [r["step"] for r in results],
         "wpsh": wpsh,
+        "render_version": cfg["site"]["render_version"],
         "rendered_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sources": sorted(srcs),
         "images": sum(r["images"] for r in results),
