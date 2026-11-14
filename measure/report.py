@@ -7,7 +7,7 @@ import sys
 
 from measure.common import RESULTS, load
 
-ORDER = ["install", "m1", "m2", "m3", "m4", "m5"]
+ORDER = ["install", "m1", "m2", "m3", "m4", "m5", "m7"]
 
 
 def main():

@@ -3,6 +3,10 @@ name: measure (Stage 0)
 # Stage 0 measurements (manual since Stage 1; ci.yml checks branches). No deploy, no publishing.
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: "Run only this measurement (e.g. m7); empty = all"
+        default: ""
 
 permissions:
   contents: read
@@ -47,24 +51,34 @@ jobs:
         run: python -m measure.install_check
 
       - name: M1 sources
+        if: inputs.only == '' || inputs.only == 'm1'
         continue-on-error: true
         run: python -m measure.m1_sources
 
       - name: M2 fields
+        if: inputs.only == '' || inputs.only == 'm2'
         continue-on-error: true
         run: python -m measure.m2_fields
 
       - name: M3 render
+        if: inputs.only == '' || inputs.only == 'm3'
         continue-on-error: true
         run: python -m measure.m3_render
 
       - name: M5 MFC sanity
+        if: inputs.only == '' || inputs.only == 'm5'
         continue-on-error: true
         run: python -m measure.m5_mfc
 
       - name: M4 WPSH rule
+        if: inputs.only == '' || inputs.only == 'm4'
         continue-on-error: true
         run: python -m measure.m4_wpsh
+
+      - name: M7 per-step publication delay
+        if: inputs.only == '' || inputs.only == 'm7'
+        continue-on-error: true
+        run: python -m measure.m7_stage_delay
 
       - name: Report to job summary
         if: always()
