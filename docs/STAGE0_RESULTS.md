@@ -17,3 +17,18 @@ from measured per-step numbers.
 | M6 Pages | 100 MB site deployed in 8 s; JSON and PNG served with `Access-Control-Allow-Origin: *`, `Cache-Control: max-age=600`, ETag and Last-Modified |
 
 Decisions taken from these results: `docs/DECISIONS.md`.
+
+## M7 per-step publication delay (2026-11-14, measured on a runner)
+
+Last-Modified of each step's `.index` file minus run time, median over the 6 runs of each group before
+14:41 UTC. Every source publishes **all steps of a run at the same time**:
+
+| source | 00/12Z runs (+0h ... +240h) | 06/18Z runs (+0h ... +144h) |
+|---|---|---|
+| ecmwf portal | 7.57 h at every step | 6.45 h at every step |
+| google | 7.57-7.59 h | 6.47-6.52 h |
+| azure | 7.57-7.58 h | 6.45-6.46 h |
+| aws | 7.57 h | 6.45-6.46 h |
+
+Consequence: publishing the early forecast steps first would not make anything available sooner, so the
+staged (72 h / 144 h / 240 h) publication idea was not implemented.

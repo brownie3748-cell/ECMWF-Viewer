@@ -174,7 +174,8 @@ def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
     lv = _levels(p, c["interval"])
     widths = [1.6 if (v % c["bold_every"] == 0) else 0.8 for v in lv]
     cs = fr.ax.contour(S.lon, S.lat, p, levels=lv, colors="k", linewidths=widths, transform=PC, zorder=4)
-    fr.ax.clabel(cs, fmt="%d", fontsize=8, inline_spacing=2)
+    fr.ax.clabel(cs, levels=[v for v in cs.levels if v % c["label_every"] == 0], fmt="%d", fontsize=8,
+                 inline_spacing=2)
     halo = [patheffects.withStroke(linewidth=3, foreground="white")]
     d = fr.dom
     for kind, sym, col in (("max", "H", "#0033cc"), ("min", "L", "#cc0000")):
@@ -218,7 +219,8 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
     c = cfg["charts"]["gz"]
     temp_style = temp_style or temp_style_for(cfg, level)
     lvkey = str(level)
-    fr = Frame(cfg, domain, strong_coast=(temp_style == "C"))
+    wind_fill = level in c.get("wind_fill", {}).get("levels", [])
+    fr = Frame(cfg, domain, strong_coast=(temp_style == "C" or wind_fill))
     S = _sub(F, fr)
     gh = S[("gh", level)].copy()
     t = S[("t", level)] - 273.15
@@ -249,10 +251,24 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
                             zorder=1, alpha=0.85)
         fr.colorbar(cf, label="deg C", ticks=tl[::2])
     else:
+        iso_col = "#d00000"
+        if wind_fill:
+            wf = c["wind_fill"]
+            spd = np.hypot(u, v)
+            a = wf["anchors"]
+            cmap = mcolors.LinearSegmentedColormap.from_list(
+                "wspd", [(k / wf["max"], col) for k, col in a], N=512)
+            cmap.set_over(a[-1][1])
+            wl = np.arange(0, wf["max"] + wf["step"] / 2, wf["step"])
+            cf = fr.ax.contourf(S.lon, S.lat, spd, levels=wl, cmap=cmap, vmin=0, vmax=wf["max"], extend="max",
+                                transform=PC, zorder=1)
+            fr.colorbar(cf, label="kt", ticks=wl[::5])
+            iso_col = wf["isotherm_color"]
+            barb_color = wf["barb_color"]
         tl = _levels(t, ti)
-        cs = fr.ax.contour(S.lon, S.lat, t, levels=tl, colors="#d00000", linewidths=0.8, linestyles="--",
+        cs = fr.ax.contour(S.lon, S.lat, t, levels=tl, colors=iso_col, linewidths=0.8, linestyles="--",
                            transform=PC, zorder=4)
-        fr.ax.clabel(cs, fmt="%d", fontsize=7, colors="#d00000")
+        fr.ax.clabel(cs, fmt="%d", fontsize=7, colors=iso_col)
     hl = _levels(gh, c["gh_interval"][lvkey])
     cs = fr.ax.contour(S.lon, S.lat, gh, levels=hl, colors="k", linewidths=1.1, transform=PC, zorder=5)
     fr.ax.clabel(cs, fmt="%d", fontsize=8)
@@ -260,7 +276,8 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
     sl = (slice(None, None, n), slice(None, None, n))
     fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=barb_color,
                 transform=PC, zorder=6)
-    ttl = f"{level}hPa Geopotential Height (gpm), Temperature (C), Wind (kt)"
+    ttl = (f"{level}hPa Height (gpm), Temperature (C), Wind Speed (kt)" if wind_fill
+           else f"{level}hPa Geopotential Height (gpm), Temperature (C), Wind (kt)")
     fr.header(ttl, run, step)
     return fr
 

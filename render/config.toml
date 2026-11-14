@@ -91,7 +91,8 @@ kst_offset_h = 9
 [charts.msl]
 title = "Mean Sea Level Pressure (hPa)"
 title_with_tp = "MSLP (hPa) and {window}h Precipitation (mm)"
-interval = 4
+interval = 2
+label_every = 4                 # label only isobars that are multiples of this (hPa)
 bold_every = 20
 hl_window_deg = 5.0             # +/- window for H/L detection
 hl_edge_exclude_deg = 1.0
@@ -115,6 +116,22 @@ temp_style_by_level = { 925 = "C", 850 = "C", 700 = "C", 500 = "A" }
 gz500_variants = []             # Stage 0 A/B review done
 t_cmap = "RdYlBu_r"
 mask_underground = [925, 850]
+
+[charts.gz.wind_fill]
+# Wind-speed shading for upper levels; isotherms switch to dark grey dashed lines there.
+levels = [300, 200]
+step = 5                        # kt
+max = 200
+isotherm_color = "#3a3a3a"
+barb_color = "#1a1a1a"
+# speed (kt) -> colour: grey < 50, pale -> deep yellow 50-75, orange 75-100, red 100-150, purple above
+anchors = [
+  [0, "#ffffff"], [49.9, "#cfcfcf"],
+  [50, "#fff4b8"], [75, "#f5c000"],
+  [75.1, "#ffbf66"], [100, "#e0620b"],
+  [100.1, "#ff6b5b"], [150, "#9e0b0b"],
+  [150.1, "#b77fd6"], [200, "#4b1a7a"],
+]
 
 [charts.gz.fill_c]
 step = 1                        # shading interval, deg C
@@ -172,7 +189,7 @@ lookback_runs = 16              # how many past 6-hourly cycles to consider when
 workers = 4                     # parallel render processes
 path = "runs/{run}/{chart}_{step:03d}.png"
 schema_version = 1
-render_version = 2              # bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 3              # bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
