@@ -267,12 +267,14 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
 
 def chart_rh700(cfg, F, run, step):
     c = cfg["charts"]["rh700"]
-    fr = Frame(cfg, "default")
+    fr = Frame(cfg, "default", strong_coast=True)
     S = _sub(F, fr)
     rh = np.clip(S[("r", 700)], 0, 100)   # IFS r can be <0 or >100 (ice saturation)
-    cf = fr.ax.contourf(S.lon, S.lat, rh, levels=c["levels"], colors=c["colors"], extend="neither",
-                        transform=PC, zorder=1)
-    fr.colorbar(cf, label="%", ticks=c["levels"])
+    a = c["anchors"]
+    cmap = mcolors.LinearSegmentedColormap.from_list("rh", [(v / 100, col) for v, col in a], N=256)
+    lv = np.arange(0, 100 + c["step"] / 2, c["step"])
+    cf = fr.ax.contourf(S.lon, S.lat, rh, levels=lv, cmap=cmap, vmin=0, vmax=100, transform=PC, zorder=1)
+    fr.colorbar(cf, label="%", ticks=lv[::2])
     gh = S[("gh", 700)]
     cs = fr.ax.contour(S.lon, S.lat, gh, levels=_levels(gh, cfg["charts"]["gz"]["gh_interval"]["700"]),
                        colors="k", linewidths=1.0, transform=PC, zorder=5)

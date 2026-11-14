@@ -132,8 +132,13 @@ anchors = [
 
 [charts.rh700]
 title = "700hPa Relative Humidity (%) and Geopotential Height (gpm)"
-levels = [60, 70, 80, 90, 100]
-colors = ["#d9f0d3", "#a6dba0", "#5aae61", "#1b7837"]
+# continuous brown (dry) -> white (~50 %) -> teal/green (moist), like a BrBG scale
+step = 5                        # shading interval, %
+anchors = [
+  [0, "#3d2208"], [10, "#6b3f12"], [20, "#9a6324"], [30, "#c49a5a"], [40, "#e6cf9e"],
+  [50, "#f5f0e4"], [60, "#cfe8e2"], [70, "#8ccdbf"], [80, "#3fa392"], [90, "#137a6c"],
+  [100, "#00443c"],
+]
 
 [charts.mfc]
 title = "{level}hPa Moisture Flux(m/s) and Convergence(E-8/s)"
