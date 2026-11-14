@@ -1,0 +1,146 @@
+# Single configuration file for the ECMWF chart renderer.
+# Domains, charts, thresholds and styling all live here.
+
+[data]
+model = "ifs"
+resolution = "0p25"            # "0p25" now; "0p1" is Stage 3
+grid_deg = 0.25
+sources = ["ecmwf", "aws", "azure", "google"]
+preferred_source = "aws"
+max_step_main = 240            # 00/12Z runs
+max_step_short = 144           # 06/18Z runs
+publish_every_h = 6
+tp_short_accum_h = 3           # accumulation window for step <= tp_switch_h
+tp_long_accum_h = 6            # accumulation window for step > tp_switch_h
+tp_switch_h = 144
+# Region read from the global grid (with margin around all domains), deg.
+read_region = { lat_min = 0.0, lat_max = 60.0, lon_min = 90.0, lon_max = 190.0 }
+
+# Fields fetched per published step (30 fields total).
+[[data.groups]]
+levtype = "sfc"
+param = ["msl", "sp", "tp"]
+
+[[data.groups]]
+levtype = "pl"
+levelist = [925, 850]
+param = ["gh", "t", "u", "v", "q"]
+
+[[data.groups]]
+levtype = "pl"
+levelist = [700]
+param = ["gh", "t", "u", "v", "r"]
+
+[[data.groups]]
+levtype = "pl"
+levelist = [500, 300, 200]
+param = ["gh", "t", "u", "v"]
+
+[domains.default]
+lat_min = 25.0
+lat_max = 48.0
+lon_min = 110.0
+lon_max = 140.0
+map_width_px = 900
+grid_step_deg = 5               # graticule spacing
+barb_every = 8                  # grid points between wind barbs
+vector_every = 3                # grid points between MFC vectors
+
+[domains.wide]
+lat_min = 10.0
+lat_max = 50.0
+lon_min = 100.0
+lon_max = 180.0
+map_width_px = 1200
+grid_step_deg = 10
+barb_every = 12
+vector_every = 6
+
+[layout]
+dpi = 100
+margin_left_px = 56
+margin_right_px = 100          # colour-bar slot is always reserved
+margin_top_px = 62
+margin_bottom_px = 64
+colorbar_width_px = 16
+colorbar_pad_px = 12
+
+[style]
+font_family = "DejaVu Sans"
+title_size = 13
+label_size = 9
+footer_size = 10
+credit_size = 7
+model_label = "ECMWF IFS 0.25deg"
+credit = "Adapted from 'ECMWF IFS 15-day Forecast Data' by ECMWF, CC BY 4.0 (https://data.ecmwf.int/forecasts/). Modified: cropped, derived and rendered."
+coast_resolution = "50m"       # Natural Earth: 110m / 50m / 10m
+coast_color = "#4d4d4d"
+coast_width = 0.65
+border_color = "#707070"
+border_width = 0.5
+grid_color = "#999999"
+grid_width = 0.4
+utc_color = "#d00000"
+kst_offset_h = 9
+
+[charts.msl]
+title = "Mean Sea Level Pressure (hPa)"
+interval = 4
+bold_every = 20
+hl_window_deg = 5.0             # +/- window for H/L detection
+hl_edge_exclude_deg = 1.0
+
+[charts.tp]
+title_short = "3h Accumulated Precipitation (mm)"
+title_long = "6h Accumulated Precipitation (mm)"
+levels = [0.5, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 70]
+colors = ["#b4e0fb", "#80c4f2", "#4ea3e6", "#2a7fd4", "#1a9e3c",
+          "#52c234", "#9ade3c", "#f2e33a", "#f5b52d", "#f27a1f", "#e33a16",
+          "#c4161c", "#9b1d6b", "#6c1a8c"]
+
+[charts.gz]
+# Height contour interval (gpm) and isotherm interval (deg C) per level.
+gh_interval = { 925 = 30, 850 = 30, 700 = 30, 500 = 60, 300 = 120, 200 = 120 }
+t_interval = { 925 = 3, 850 = 3, 700 = 3, 500 = 3, 300 = 3, 200 = 3 }
+t_fill_range = { 925 = [-30, 30], 850 = [-36, 27], 700 = [-42, 18], 500 = [-51, -3], 300 = [-66, -30], 200 = [-72, -42] }
+temp_style = "B"                # default: A = colour fill + colour bar, B = dashed isotherms
+temp_style_by_level = { 500 = "A" }   # decided 2026-11-14: gz500 (and gz500_wide) use colour fill
+gz500_variants = []             # Stage 0 A/B review done
+t_cmap = "RdYlBu_r"
+mask_underground = [925, 850]
+
+[charts.rh700]
+title = "700hPa Relative Humidity (%) and Geopotential Height (gpm)"
+levels = [60, 70, 80, 90, 100]
+colors = ["#d9f0d3", "#a6dba0", "#5aae61", "#1b7837"]
+
+[charts.mfc]
+title = "{level}hPa Moisture Flux(m/s) and Convergence(E-8/s)"
+scale = 1e8                     # displayed value = div(qV) * scale (E-8/s, decided after M5)
+shade_min = -50
+shade_step = 5
+shade_colors = ["#f3eefa", "#ddd0f0", "#c2a6e3", "#a97bd6", "#8f55c6",
+                "#6f3fb0", "#4b8fd0", "#33c3e6", "#1f7fe0", "#1240b8"]
+contour_interval = 10           # positive (divergence) contour interval
+contour_color = "#6a6a6a"
+contour_width = 0.35
+smooth_sigma = 1.0              # gaussian sigma in grid points (0 = off)
+vector_color = "#d00000"
+vector_ref = 0.1                # m/s reference vector for the key
+vector_scale = 6.0              # m/s of flux per map width (larger = shorter arrows)
+
+[wpsh]
+level_offset_gpm = 50           # red line at H - offset
+search_box = { lat_min = 10.0, lat_max = 40.0, lon_min = 120.0, lon_max = 180.0 }
+local_window_deg = 5.0          # candidate = max within +/- window
+edge_exclude_deg = 2.0          # drop candidates this close to the box edge
+line_color = "#e00000"
+line_width = 2.0
+run_hours = [0, 12]             # draw the line only for these run hours (06/18Z: no line, decided 2026-11-14)
+jump_flag_deg = 10.0            # M4: centre moves larger than this are reported (informational only)
+jump_flag_gpm = 40.0            # M4: flag H changes larger than this between consecutive 00/12Z runs
+
+[output]
+format = "png8"                 # png | png8 | webp (decided after M3)
+png8_colors = 256
+webp_quality = 85

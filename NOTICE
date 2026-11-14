@@ -1,0 +1,47 @@
+ECMWF chart viewer
+==================
+
+Copyright 2026 ECMWF-Viewer contributors.
+The source code in this repository is licensed under the Apache License, Version 2.0
+(see LICENSE). The ECMWF data and the charts derived from it are covered by the data
+licence below, not by the Apache License.
+
+Weather charts produced by this project are derived from ECMWF open data.
+
+Data source
+-----------
+ECMWF IFS open data (HRES, 0.25 deg), https://data.ecmwf.int/forecasts/
+and its cloud mirrors (AWS, Azure, Google Cloud).
+
+Copyright: European Centre for Medium-Range Weather Forecasts (ECMWF).
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0)
+  https://creativecommons.org/licenses/by/4.0/
+  https://creativecommons.org/licenses/by/4.0/legalcode
+ECMWF Terms of Use: https://www.ecmwf.int/en/terms-use
+  (publicly accessible ECMWF content without its own rights notice is available under
+  CC BY 4.0; checked against the Terms of Use text on 2026-11-14)
+
+Attribution (shown on every chart):
+  Adapted from 'ECMWF IFS 15-day Forecast Data' by ECMWF, licensed under CC BY 4.0,
+  available at https://data.ecmwf.int/forecasts/
+  (wording follows ECMWF's example attribution for its open data)
+
+Modifications
+-------------
+The data have been modified: fields are cropped to regional domains, derived
+quantities are computed (precipitation accumulated over 3 h / 6 h windows from the
+cumulative total precipitation, moisture-flux divergence, a working definition of
+the west-Pacific subtropical-high edge), and the results are rendered as images.
+These derived products are not produced, checked or endorsed by ECMWF.
+
+Disclaimer
+----------
+The charts are provided "as is", without warranty of any kind. Users accept full
+responsibility for their use. Neither ECMWF nor the authors of this project are liable
+for any damages arising from their use.
+
+Map base data
+-------------
+Coastlines and country borders: Natural Earth (public domain), https://www.naturalearthdata.com/
+Borders are drawn for orientation only and do not imply any opinion on the legal status
+of any territory or its frontiers.

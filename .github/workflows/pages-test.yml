@@ -1,0 +1,54 @@
+name: M6 Pages test (manual, main only)
+
+# M6: deploy a ~100 MB dummy site to GitHub Pages and time it.
+# DO NOT RUN until the owner says so. Requires: Settings -> Pages -> Source = GitHub Actions.
+# Runs only from main (publishing rule). After deploy, run measure/m6_pages_check.sh against the URL.
+on:
+  workflow_dispatch:
+    inputs:
+      size_mb:
+        description: "Approximate dummy site size in MB"
+        default: "100"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build dummy site
+        run: |
+          pip install pillow==13.0.0 numpy==2.5.4
+          python measure/m6_make_dummy_site.py site "${{ inputs.size_mb }}"
+          du -sh site; find site -type f | wc -l
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy (timed)
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Report
+        run: |
+          echo "Deployed to ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy step duration is shown in the job timeline." >> "$GITHUB_STEP_SUMMARY"
