@@ -16,7 +16,6 @@ N_TP_EXTRA = 24                   # 3-hourly tp-only steps (3, 9, ..., 141) per 
 
 
 def jobs(cfg, F, P, run, step, window):
-    gz = cfg["charts"]["gz"]["temp_style"]
     j = {
         "msl": lambda: plot.chart_msl(cfg, F, run, step),
         "tp": lambda: plot.chart_tp(cfg, F, P, run, step, window)[0],
@@ -24,11 +23,11 @@ def jobs(cfg, F, P, run, step, window):
         "mfc925": lambda: plot.chart_mfc(cfg, F, 925, run, step)[0],
         "mfc850": lambda: plot.chart_mfc(cfg, F, 850, run, step)[0],
         "wpsh500": lambda: plot.overlay_wpsh(cfg, F, run, step)[0],
-        "gz500_wide": lambda: plot.chart_gz(cfg, F, 500, run, step, gz, "wide"),
+        "gz500_wide": lambda: plot.chart_gz(cfg, F, 500, run, step, domain="wide"),
         "wpsh500_wide": lambda: plot.overlay_wpsh(cfg, F, run, step, "wide")[0],
     }
     for lv in (925, 850, 700, 500, 300, 200):
-        j[f"gz{lv}"] = (lambda lv=lv: plot.chart_gz(cfg, F, lv, run, step, gz))
+        j[f"gz{lv}"] = (lambda lv=lv: plot.chart_gz(cfg, F, lv, run, step))
     extra = {f"gz500_{v}": (lambda v=v: plot.chart_gz(cfg, F, 500, run, step, v))
              for v in cfg["charts"]["gz"]["gz500_variants"]}
     return j, extra

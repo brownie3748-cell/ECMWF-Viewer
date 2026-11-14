@@ -15,6 +15,7 @@ matplotlib.use("Agg")
 import cartopy.crs as ccrs  # noqa: E402
 import cartopy.feature as cfeature  # noqa: E402
 import matplotlib.colors as mcolors  # noqa: E402
+import matplotlib.patheffects as patheffects  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from cartopy.mpl.ticker import LatitudeFormatter, LongitudeFormatter  # noqa: E402
@@ -184,8 +185,14 @@ def chart_tp(cfg, F_now, F_prev, run, step, window_h):
     return fr, acc
 
 
-def chart_gz(cfg, F, level, run, step, temp_style="B", domain="default"):
+def temp_style_for(cfg, level):
     c = cfg["charts"]["gz"]
+    return c.get("temp_style_by_level", {}).get(str(level), c["temp_style"])
+
+
+def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
+    c = cfg["charts"]["gz"]
+    temp_style = temp_style or temp_style_for(cfg, level)
     lvkey = str(level)
     fr = Frame(cfg, domain)
     S = _sub(F, fr)
@@ -279,8 +286,11 @@ def overlay_wpsh(cfg, F, run, step, domain="default"):
     res = derive.wpsh_centre(B[("gh", 500)], B.lat, B.lon, cfg, cfg["data"]["grid_deg"])
     if res["line_gpm"] is not None:
         S = _sub(F, fr)
-        fr.ax.contour(S.lon, S.lat, S[("gh", 500)], levels=[res["line_gpm"]], colors=w["line_color"],
-                      linewidths=w["line_width"], transform=PC, zorder=7)
+        cs = fr.ax.contour(S.lon, S.lat, S[("gh", 500)], levels=[res["line_gpm"]], colors=w["line_color"],
+                           linewidths=w["line_width"], transform=PC, zorder=7)
+        # white halo keeps the red line readable over the warm colour fill of gz500 (style A)
+        cs.set(path_effects=[patheffects.Stroke(linewidth=w["line_width"] + 2.5, foreground="white"),
+                             patheffects.Normal()])
         txt = f"WPSH  H={res['H']:.0f}  line={res['line_gpm']:.0f} gpm"
     else:
         txt = "WPSH  no centre"

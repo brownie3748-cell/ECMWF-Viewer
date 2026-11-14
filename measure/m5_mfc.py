@@ -68,12 +68,20 @@ def main():
         for lev in (850, 925):
             fr, _ = plot.chart_mfc(c, F, lev, run, STEP)
             (out / f"mfc{lev}_{name}_{run:%Y%m%d%H}_{STEP:03d}.png").write_bytes(fr.png_bytes())
-    # brief-scale saturation decides the verdict
-    sat = stats["850_s1"]["frac_below_-50e-9"]
-    sign_ok = all(s["corr_conv_rain"] is None or s["corr_conv_rain"] > 0 for s in stats.values())
+    # saturation at the configured scale and smoothing decides the verdict
+    mc = CFG["charts"]["mfc"]
+    sig_cfg = mc["smooth_sigma"]
+    key = "frac_below_-50e-8" if mc["scale"] == 1e8 else "frac_below_-50e-9"
+    sat = max(stats.get(f"{lv}_s{int(sig_cfg)}", {}).get(key, 1.0) for lv in (850, 925))
+    # sign: contradicted if convergence anti-correlates with rain; confirmed if clearly positive
+    corrs = {lv: stats[f"{lv}_s{int(sig_cfg)}"]["corr_conv_rain"] for lv in (850, 925)}
+    sign = {lv: ("n/a" if c is None else "consistent" if c > 0.2 else "contradicted" if c < -0.1
+                 else "inconclusive") for lv, c in corrs.items()}
+    sign_ok = "contradicted" not in sign.values() and "consistent" in sign.values()
     status = "PASS" if sat < 0.05 and sign_ok else "FAIL"
-    res = {"status": status, "run": f"{run:%Y%m%d%H}", "step": STEP, "stats": stats}
-    md = [f"## M5 MFC sanity — **{status}** (brief scale E-9/s, sigma=1)\n",
+    res = {"status": status, "sign": sign, "run": f"{run:%Y%m%d%H}", "step": STEP, "stats": stats}
+    md = [f"## M5 MFC sanity — **{status}** (configured scale {mc['scale']:g}, sigma={sig_cfg}; "
+          f"max saturated fraction {sat * 100:.1f}%, gate < 5%; sign {sign})\n",
           f"Run `{run:%Y%m%d%H}` +{STEP} h, default domain, q in kg/kg, V in m/s, div(qV) on the sphere; "
           "values below are div(qV) x 1e9 (s^-1). Negative = convergence. sigma = gaussian smoothing in grid "
           "points (0.25 deg). Masked = level below ground (p > sp).\n",
