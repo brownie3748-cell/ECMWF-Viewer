@@ -114,7 +114,7 @@ class Frame:
 
     def colorbar(self, mappable, label=None, ticks=None):
         cax = self.fig.add_axes(self.cax_rect)
-        cb = self.fig.colorbar(mappable, cax=cax, ticks=ticks)
+        cb = self.fig.colorbar(mappable, cax=cax, ticks=ticks, format="%g")
         cb.ax.tick_params(labelsize=self.cfg["style"]["label_size"])
         if label:
             cb.set_label(label, fontsize=self.cfg["style"]["label_size"])

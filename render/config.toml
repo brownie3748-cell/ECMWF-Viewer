@@ -5,8 +5,9 @@
 model = "ifs"
 resolution = "0p25"            # "0p25" now; "0p1" is Stage 3
 grid_deg = 0.25
-sources = ["ecmwf", "aws", "azure", "google"]
+sources = ["ecmwf", "aws", "azure", "google"]   # all sources (M1 measures each)
 preferred_source = "aws"
+source_order = ["google", "ecmwf", "azure"]      # Stage 1 download order (M1: aws returned 503 on every download)
 max_step_main = 240            # 00/12Z runs
 max_step_short = 144           # 06/18Z runs
 publish_every_h = 6
@@ -139,6 +140,30 @@ line_width = 2.0
 run_hours = [0, 12]             # draw the line only for these run hours (06/18Z: no line, decided 2026-11-14)
 jump_flag_deg = 10.0            # M4: centre moves larger than this are reported (informational only)
 jump_flag_gpm = 40.0            # M4: flag H changes larger than this between consecutive 00/12Z runs
+
+[site]
+retention_runs = 10             # newest complete runs kept on the published site
+lookback_runs = 16              # how many past 6-hourly cycles to consider when polling
+workers = 4                     # parallel render processes
+path = "runs/{run}/{chart}_{step:03d}.png"
+schema_version = 1
+# Published charts, in display order (id, title, level, domain, overlay_of, min_step).
+charts = [
+  { id = "msl", title = "MSLP", domain = "default" },
+  { id = "tp", title = "Precipitation", domain = "default", min_step = 6 },
+  { id = "gz925", title = "925hPa", level = 925, domain = "default" },
+  { id = "gz850", title = "850hPa", level = 850, domain = "default" },
+  { id = "gz700", title = "700hPa", level = 700, domain = "default" },
+  { id = "gz500", title = "500hPa", level = 500, domain = "default" },
+  { id = "gz300", title = "300hPa", level = 300, domain = "default" },
+  { id = "gz200", title = "200hPa", level = 200, domain = "default" },
+  { id = "rh700", title = "700hPa RH", level = 700, domain = "default" },
+  { id = "mfc925", title = "925hPa MFC", level = 925, domain = "default" },
+  { id = "mfc850", title = "850hPa MFC", level = 850, domain = "default" },
+  { id = "wpsh500", title = "WPSH line", level = 500, domain = "default", overlay_of = "gz500" },
+  { id = "gz500_wide", title = "500hPa wide", level = 500, domain = "wide" },
+  { id = "wpsh500_wide", title = "WPSH line (wide)", level = 500, domain = "wide", overlay_of = "gz500_wide" },
+]
 
 [output]
 format = "png8"                 # png | png8 | webp (decided after M3)

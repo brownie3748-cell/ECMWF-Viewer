@@ -19,5 +19,9 @@ Full project brief: [docs/SPEC.md](docs/SPEC.md). Read it first.
 
 ## Layout
 - `render/` renderer package; `render/config.toml` is the single config (domains, charts, thresholds, style).
-- `measure/` Stage 0 measurement scripts (M1-M6); `.github/workflows/measure.yml` runs them.
+- `python -m render {poll,render-run,latest,manifest}`: Stage 1 pipeline (`render/pipeline.py`, `render/site.py`).
+- Workflows: `publish.yml` (main only: poll, render, deploy Pages), `ci.yml` (branches: tests + smoke render),
+  `measure.yml` (Stage 0 measurements, manual), `pages-test.yml` (M6, manual).
+- Design notes: `docs/STAGE1.md`; decisions: `docs/DECISIONS.md`.
+- `measure/` Stage 0 measurement scripts (M1-M6).
 - Attribution: `NOTICE` and the on-chart credit line (`style.credit` in the config).

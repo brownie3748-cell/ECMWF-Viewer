@@ -1,15 +1,8 @@
 name: measure (Stage 0)
 
-# Stage 0 measurements. No deploy, no publishing.
+# Stage 0 measurements (manual since Stage 1; ci.yml checks branches). No deploy, no publishing.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - claude/ecmwf-chart-viewer-stage-0-wnk6xx
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - "NOTICE"
 
 permissions:
   contents: read
