@@ -20,3 +20,7 @@ pip install -r requirements.lock
 python -m measure.m1_sources   # downloads into ./work
 python -m measure.m3_render
 ```
+
+## License
+
+Code: [Apache-2.0](LICENSE). Data and charts: ECMWF open data, CC BY 4.0 — see [NOTICE](NOTICE).

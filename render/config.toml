@@ -122,6 +122,8 @@ shade_step = 5
 shade_colors = ["#f3eefa", "#ddd0f0", "#c2a6e3", "#a97bd6", "#8f55c6",
                 "#6f3fb0", "#4b8fd0", "#33c3e6", "#1f7fe0", "#1240b8"]
 contour_interval = 10           # positive (divergence) contour interval
+contour_color = "#6a6a6a"
+contour_width = 0.35
 smooth_sigma = 1.0              # gaussian sigma in grid points (0 = off)
 vector_color = "#d00000"
 vector_ref = 0.1                # m/s reference vector for the key

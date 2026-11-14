@@ -1,6 +1,11 @@
 ECMWF chart viewer
 ==================
 
+Copyright 2026 ECMWF-Viewer contributors.
+The source code in this repository is licensed under the Apache License, Version 2.0
+(see LICENSE). The ECMWF data and the charts derived from it are covered by the data
+licence below, not by the Apache License.
+
 Weather charts produced by this project are derived from ECMWF open data.
 
 Data source

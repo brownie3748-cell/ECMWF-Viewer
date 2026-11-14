@@ -264,8 +264,10 @@ def chart_mfc(cfg, F, level, run, step):
     ci = c["contour_interval"]
     vmax = np.nanmax(val) if np.isfinite(val).any() else 0
     pl = np.arange(0, max(ci, vmax) + ci, ci)
-    cs = fr.ax.contour(S.lon, S.lat, val, levels=pl, colors="k", linewidths=0.7, transform=PC, zorder=4)
-    fr.ax.clabel(cs, fmt="%d", fontsize=7)
+    # thin grey divergence contours drawn below coastlines/borders (zorder 3) so they do not hide them
+    cs = fr.ax.contour(S.lon, S.lat, val, levels=pl, colors=c["contour_color"], linewidths=c["contour_width"],
+                       transform=PC, zorder=2.5)
+    fr.ax.clabel(cs, fmt="%d", fontsize=6.5, colors=c["contour_color"])
     n = fr.dom["vector_every"]
     s = (slice(None, None, n), slice(None, None, n))
     q = fr.ax.quiver(S.lon[::n], S.lat[::n], qu[s], qv[s], color=c["vector_color"], scale=c["vector_scale"],

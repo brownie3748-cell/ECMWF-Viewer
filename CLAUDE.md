@@ -15,7 +15,7 @@ Full project brief: [docs/SPEC.md](docs/SPEC.md). Read it first.
   screenshots (reference screenshots pasted in chat are for visual reference only).
 - Data-dependent steps that the sandbox cannot reach run in GitHub Actions; results go to the job summary
   and artifacts.
-- Ask before adding a LICENSE. Never generate or commit a signing keystore.
+- Code licence: Apache-2.0 (LICENSE); data/charts: CC BY 4.0 (NOTICE). Never generate or commit a signing keystore.
 
 ## Layout
 - `render/` renderer package; `render/config.toml` is the single config (domains, charts, thresholds, style).
