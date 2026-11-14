@@ -12,3 +12,6 @@ where the implementation deliberately differs from it.
 | 2026-11-14 | wpsh500 line | White halo around the red line so it stays readable over the gz500 warm colour fill. | Follows from the gz500 style A choice. |
 | 2026-11-14 | Code licence | Apache-2.0 for the source code; data/charts stay CC BY 4.0 via NOTICE. | Owner decision. |
 | 2026-11-14 | MFC contours | Divergence contours thin grey (#6a6a6a, 0.35 px) and drawn below coastlines/borders. | Owner review: thick contours hid borders. |
+| 2026-11-14 | WPSH run hours | The red line is drawn only for 00/12Z runs; 06/18Z overlays show "line: 00/12 UTC runs only". | M4: 06/18Z H about 16 gpm lower than 00/12Z on average. |
+| 2026-11-14 | WPSH centre moves | Centre moves between far-apart candidates of similar height are accepted (H = max, computation continues); only H changes > 40 gpm between consecutive 00/12Z runs are flagged. The weak secondary maximum inside the box when the core is east of 180E is accepted. | Owner review of M4. |
+| 2026-11-14 | Attribution | NOTICE checked against the ECMWF Terms of Use (CC BY 4.0 for public content, disclaimer); Natural Earth credit and a borders note added. | Owner supplied the Terms of Use text. |

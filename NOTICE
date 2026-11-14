@@ -14,12 +14,17 @@ ECMWF IFS open data (HRES, 0.25 deg), https://data.ecmwf.int/forecasts/
 and its cloud mirrors (AWS, Azure, Google Cloud).
 
 Copyright: European Centre for Medium-Range Weather Forecasts (ECMWF).
-Licence: Creative Commons Attribution 4.0 International (CC BY 4.0),
-https://creativecommons.org/licenses/by/4.0/ , together with the ECMWF Terms of Use.
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0)
+  https://creativecommons.org/licenses/by/4.0/
+  https://creativecommons.org/licenses/by/4.0/legalcode
+ECMWF Terms of Use: https://www.ecmwf.int/en/terms-use
+  (publicly accessible ECMWF content without its own rights notice is available under
+  CC BY 4.0; checked against the Terms of Use text on 2026-11-14)
 
 Attribution (shown on every chart):
   Adapted from 'ECMWF IFS 15-day Forecast Data' by ECMWF, licensed under CC BY 4.0,
   available at https://data.ecmwf.int/forecasts/
+  (wording follows ECMWF's example attribution for its open data)
 
 Modifications
 -------------
@@ -29,7 +34,14 @@ cumulative total precipitation, moisture-flux divergence, a working definition o
 the west-Pacific subtropical-high edge), and the results are rendered as images.
 These derived products are not produced, checked or endorsed by ECMWF.
 
-No warranty: the charts are provided "as is" without any warranty.
+Disclaimer
+----------
+The charts are provided "as is", without warranty of any kind. Users accept full
+responsibility for their use. Neither ECMWF nor the authors of this project are liable
+for any damages arising from their use.
 
-TODO (Stage 0 open item): re-check the exact attribution and disclaimer wording
-against the current ECMWF Terms of Use before the first public deploy.
+Map base data
+-------------
+Coastlines and country borders: Natural Earth (public domain), https://www.naturalearthdata.com/
+Borders are drawn for orientation only and do not imply any opinion on the legal status
+of any territory or its frontiers.

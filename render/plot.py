@@ -279,9 +279,18 @@ def chart_mfc(cfg, F, level, run, step):
 
 
 def overlay_wpsh(cfg, F, run, step, domain="default"):
-    """Transparent PNG with only the red H-50 contour and its legend."""
+    """Transparent PNG with only the red H-50 contour and its legend.
+
+    Runs whose hour is not in wpsh.run_hours (06/18Z) get no line; the legend says so and
+    the returned result has drawn=False.
+    """
     w = cfg["wpsh"]
     fr = Frame(cfg, domain, transparent=True)
+    if run.hour not in w.get("run_hours", [0, 6, 12, 18]):
+        fr.ax.text(0.99, 0.985, "WPSH  line: 00/12 UTC runs only", transform=fr.ax.transAxes, ha="right",
+                   va="top", fontsize=9, color="#666666", zorder=8,
+                   bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="#999999", lw=0.8, alpha=0.9))
+        return fr, {"candidates": [], "H": None, "centre": None, "line_gpm": None, "drawn": False}
     box = w["search_box"]
     mg = w["local_window_deg"] + 1
     B = F.crop(box["lat_min"] - mg, box["lat_max"] + mg, box["lon_min"] - mg, box["lon_max"] + mg)
@@ -296,6 +305,7 @@ def overlay_wpsh(cfg, F, run, step, domain="default"):
         txt = f"WPSH  H={res['H']:.0f}  line={res['line_gpm']:.0f} gpm"
     else:
         txt = "WPSH  no centre"
+    res["drawn"] = res["line_gpm"] is not None
     fr.ax.text(0.99, 0.985, txt, transform=fr.ax.transAxes, ha="right", va="top", fontsize=9,
                color=w["line_color"], fontweight="bold", zorder=8,
                bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=w["line_color"], lw=0.8, alpha=0.9))

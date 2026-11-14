@@ -136,8 +136,9 @@ local_window_deg = 5.0          # candidate = max within +/- window
 edge_exclude_deg = 2.0          # drop candidates this close to the box edge
 line_color = "#e00000"
 line_width = 2.0
-jump_flag_deg = 10.0            # M4: flag centre moves larger than this between runs
-jump_flag_gpm = 40.0            # M4: flag H changes larger than this between runs
+run_hours = [0, 12]             # draw the line only for these run hours (06/18Z: no line, decided 2026-11-14)
+jump_flag_deg = 10.0            # M4: centre moves larger than this are reported (informational only)
+jump_flag_gpm = 40.0            # M4: flag H changes larger than this between consecutive 00/12Z runs
 
 [output]
 format = "png8"                 # png | png8 | webp (decided after M3)

@@ -10,7 +10,7 @@ import matplotlib.patches as mpatches
 from measure.common import CFG, DATA, IMAGES, best_source, guarded, md_table, now_utc, save
 from render import derive, fetch, grib, plot
 
-N_RUNS = 12
+N_RUNS = 16          # 16 consecutive runs -> 8 consecutive 00/12Z runs
 FHS = [0, 120]
 GH500 = [{"levtype": "pl", "levelist": [500], "param": ["gh"]}]
 
@@ -121,24 +121,34 @@ def main():
             overlay_composite(F, r, fh, out / f"wpsh_composite_{r:%Y%m%d%H}_{fh:03d}.png")
             records.append(rec)
 
-    # jumps between consecutive runs at the same forecast hour
+    # H changes between consecutive *drawn* (00/12Z) runs at the same forecast hour.
+    # A large centre move with a similar H is accepted (the line level barely changes): reported, not flagged.
     rows = []
     n_jump = 0
+    drawn_hours = w.get("run_hours", [0, 6, 12, 18])
     for fh in FHS:
         prev = None
         for rec in [x for x in records if x["fh"] == fh]:
             flag = ""
-            if prev and rec.get("centre") and prev.get("centre"):
+            drawn = int(rec["run"][-2:]) in drawn_hours
+            rec["drawn"] = drawn
+            if not drawn:
+                flag = "no line (06/18Z)"
+            elif prev and rec.get("centre") and prev.get("centre"):
                 (a1, o1), (a2, o2) = prev["centre"], rec["centre"]
                 dist = math.hypot(a2 - a1, (o2 - o1) * math.cos(math.radians((a1 + a2) / 2)))
                 dh = rec["H"] - prev["H"]
                 rec["move_deg"], rec["dH"] = round(dist, 1), round(dh, 1)
-                if dist > w["jump_flag_deg"] or abs(dh) > w["jump_flag_gpm"]:
-                    flag = "JUMP"
+                if abs(dh) > w["jump_flag_gpm"]:
+                    flag = "H JUMP"
+                    n_jump += 1
+                elif dist > w["jump_flag_deg"]:
+                    flag = "moved, H similar (ok)"
             elif prev and (bool(rec.get("centre")) != bool(prev.get("centre"))):
                 flag = "APPEAR/VANISH"
-            if flag:
                 n_jump += 1
+            if drawn:
+                prev = rec
             rec["flag"] = flag
             c = rec.get("centre")
             rows.append([rec["run"], f"+{fh}", rec["valid"],
@@ -148,15 +158,15 @@ def main():
                          len(rec.get("candidates", [])),
                          "; ".join(f"{v:.0f}@{a:.1f}N{o:.1f}E" for a, o, v in rec.get("candidates", [])[:5]),
                          rec.get("move_deg", ""), rec.get("dH", ""), flag or rec.get("error", "")])
-            prev = rec
     ok = sum(1 for r in records if "error" not in r)
-    status = "PASS" if ok >= 16 else ("UNKNOWN" if ok == 0 else "PARTIAL")
+    status = "PASS" if ok >= 16 and n_jump == 0 else "FLAGGED" if ok >= 16 else ("UNKNOWN" if ok == 0 else "PARTIAL")
     res = {"status": status, "runs": [f"{r:%Y%m%d%H}" for r in runs], "records": records, "jumps": n_jump}
     md = [f"## M4 WPSH centre rule — {status} ({ok}/{len(records)} frames, {n_jump} flags)\n",
           f"Rule: search box {box}, local max within +/-{w['local_window_deg']} deg, "
           f"edge exclusion {w['edge_exclude_deg']} deg, line = H - {w['level_offset_gpm']} gpm. "
-          f"Flag if centre moves > {w['jump_flag_deg']} deg or |dH| > {w['jump_flag_gpm']} gpm between consecutive "
-          "runs at the same forecast hour.\n",
+          f"Line drawn only for run hours {drawn_hours}. Flag (H JUMP) only if |dH| > {w['jump_flag_gpm']} gpm "
+          f"between consecutive drawn runs at the same forecast hour; centre moves > {w['jump_flag_deg']} deg with "
+          "similar H are reported but accepted.\n",
           md_table(["run", "FH", "valid", "H gpm", "centre", "line gpm", "#cand", "top candidates", "move deg", "dH",
                     "flag"], rows),
           "\nImages: artifact `stage0-images` -> `m4/wpsh_diag_*.png` (wide-domain diagnostic) and "
