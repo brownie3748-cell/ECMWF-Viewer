@@ -23,6 +23,7 @@
   </header>
 
   <nav id="models" class="models" aria-label="모델 선택"></nav>
+  <nav id="charts" class="chips" aria-label="차트 선택"></nav>
 
   <main>
     <div id="status" class="status" hidden></div>
@@ -46,6 +47,7 @@
         <button id="next" class="btn" aria-label="다음 시각">▶</button>
       </div>
       <input id="slider" type="range" min="0" max="0" value="0" aria-label="예보 시간">
+      <button id="compare" class="btn wide">과거 런 비교 (같은 시각)</button>
     </section>
 
     <section class="card">
@@ -57,10 +59,6 @@
       <div class="steps" id="steps" role="group" aria-label="예보 시간 선택"></div>
     </section>
 
-    <section class="card">
-      <div class="card-head"><span class="card-title">차트</span></div>
-      <div class="charts" id="charts" role="group" aria-label="차트 선택"></div>
-    </section>
 
     <section class="toggles">
       <label class="switch" id="wpsh-wrap">
@@ -68,7 +66,6 @@
         <span>북태평양고기압선 (500 hPa H−50, 모든 층에 겹쳐 보기)</span>
       </label>
       <div class="wpsh-info" id="wpsh-info"></div>
-      <button id="compare" class="btn wide">과거 런 비교 (같은 시각)</button>
     </section>
   </main>
 
