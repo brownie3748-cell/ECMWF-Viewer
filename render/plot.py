@@ -269,6 +269,12 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
         cs = fr.ax.contour(S.lon, S.lat, t, levels=tl, colors=iso_col, linewidths=0.8, linestyles="--",
                            transform=PC, zorder=4)
         fr.ax.clabel(cs, fmt="%d", fontsize=7, colors=iso_col)
+    hi_iso = c.get("highlight_isotherm", {})
+    hv = hi_iso.get("levels", {}).get(lvkey)
+    if hv is not None and np.nanmin(t) < hv < np.nanmax(t):
+        cs = fr.ax.contour(S.lon, S.lat, t, levels=[hv], colors=hi_iso["color"], linewidths=hi_iso["width"], linestyles="solid",
+                           transform=PC, zorder=4.5)
+        fr.ax.clabel(cs, fmt="%d", fontsize=8, colors=hi_iso["color"])
     hl = _levels(gh, c["gh_interval"][lvkey])
     cs = fr.ax.contour(S.lon, S.lat, gh, levels=hl, colors="k", linewidths=1.1, transform=PC, zorder=5)
     fr.ax.clabel(cs, fmt="%d", fontsize=8)
