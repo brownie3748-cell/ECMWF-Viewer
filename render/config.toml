@@ -200,7 +200,7 @@ process_order = ["ifs", "aifs", "kimg", "kimr", "ifs01"]   # within a cycle: lig
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
-render_version = 7              # bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 8              # bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
@@ -268,7 +268,7 @@ model = "aifs-single"
 tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
 [models.override.site]
-render_version = 7              # 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
+render_version = 8              # 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
 [[models.override.data.groups]]
 levtype = "sfc"
 param = ["msl", "sp", "tp"]
