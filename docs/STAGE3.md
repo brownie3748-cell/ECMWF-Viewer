@@ -72,3 +72,20 @@ GRIB2, `nwp_nc_vars_down.php`); otherwise give API Hub request URL(s) without th
 The key is read from the `KMA_APIHUB_KEY` secret, masked in the log and replaced by `***` in the report.
 The job summary shows: hub reachability from the runner, HTTP status, size, speed, file kind
 (GRIB / NetCDF / JSON ...), and for GRIB the grid definition and the field list.
+
+### M8 result (2026-11-15, run 2026111400, measured from a GitHub runner)
+
+- Hub reachable 10/10 (0.7-3.3 s); no failed tries on any request (the sandbox resets were not seen on the runner).
+- `nwp_nc_vars_down.php` returns **one field per request**: several `vars` give a text error ("vars ... one"),
+  several `lvl_lst` levels return only the first level.
+- KIM global (KIMG, cut to 100-180E 10-55N): `regular_ll`, 0.083333 deg (about 9 km), 961 x 540, 1.56 MB per
+  field, 2.0-3.5 s per request (0.45-0.78 MB/s). +240 h available.
+- KIM regional (KIMR, whole domain): **Lambert conformal, 3 km** (Dx = Dy = 3000 m), 1050 x 840, LoV 126E,
+  Latin1/2 30/60N, first point 25.26N 110.62E; 2.65 MB per field, 2.7-20 s per request (0.13-0.97 MB/s).
+  +87 h available. So the regional model is 3 km, not the 12 km of the page's overview text.
+- The GRIB2 headers are **not usable for identification**: every message reads `shortName=t`, date 2007-03-23 12 UTC,
+  step 0, whatever variable, level or lead time was requested. A KIM reader must label fields from the request
+  (variable, level, run, lead time), not from the GRIB keys. Units of the values still need a check.
+- Consequence for a KIM pipeline: about 30 fields per step means 30 requests per step (estimated: global 65 steps
+  about 2000 requests and 3 GB per run; regional 30 steps about 900 requests and 2.4 GB per run). The API Hub daily
+  request quota per key is UNVERIFIED.

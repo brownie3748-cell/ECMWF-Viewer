@@ -416,15 +416,33 @@ function openCompare() {
     b.onclick = () => { cmpStop(); state.cmp.idx = i; cmpRender(); };
     dots.appendChild(b);
   });
+  frames.forEach((f) => {                         // download every frame up front
+    preloadUrl(url(f.run.run, state.chart, f.step));
+    const o = overlayUrl(f.run, f.step);
+    if (o) preloadUrl(o);
+  });
   cmpRender();
   $("compare-dlg").showModal();
   if (frames.length > 1) { state.cmp.idx = 0; cmpRender(); cmpPlay(); }
 }
 
-function cmpRender() {
+function preloadUrl(u) {
+  if (loaded.has(u)) return;
+  const im = new Image();
+  im.onload = () => { loaded.add(u); if ($("compare-dlg").open) cmpRender(true); };
+  im.src = u;
+}
+const cmpReady = (f) => loaded.has(url(f.run.run, state.chart, f.step));
+
+function cmpRender(fromLoad) {
   const { frames, idx } = state.cmp;
   const f = frames[idx];
   if (!f) return;
+  // Until the frame's image has arrived, dim the previous picture and say so (it is not this run).
+  const ready = cmpReady(f);
+  document.querySelector("#compare-dlg .viewer").classList.toggle("stale", !ready);
+  $("cmp-loading").hidden = ready;
+  if (fromLoad && !ready) return;
   const newest = idx === frames.length - 1;
   const ov = overlayOf(state.chart);
   const w = ov ? wpshFor(f.run, f.step) : null;
@@ -455,6 +473,7 @@ function cmpPlay() {
   state.cmp.timer = setInterval(() => {
     const n = state.cmp.frames.length;
     if (state.cmp.idx >= n - 1) { cmpStop(); return; }   // stop on the newest run
+    if (!cmpReady(state.cmp.frames[state.cmp.idx]) || !cmpReady(state.cmp.frames[state.cmp.idx + 1])) return;  // wait for images
     state.cmp.idx += 1;
     cmpRender();
   }, CMP_PLAY_MS);
