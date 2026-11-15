@@ -40,13 +40,21 @@ def _summary(text: str):
     print(text)
 
 
+def process_order(cfg) -> list[str]:
+    """Models in processing order within a cycle (lightest first), from site.process_order."""
+    order = [m for m in cfg["site"].get("process_order", []) if m in config.model_ids(cfg)]
+    return order + [m for m in config.model_ids(cfg) if m not in order]
+
+
 def _poll_plan(cfg, store_runs, complete_by_model, rv):
-    """Work for one poll: (todo [(cycle, model)], remove {model: [run]}). Newest cycle first, all models."""
+    """Work for one poll: (todo [(cycle, model)], remove {model: [run]}).
+
+    Newest cycle first; within a cycle the models in process_order (lightest first)."""
     todo, remove = [], {}
     cycles = sorted({c for cs in complete_by_model.values() for c in cs}, reverse=True)
     for c in cycles:
         rs = f"{c:%Y%m%d%H}"
-        for mid in config.model_ids(cfg):
+        for mid in process_order(cfg):
             if c in complete_by_model.get(mid, []):
                 have = store_runs.get(mid, {}).get(rs)
                 if not have or have.get("rv") != rv:
@@ -59,6 +67,20 @@ def _poll_plan(cfg, store_runs, complete_by_model, rv):
     for mid in set(store_runs) - set(config.model_ids(cfg)):     # model dropped from the config
         remove[mid] = sorted(store_runs[mid])
     return todo, remove
+
+
+def _newer_complete(cfg, sources, complete, queue):
+    """[(cycle, model)] for cycles newer than each model's newest known complete run that are now complete."""
+    now_cycles = recent_cycles(2)
+    found = []
+    for c in sorted(now_cycles, reverse=True):
+        for mid in process_order(cfg):
+            known = complete.get(mid, [])
+            if (known and c <= known[0]) or (c, mid) in queue:
+                continue
+            if sources[mid][1].run_complete(c):
+                found.append((c, mid))
+    return found
 
 
 def cmd_poll(args, cfg):
@@ -115,8 +137,10 @@ def cmd_poll(args, cfg):
     if "NOTICE.txt" not in sizes:
         site.write_notice(cfg, st)
     # 2) render + upload, newest cycle first, within the time budget
-    rendered, skipped = [], []
-    for c, mid in todo:
+    rendered, skipped, late = [], [], []
+    queue = list(todo)
+    while queue:
+        c, mid = queue.pop(0)
         rs = f"{c:%Y%m%d%H}"
         if error or (time.monotonic() - t_start) / 60 > args.time_budget_min:
             skipped.append(f"{mid}/{rs}")
@@ -135,6 +159,12 @@ def cmd_poll(args, cfg):
         runs.setdefault(mid, {})[rs] = site.run_entry(meta)
         site.write_manifest(cfg, st, runs)       # each finished run appears in the app right away
         rendered.append(meta)
+        # a run published while this job works (long backfills) goes to the front of the queue
+        new = _newer_complete(cfg, sources, complete, queue)
+        for item in reversed(new):
+            queue.insert(0, item)
+            complete[item[1]].insert(0, item[0])
+            late.append(f"{item[1]}/{item[0]:%Y%m%d%H}")
     if not rendered and not removed and manifest_stale:
         site.write_manifest(cfg, st, runs)
     st.save_ops()
@@ -142,7 +172,8 @@ def cmd_poll(args, cfg):
     used = sum(sizes.values())
     ops = st.month_ops()
     lines += ["", f"Removed: {removed or 'none'}; orphans deleted: {orphans or 'none'}",
-              f"Skipped (time budget or cap, next poll): {skipped or 'none'}", ""]
+              f"Skipped (time budget or cap, next poll): {skipped or 'none'}",
+              f"Published while this job ran (moved to the front): {late or 'none'}", ""]
     if rendered:
         lines += ["| model | run | images | MB | download s | wall s | render s (sum) | sources |",
                   "|---|---|---|---|---|---|---|---|"]

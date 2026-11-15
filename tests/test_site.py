@@ -10,7 +10,7 @@ import numpy as np
 
 from render import config, derive, fetch, site
 from render import store as store_mod
-from render.__main__ import _poll_plan, recent_cycles
+from render.__main__ import _newer_complete, _poll_plan, recent_cycles
 
 CFG = config.load()
 
@@ -140,9 +140,23 @@ class Plan(unittest.TestCase):
                 "old": {"2026111400": {"run": "2026111400", "rv": rv}}}
         todo, remove = _poll_plan(CFG, have, complete, rv)
         self.assertEqual([(f"{c:%Y%m%d%H}", m) for c, m in todo],
-                         [("2026111506", "ifs"), ("2026111506", "ifs01"), ("2026111506", "aifs"),
-                          ("2026111500", "ifs01"), ("2026111500", "aifs")])
+                         [("2026111506", "ifs"), ("2026111506", "aifs"), ("2026111506", "ifs01"),
+                          ("2026111500", "aifs"), ("2026111500", "ifs01")])
         self.assertEqual(remove, {"ifs": ["2026111418"], "old": ["2026111400"]})
+
+
+class LateRuns(unittest.TestCase):
+    def test_newer_cycle_found_once(self):
+        class Src:
+            def __init__(self, ok): self.ok = ok
+            def run_complete(self, c): return c in self.ok
+        newest = recent_cycles(1)[0]
+        older = newest - dt.timedelta(hours=6)
+        sources = {"ifs": (None, Src({newest, older})), "ifs01": (None, Src({older})), "aifs": (None, Src({newest, older}))}
+        complete = {m: [older] for m in sources}
+        found = _newer_complete(CFG, sources, complete, [])
+        self.assertEqual(found, [(newest, "ifs"), (newest, "aifs")])
+        self.assertEqual(_newer_complete(CFG, sources, complete, found), [])     # already queued
 
 
 class Manifest(unittest.TestCase):

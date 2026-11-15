@@ -192,6 +192,7 @@ jump_flag_gpm = 40.0            # M4: flag H changes larger than this between co
 [site]
 retention_runs = 12             # newest complete runs kept on the published site (3 days)
 lookback_runs = 18              # how many past 6-hourly cycles to consider when polling
+process_order = ["ifs", "aifs", "ifs01"]   # within a cycle: lightest model first (0.1 deg is slowest)
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
