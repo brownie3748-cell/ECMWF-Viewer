@@ -33,13 +33,28 @@ def moisture_flux(q, u, v, lat, lon, level_hpa=None, sp_pa=None, smooth_sigma=0.
     qv = q * v
     div = spherical_divergence(qu, qv, lat, lon)
     if smooth_sigma and smooth_sigma > 0:
-        div = ndimage.gaussian_filter(div, smooth_sigma, mode="nearest")
+        div = nan_gaussian(div, smooth_sigma)
     if level_hpa is not None and sp_pa is not None:
         under = sp_pa < level_hpa * 100.0
         div = np.where(under, np.nan, div)
         qu = np.where(under, np.nan, qu)
         qv = np.where(under, np.nan, qv)
     return qu, qv, div
+
+
+def nan_gaussian(a: np.ndarray, sigma: float) -> np.ndarray:
+    """Gaussian smoothing that ignores NaN (normalised convolution): data next to a domain edge or a masked
+    area is smoothed with the valid neighbours only, instead of the NaN spreading inwards."""
+    a = np.asarray(a, dtype=np.float64)
+    ok = np.isfinite(a)
+    if ok.all():
+        return ndimage.gaussian_filter(a, sigma, mode="nearest")
+    num = ndimage.gaussian_filter(np.where(ok, a, 0.0), sigma, mode="nearest")
+    den = ndimage.gaussian_filter(ok.astype(np.float64), sigma, mode="nearest")
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out = num / den
+    out[~ok] = np.nan
+    return out
 
 
 def local_extrema(field, lat, lon, window_deg, grid_deg, kind="max", edge_exclude_deg=0.0,

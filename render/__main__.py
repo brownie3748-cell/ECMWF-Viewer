@@ -11,9 +11,9 @@ import pathlib
 import sys
 import time
 
-from . import config, pipeline, site
+from . import config, fetch, kim, pipeline, site
+from . import sources as sources_mod
 from . import store as store_mod
-from .sources import Sources
 
 log = logging.getLogger("render")
 
@@ -77,6 +77,8 @@ def _newer_complete(cfg, sources, complete, queue):
     found = []
     for c in sorted(now_cycles, reverse=True):
         for mid in process_order(cfg):
+            if mid not in sources:
+                continue
             known = complete.get(mid, [])
             if (known and c <= known[0]) or (c, mid) in queue:
                 continue
@@ -96,13 +98,27 @@ def cmd_poll(args, cfg):
     keep = cfg["site"]["retention_runs"]
     cycles = recent_cycles(cfg["site"]["lookback_runs"])
     complete, sources = {}, {}
+    kma_usage = kim.load_usage(st)             # shared by the KIM models: one daily API Hub budget
+    kma_calls0 = kma_usage["calls"]
+    probe_notes = []
     for mid in config.model_ids(cfg):
         mcfg = config.for_model(cfg, mid)
-        sources[mid] = (mcfg, Sources(mcfg))
+        src = sources_mod.make_sources(mcfg)
+        if kim.is_kma(mcfg):
+            src.usage = kma_usage
+        sources[mid] = (mcfg, src)
         complete[mid] = []
         for c in cycles:                       # newest first
-            if sources[mid][1].run_complete(c):
-                complete[mid].append(c)
+            have = runs.get(mid, {}).get(f"{c:%Y%m%d%H}")
+            if have and have.get("rv") == rv[mid]:
+                complete[mid].append(c)        # already published: complete, no need to ask the source again
+            else:
+                try:
+                    if src.run_complete(c):
+                        complete[mid].append(c)
+                except kim.QuotaError as e:
+                    probe_notes.append(f"{mid}: {e}")
+                    break
             if len(complete[mid]) >= keep:
                 break
     todo, remove = _poll_plan(cfg, runs, complete, rv)
@@ -112,6 +128,8 @@ def cmd_poll(args, cfg):
     for mid in config.model_ids(cfg):
         lines.append(f"- {mid}: complete runs in window {[f'{c:%Y%m%d%H}' for c in complete[mid]]}")
     if not todo and not remove and not manifest_stale:
+        if kma_usage["calls"] != kma_calls0:
+            kim.save_usage(st, kma_usage)       # completeness probes count against the daily budget
         lines.append("\nNothing to do.")
         _gh_output(changed="false")
         _summary("\n".join(lines))
@@ -139,7 +157,7 @@ def cmd_poll(args, cfg):
     if "NOTICE.txt" not in sizes:
         site.write_notice(cfg, st)
     # 2) render + upload, newest cycle first, within the time budget
-    rendered, skipped, late = [], [], []
+    rendered, skipped, late, failed = [], [], [], []
     queue = list(todo)
     while queue:
         c, mid = queue.pop(0)
@@ -149,7 +167,14 @@ def cmd_poll(args, cfg):
             continue
         mcfg, src = sources[mid]
         store_mod.clear_dir(stage)
-        meta = pipeline.render_run(mcfg, src, c, stage, work, cfg_path=args.config)
+        try:
+            if kim.is_kma(mcfg):               # do not start a KIM run the daily API budget cannot finish
+                src.check_budget(*kim.run_cost(mcfg, len(fetch.published_steps(c.hour, mcfg))))
+            meta = pipeline.render_run(mcfg, src, c, stage, work, cfg_path=args.config)
+        except (kim.QuotaError, RuntimeError) as e:
+            failed.append(f"{mid}/{rs}: {str(e)[:200]}")
+            store_mod.clear_dir(stage)
+            continue
         try:
             meta["uploaded_bytes"] = st.upload_dir(stage / mid / rs, f"{mid}/{rs}/", sizes, last="meta.json")
         except store_mod.StorageCapError as e:
@@ -169,13 +194,19 @@ def cmd_poll(args, cfg):
             late.append(f"{item[1]}/{item[0]:%Y%m%d%H}")
     if not rendered and not removed and manifest_stale:
         site.write_manifest(cfg, st, runs)
+    if any(kim.is_kma(m) for m, _ in sources.values()):
+        kim.save_usage(st, kma_usage)
     st.save_ops()
     _gh_output(changed="true")
     used = sum(sizes.values())
     ops = st.month_ops()
     lines += ["", f"Removed: {removed or 'none'}; orphans deleted: {orphans or 'none'}",
               f"Skipped (time budget or cap, next poll): {skipped or 'none'}",
-              f"Published while this job ran (moved to the front): {late or 'none'}", ""]
+              f"Published while this job ran (moved to the front): {late or 'none'}",
+              f"Failed (retried next poll): {failed or 'none'}",
+              f"KMA API Hub today (KST): {kma_usage['calls']} calls, {kma_usage['bytes'] / 1e9:.2f} GB "
+              f"(guard {cfg['kma_quota']['max_calls_per_day']} calls / {cfg['kma_quota']['max_bytes_per_day'] / 1e9:.1f} GB)"
+              + (f"; {probe_notes}" if probe_notes else ""), ""]
     if rendered:
         lines += ["| model | run | images | MB | download s | wall s | render s (sum) | sources |",
                   "|---|---|---|---|---|---|---|---|"]
@@ -203,13 +234,13 @@ def cmd_render_run(args, cfg):
     run = dt.datetime.strptime(args.run, "%Y%m%d%H")
     steps = [int(s) for s in args.steps.split(",")] if args.steps else None
     mcfg = config.for_model(cfg, args.model)
-    meta = pipeline.render_run(mcfg, Sources(mcfg), run, pathlib.Path(args.site), pathlib.Path(args.work),
+    meta = pipeline.render_run(mcfg, sources_mod.make_sources(mcfg), run, pathlib.Path(args.site), pathlib.Path(args.work),
                                steps=steps, cfg_path=args.config)
     print(json.dumps(meta, indent=1))
 
 
 def cmd_latest(args, cfg):
-    src = Sources(config.for_model(cfg, args.model))
+    src = sources_mod.make_sources(config.for_model(cfg, args.model))
     for c in recent_cycles(cfg["site"]["lookback_runs"]):
         if (args.main_only and c.hour not in (0, 12)):
             continue

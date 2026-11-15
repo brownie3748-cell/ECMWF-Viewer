@@ -26,7 +26,7 @@ def _merge(base: dict, over: dict) -> dict:
 
 
 def model_ids(cfg: dict) -> list[str]:
-    return [m["id"] for m in cfg["models"]]
+    return [m["id"] for m in cfg["models"] if m.get("enabled", True)]
 
 
 def for_model(cfg: dict, model_id: str) -> dict:

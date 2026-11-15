@@ -46,3 +46,13 @@ Map base data
 Coastlines and country borders: Natural Earth (public domain), https://www.naturalearthdata.com/
 Borders are drawn for orientation only and do not imply any opinion on the legal status
 of any territory or its frontiers.
+
+
+KIM (Korea Meteorological Administration)
+-----------------------------------------
+Charts labelled "KIM global" / "KIM regional" are derived from the Korean Integrated Model (KIM) forecasts
+downloaded from the KMA API Hub (https://apihub.kma.go.kr/).
+Source: Korea Meteorological Administration (기상청). Licence: Korea Open Government License (KOGL, 공공누리)
+Type 1 - attribution required (https://www.kogl.or.kr/info/licenseType1.do).
+Modifications: regional fields interpolated from the 3 km Lambert grid to a 0.05 deg lat/lon grid; global
+fields cropped; derived quantities computed; charts rendered. Not an official KMA product.

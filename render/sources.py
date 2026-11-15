@@ -79,3 +79,10 @@ class Sources:
                 log.warning("fetch %s+%d%s via %s failed: %r", f"{run:%Y%m%d%H}", step,
                             " (tp)" if tp_only else "", src, e)
         raise RuntimeError(f"all sources failed for {run:%Y%m%d%H}+{step}: {last!r}")
+
+
+def make_sources(cfg: dict):
+    """Sources for an ECMWF model, kim.KimSource for a KMA model (data.source = "kma")."""
+    from . import kim
+
+    return kim.KimSource(cfg) if kim.is_kma(cfg) else Sources(cfg)

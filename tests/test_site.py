@@ -43,7 +43,7 @@ class Steps(unittest.TestCase):
 
 class Models(unittest.TestCase):
     def test_model_ids(self):
-        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs"])
+        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "kimr"])
 
     def test_chart_lists(self):
         ifs = config.for_model(CFG, "ifs")
@@ -61,7 +61,7 @@ class Models(unittest.TestCase):
         hi = config.for_model(CFG, "ifs01")
         self.assertEqual(hi["data"]["resolution"], "0p1")
         self.assertEqual(hi["domains"]["default"]["barb_every"], 20)
-        self.assertEqual(hi["domains"]["default"]["lat_min"], CFG["domains"]["default"]["lat_min"])  # merged
+        self.assertEqual(hi["domains"]["default"]["extent_m"], CFG["domains"]["default"]["extent_m"])  # merged
         self.assertEqual(CFG["data"]["resolution"], "0p25")                                         # base intact
         ai = config.for_model(CFG, "aifs")
         self.assertEqual(ai["data"]["model"], "aifs-single")
@@ -137,7 +137,7 @@ class Storage(unittest.TestCase):
 
 class Plan(unittest.TestCase):
     def test_plan_newest_first_all_models_and_prune(self):
-        complete = {m: [C("2026111506"), C("2026111500")] for m in config.model_ids(CFG)}
+        complete = {m: [C("2026111506"), C("2026111500")] for m in ("ifs", "ifs01", "aifs")}
         rv = CFG["site"]["render_version"]
         have = {"ifs": {"2026111500": {"run": "2026111500", "rv": rv},
                         "2026111418": {"run": "2026111418", "rv": rv}},
@@ -175,7 +175,7 @@ class Manifest(unittest.TestCase):
                             for r in ("2026111506", "2026111500")}}
             m = site.write_manifest(CFG, st, runs)
             self.assertEqual(m["schema_version"], 2)
-            self.assertEqual([x["id"] for x in m["models"]], ["ifs", "ifs01", "aifs"])
+            self.assertEqual([x["id"] for x in m["models"]], ["ifs", "ifs01", "aifs", "kimr"])
             ifs = m["models"][0]
             self.assertEqual([r["run"] for r in ifs["runs"]], ["2026111500", "2026111506"])   # oldest first
             self.assertEqual(ifs["latest"], "2026111506")

@@ -25,7 +25,7 @@ def variant_cfg(scale, sigma, label):
 def main():
     run = latest_main_run()
     F = grib.read(str(DATA / f"{run:%Y%m%d%H}_{STEP:03d}.grib2"), CFG["data"]["read_region"])
-    d = CFG["domains"]["default"]
+    d = dict(CFG["domains"]["default"], **__import__("render.plot", fromlist=["x"]).domain_geometry(CFG["domains"]["default"])["bbox"])
     S = F.crop(d["lat_min"], d["lat_max"], d["lon_min"], d["lon_max"])
     # tp of the preceding 3 h, for a physical sanity check (convergence should co-locate with rain)
     tp_path = DATA / "m3tp" / f"{run:%Y%m%d%H}_{STEP - 3:03d}_tp.grib2"

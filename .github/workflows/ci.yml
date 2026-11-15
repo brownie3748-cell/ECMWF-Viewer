@@ -42,18 +42,24 @@ jobs:
       - run: pip install -r requirements.lock
       - name: Unit tests
         run: python -m unittest -v
-      - name: Smoke render (IFS steps 0, 6, 144, 150, 240; IFS 0.1 and AIFS steps 0, 150)
+      - name: Smoke render (IFS steps 0, 6, 144, 150, 240; IFS 0.1 and AIFS steps 0, 150; KIM regional steps 0, 3, 24)
+        env:
+          KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
         run: |
           RUN=$(python -m render latest --main-only)
           python -m render render-run --model ifs --run "$RUN" --steps 0,6,144,150,240 --site smoke-site --work work
           python -m render render-run --model ifs01 --run "$RUN" --steps 0,150 --site smoke-site --work work
           python -m render render-run --model aifs --run "$RUN" --steps 0,150 --site smoke-site --work work
+          if [ -n "$KMA_APIHUB_KEY" ]; then          # KIM regional: about 70 API Hub calls
+            KRUN=$(date -u -d "yesterday" +%Y%m%d00)
+            python -m render render-run --model kimr --run "$KRUN" --steps 0,3,24 --site smoke-site --work work
+          fi
           {
             echo "## Smoke render: run $RUN"
-            for m in ifs ifs01 aifs; do
-              echo "### $m"
+            for f in smoke-site/*/*/meta.json; do
+              echo "### $f"
               echo '```json'
-              cat smoke-site/$m/$RUN/meta.json
+              cat "$f"
               echo '```'
             done
             echo "Files: $(find smoke-site -type f | wc -l), size: $(du -sh smoke-site | cut -f1)"

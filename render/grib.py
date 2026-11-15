@@ -37,7 +37,16 @@ def read(path: str, region: dict | None = None) -> Fields:
 
     The global grid (lon -180..179.75 or 0..359.75) is rolled to 0..360 so that
     domains crossing 180E work; then the read region is cropped.
+    A .npz written by render.kim (KIM fields already on a regular lat/lon grid) is read as well.
     """
+    if str(path).endswith(".npz"):
+        z = np.load(path)
+        out = Fields(z["lat"], z["lon"])
+        for k in z.files:
+            if "|" in k:
+                n, lv = k.split("|")
+                out.data[(n, int(lv))] = z[k]
+        return out.crop(region["lat_min"], region["lat_max"], region["lon_min"], region["lon_max"]) if region else out
     out = None
     with open(path, "rb") as fh:
         while True:

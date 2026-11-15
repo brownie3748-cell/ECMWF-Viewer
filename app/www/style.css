@@ -62,9 +62,10 @@ button, select, input { font: inherit; color: inherit; }
 .icon-btn { border: 0; background: transparent; color: inherit; font-size: 1.3rem; padding: 4px 7px;
   border-radius: 10px; cursor: pointer; line-height: 1; }
 
-.models { display: flex; gap: 6px; padding: 8px var(--gap) 0; }
-.model { flex: 1; border: 1.5px solid var(--accent); background: var(--card); color: var(--accent-strong);
-  padding: 8px 6px; border-radius: 12px; font-size: .95rem; font-weight: 600; cursor: pointer; }
+.models { display: flex; gap: 4px; padding: 8px var(--gap) 0; }
+.model { flex: 1; min-width: 0; border: 1.5px solid var(--accent); background: var(--card); color: var(--accent-strong);
+  padding: 7px 2px; border-radius: 10px; font-size: .8rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
 .model.on { background: var(--accent); color: var(--accent-ink); }
 .model:disabled { opacity: .35; cursor: default; border-style: dashed; }
 
@@ -72,7 +73,7 @@ main { padding: 2px var(--gap) 24px; }
 .status { margin: 0 0 6px; padding: 10px 12px; border-radius: var(--radius); background: var(--warn-bg); color: var(--warn-ink); }
 
 .viewer { position: relative; background: #ffffff; border-radius: var(--radius); overflow: hidden;
-  touch-action: none; aspect-ratio: 1056 / 816; }
+  touch-action: none; aspect-ratio: 1056 / 844; }
 .viewer.small { aspect-ratio: auto; height: min(62vh, 70vw); }
 .zoom { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
 .zoom img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
@@ -150,6 +151,7 @@ dialog.sheet::backdrop { background: rgba(10, 20, 20, .6); }
 .cmp-wpsh { font-weight: 400; font-size: .9rem; }
 .viewer.small.newest { outline: 3px solid var(--accent); }
 .viewer.stale .zoom { opacity: .3; }
+#cmp-slider { margin-top: 4px; }
 .dots { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); border: 0; padding: 0; cursor: pointer; }
 .dot.on { background: var(--accent); }

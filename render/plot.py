@@ -37,6 +37,40 @@ def _features(res):
     return _FEATURES[res]
 
 
+_GEOM: dict = {}
+
+
+def domain_geometry(d: dict) -> dict:
+    """Map projection, extent and lat/lon bounding box of a domain.
+
+    A domain with `projection = "lcc"` is a rectangle in Lambert conformal x/y (metres, `extent_m`), e.g. the
+    KIM regional grid; its lat/lon bounding box (for cropping data) is computed from the rectangle's edges.
+    Other domains are lat/lon rectangles in plate carree.
+    """
+    key = repr(sorted((k, repr(v)) for k, v in d.items()))
+    if key in _GEOM:
+        return _GEOM[key]
+    if d.get("projection") == "lcc":
+        p = d["lcc"]
+        crs = ccrs.LambertConformal(central_longitude=p["lon_0"], central_latitude=p["lat_0"],
+                                    standard_parallels=(p["lat_1"], p["lat_2"]),
+                                    globe=ccrs.Globe(semimajor_axis=p["radius"], semiminor_axis=p["radius"]))
+        x0, x1, y0, y1 = d["extent_m"]
+        t = np.linspace(0, 1, 200)
+        xs = np.concatenate([x0 + (x1 - x0) * t, np.full(200, x1), x1 - (x1 - x0) * t, np.full(200, x0)])
+        ys = np.concatenate([np.full(200, y0), y0 + (y1 - y0) * t, np.full(200, y1), y1 - (y1 - y0) * t])
+        ll = PC.transform_points(crs, xs, ys)
+        bbox = dict(lat_min=float(ll[:, 1].min()), lat_max=float(ll[:, 1].max()),
+                    lon_min=float(ll[:, 0].min() % 360), lon_max=float(ll[:, 0].max() % 360))
+        g = {"crs": crs, "extent": [x0, x1, y0, y1], "aspect": (y1 - y0) / (x1 - x0), "bbox": bbox, "lcc": True}
+    else:
+        g = {"crs": PC, "extent": [d["lon_min"], d["lon_max"], d["lat_min"], d["lat_max"]],
+             "aspect": (d["lat_max"] - d["lat_min"]) / (d["lon_max"] - d["lon_min"]),
+             "bbox": {k: d[k] for k in ("lat_min", "lat_max", "lon_min", "lon_max")}, "lcc": False}
+    _GEOM[key] = g
+    return g
+
+
 def kst(t: dt.datetime, cfg) -> dt.datetime:
     return t + dt.timedelta(hours=cfg["style"]["kst_offset_h"])
 
@@ -47,13 +81,14 @@ class Frame:
     def __init__(self, cfg: dict, domain: str, transparent: bool = False, strong_coast: bool = False):
         self.cfg = cfg
         self.strong_coast = strong_coast
-        self.dom = cfg["domains"][domain]
+        self.geom = domain_geometry(cfg["domains"][domain])
+        # lat/lon keys of self.dom are the bounding box (used to crop data), also for a Lambert domain
+        self.dom = dict(cfg["domains"][domain], **self.geom["bbox"])
         self.domain = domain
         lay = cfg["layout"]
         st = cfg["style"]
-        d = self.dom
-        self.mw = d["map_width_px"]
-        self.mh = int(round(self.mw * (d["lat_max"] - d["lat_min"]) / (d["lon_max"] - d["lon_min"])))
+        self.mw = self.dom["map_width_px"]
+        self.mh = int(round(self.mw * self.geom["aspect"]))
         self.W = lay["margin_left_px"] + self.mw + lay["margin_right_px"]
         self.H = lay["margin_bottom_px"] + self.mh + lay["margin_top_px"]
         self.dpi = lay["dpi"]
@@ -63,9 +98,9 @@ class Frame:
         W, H = self.W, self.H
         self.ax = self.fig.add_axes(
             [lay["margin_left_px"] / W, lay["margin_bottom_px"] / H, self.mw / W, self.mh / H],
-            projection=PC,
+            projection=self.geom["crs"],
         )
-        self.ax.set_extent([d["lon_min"], d["lon_max"], d["lat_min"], d["lat_max"]], crs=PC)
+        self.ax.set_extent(self.geom["extent"], crs=self.geom["crs"])
         x0 = (lay["margin_left_px"] + self.mw + lay["colorbar_pad_px"]) / W
         self.cax_rect = [x0, lay["margin_bottom_px"] / H, lay["colorbar_width_px"] / W, self.mh / H]
         if transparent:
@@ -87,6 +122,15 @@ class Frame:
         g = d["grid_step_deg"]
         xt = np.arange(np.ceil(d["lon_min"] / g) * g, d["lon_max"] + 1e-6, g)
         yt = np.arange(np.ceil(d["lat_min"] / g) * g, d["lat_max"] + 1e-6, g)
+        if self.geom["lcc"]:
+            gl = self.ax.gridlines(crs=PC, xlocs=xt, ylocs=yt, color=st["grid_color"], linewidth=st["grid_width"],
+                                   linestyle="--", zorder=2, draw_labels=True, x_inline=False, y_inline=False,
+                                   rotate_labels=False)
+            gl.top_labels = gl.right_labels = False
+            gl.xformatter = LongitudeFormatter(degree_symbol="", dateline_direction_label=False)
+            gl.yformatter = LatitudeFormatter(degree_symbol="")
+            gl.xlabel_style = gl.ylabel_style = {"size": st["label_size"]}
+            return
         self.ax.set_xticks(xt, crs=PC)
         self.ax.set_yticks(yt, crs=PC)
         self.ax.xaxis.set_major_formatter(LongitudeFormatter(degree_symbol="", dateline_direction_label=False))
@@ -94,6 +138,13 @@ class Frame:
         self.ax.tick_params(labelsize=st["label_size"], length=3)
         self.ax.gridlines(xlocs=xt, ylocs=yt, color=st["grid_color"], linewidth=st["grid_width"],
                           linestyle="--", zorder=2)
+
+    def inside(self, lon: float, lat: float, edge_frac: float = 0.0) -> bool:
+        """True if (lon, lat) is on the map, at least edge_frac of the map size away from its edges."""
+        x, y = self.geom["crs"].transform_point(lon, lat, PC)
+        x0, x1, y0, y1 = self.geom["extent"]
+        ex, ey = (x1 - x0) * edge_frac, (y1 - y0) * edge_frac
+        return x0 + ex <= x <= x1 - ex and y0 + ey <= y <= y1 - ey
 
     def header(self, title: str, run: dt.datetime, step: int):
         st = self.cfg["style"]
@@ -173,7 +224,7 @@ def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
         _tp_fill(cfg, fr, S, _sub(F_prev, fr))
     p = S[("msl", 0)] / 100.0
     if c.get("smooth_sigma", 0) > 0:           # 0.1 deg: smooth small-scale terrain noise in the isobars
-        p = ndimage.gaussian_filter(p, c["smooth_sigma"], mode="nearest")
+        p = derive.nan_gaussian(p, c["smooth_sigma"])
     lv = _levels(p, c["interval"])
     widths = [1.6 if (v % c["bold_every"] == 0) else 0.8 for v in lv]
     cs = fr.ax.contour(S.lon, S.lat, p, levels=lv, colors="k", linewidths=widths, transform=PC, zorder=4)
@@ -183,7 +234,9 @@ def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
     d = fr.dom
     for kind, sym, col in (("max", "H", "#0033cc"), ("min", "L", "#cc0000")):
         ext = derive.local_extrema(p, S.lat, S.lon, c["hl_window_deg"], cfg["data"]["grid_deg"], kind=kind,
-                                   edge_exclude_deg=c["hl_edge_exclude_deg"], box=d)
+                                   edge_exclude_deg=0.0 if fr.geom["lcc"] else c["hl_edge_exclude_deg"], box=d)
+        if fr.geom["lcc"]:                       # curved lat/lon edges: test against the map rectangle itself
+            ext = [e for e in ext if fr.inside(e[1], e[0], c.get("hl_edge_exclude_frac", 0.05))]
         for la, lo, val in ext:
             fr.ax.text(lo, la, sym, color=col, fontsize=16, fontweight="bold", ha="center", va="center",
                        transform=PC, zorder=6, path_effects=halo)

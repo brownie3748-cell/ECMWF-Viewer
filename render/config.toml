@@ -39,10 +39,13 @@ levelist = [500, 300, 200]
 param = ["gh", "t", "u", "v"]
 
 [domains.default]
-lat_min = 25.0
-lat_max = 48.0
-lon_min = 110.0
-lon_max = 140.0
+# Lambert conformal map identical to the KIM regional grid (LoV 126E, standard parallels 30/60N, sphere
+# R = 6371229 m; measured in M8), framed by that grid's rectangle minus 15 km, so every model is drawn on the
+# same map and KIM regional has no blank corner. Corners about 25.4N 110.8E / 25.4N 141.2E (south) and
+# 47.6N 104.2E / 47.6N 147.8E (north); 49.6N on the 126E meridian. Data are cropped to its lat/lon bounding box.
+projection = "lcc"
+lcc = { lon_0 = 126.0, lat_0 = 30.0, lat_1 = 30.0, lat_2 = 60.0, radius = 6371229.0 }
+extent_m = [-1558000.0, 1558000.0, -367000.0, 2120000.0]
 map_width_px = 900
 grid_step_deg = 5               # graticule spacing
 barb_every = 8                  # grid points between wind barbs
@@ -193,11 +196,11 @@ jump_flag_gpm = 40.0            # M4: flag H changes larger than this between co
 [site]
 retention_runs = 12             # newest complete runs kept on the published site (3 days)
 lookback_runs = 18              # how many past 6-hourly cycles to consider when polling
-process_order = ["ifs", "aifs", "ifs01"]   # within a cycle: lightest model first (0.1 deg is slowest)
+process_order = ["ifs", "aifs", "kimg", "kimr", "ifs01"]   # within a cycle: lightest model first (0.1 deg is slowest)
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
-render_version = 6              # bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 7              # bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
@@ -265,7 +268,7 @@ model = "aifs-single"
 tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
 [models.override.site]
-render_version = 5              # AIFS charts unchanged by the IFS 3-hourly switch (version 6)
+render_version = 7              # 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
 [[models.override.data.groups]]
 levtype = "sfc"
 param = ["msl", "sp", "tp"]
@@ -284,6 +287,116 @@ param = ["gh", "t", "u", "v"]
 [models.override.style]
 model_label = "ECMWF AIFS Single 0.25deg"
 credit = "Adapted from 'ECMWF AIFS Single Forecast Data' by ECMWF, CC BY 4.0 (https://data.ecmwf.int/forecasts/). Modified: cropped, derived and rendered."
+
+[[models]]
+id = "kimg"
+label = "KIM 전구"
+enabled = false                 # owner 2026-11-15: off; a 0-240 h run (~1230 requests) takes ~100 min (measured rate)
+charts = ["msl", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500", "wpsh500", "gz300", "gz200"]
+[models.override.data]
+source = "kma"                  # render.kim: KMA API Hub, one field per request
+run_hours = [0, 12]             # owner choice: 00/12Z only (API Hub daily quota)
+grid_deg = 0.0833333
+max_step_main = 240
+max_step_short = 240
+publish_every_h = 6
+publish_every_h_long = 6
+tp_short_accum_h = 6
+tp_long_accum_h = 6
+read_region = { lat_min = 5.0, lat_max = 53.5, lon_min = 100.0, lon_max = 180.0 }
+[[models.override.data.groups]]
+levtype = "sfc"
+param = ["msl", "sp", "tp"]
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [925, 850]
+param = ["gh", "t", "u", "v", "q"]
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [700]
+param = ["gh", "t", "u", "v", "r"]
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [500, 300, 200]
+param = ["gh", "t", "u", "v"]
+[models.override.kma]
+group = "KIMG"
+box = [101, 22, 151, 53]                  # lon1, lat1, lon2, lat2: the Lambert map's lat/lon box + 3 deg
+wide_box_gh500 = [100, 5, 180, 50]        # gh500 also covers the WPSH search box (120-180E)
+probe_box = [126, 37, 127, 38]            # completeness probe: a tiny MSLP cut of the last step
+probe_every_min = 30
+min_age_h = 4
+parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
+est_bytes_per_field = 800_000             # measured 1.56 MB for 100-180E x 10-55N; the map box is about 0.43 of it
+grid = { lat_min = 5.0416667, lat_max = 53.0416667, lon_min = 100.0, lon_max = 180.0, step = 0.0833333 }
+vars = { gh = "hgt", t = "T", u = "u", v = "v", q = "q", r = "rh", msl = "psl", sp = "ps", tp = "prec_acc" }
+[models.override.domains.default]
+barb_every = 24
+vector_every = 9
+[models.override.charts.msl]
+smooth_sigma = 2.4
+[models.override.charts.mfc]
+smooth_sigma = 4.8
+[models.override.style]
+model_label = "KIM global 1/12deg"
+credit = "Source: KMA API Hub, KIM global model (KOGL Type 1, Korea Meteorological Administration). Modified: cropped, derived and rendered."
+
+[[models]]
+id = "kimr"
+label = "KIM 지역"
+charts = ["msl", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500"]
+[models.override.data]
+source = "kma"
+run_hours = [0, 12]
+grid_deg = 0.05
+max_step_main = 84               # measured +87 h available
+max_step_short = 84
+publish_every_h = 3              # owner 2026-11-15: 3-hourly
+publish_every_h_long = 3
+tp_short_accum_h = 3
+tp_long_accum_h = 3
+read_region = { lat_min = 22.0, lat_max = 53.0, lon_min = 101.0, lon_max = 151.0 }
+[[models.override.data.groups]]
+levtype = "sfc"
+param = ["msl", "sp", "tp"]
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [925, 850]
+param = ["gh", "t", "u", "v", "q"]
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [700]
+param = ["gh", "t", "u", "v", "r"]
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [500]
+param = ["gh", "t", "u", "v"]
+[models.override.kma]
+group = "KIMR"
+# Lambert 3 km, whole domain (a lon/lat cut of the Lambert grid was not measured); interpolated onto a
+# 0.05 deg lat/lon grid so the charts use exactly the same map frame as the other models.
+probe_every_min = 30
+min_age_h = 4
+parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
+est_bytes_per_field = 2_700_000           # measured 2.65 MB
+grid = { lat_min = 22.0, lat_max = 53.0, lon_min = 101.0, lon_max = 151.0, step = 0.05 }
+vars = { gh = "GPH", t = "T", u = "U", v = "V", q = "QVAPOR", r = "RH", msl = "MSLP", sp = "PSFC", tp = "RAIN" }
+q_is_mixing_ratio = true
+[models.override.domains.default]
+barb_every = 40
+vector_every = 15
+[models.override.charts.msl]
+smooth_sigma = 4.0
+[models.override.charts.mfc]
+smooth_sigma = 8.0
+[models.override.style]
+model_label = "KIM regional 3km"
+credit = "Source: KMA API Hub, KIM regional model (KOGL Type 1, Korea Meteorological Administration). Modified: regridded, derived and rendered."
+
+# KMA API Hub daily limits are 20,000 calls and 5 GB per key (owner, API Hub my page); stop below them.
+[kma_quota]
+max_calls_per_day = 18000
+max_bytes_per_day = 4_500_000_000
 
 # ---------------------------------------------------------------------------------------------
 # Cloudflare R2 storage (S3 API). Credentials come from the environment: R2_ACCOUNT_ID,
