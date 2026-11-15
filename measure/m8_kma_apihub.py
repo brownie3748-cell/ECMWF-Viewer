@@ -24,10 +24,9 @@ TIMEOUT = 60
 MAX_BYTES = 400_000_000
 ATTEMPTS = 5            # connections from abroad are often reset; every attempt is counted in the report
 HUB = "https://apihub.kma.go.kr/"
-# Default requests when M8_URLS is empty: KIM global (KIMG) and local (KIML), plus one regional (KIMR) field to
-# check its grid spacing; yesterday 00 UTC, GRIB2, from the "KIM 경량화 다운로드" API
+# Default requests when M8_URLS is empty: KIM global (KIMG) and regional (KIMR); yesterday 00 UTC, GRIB2, from the "KIM 경량화 다운로드" API
 # (apihub.kma.go.kr/apiList.do?seqApi=9, section 1.1). Variable names follow the API's own examples and the
-# "KIM 표준화 데이터 변수목록": global hgt/T/u/v/q/rh, psl/ps/prec_acc; regional/local GPH/T/U/V/RH/QVAPOR,
+# "KIM 표준화 데이터 변수목록": global hgt/T/u/v/q/rh, psl/ps/prec_acc; regional GPH/T/U/V/RH/QVAPOR,
 # MSLP/PSFC/RAIN. Global requests are cut to 100-180E, 10-55N (covers the IFS chart domains).
 _DL = "https://apihub.kma.go.kr/api/typ06/url/nwp_nc_vars_down.php?tmfc={tmfc}&dataType=GB2"
 _BOX = "&lon1=100&lat1=10&lon2=180&lat2=55"
@@ -38,12 +37,12 @@ DEFAULTS = [
     _DL + "&group=KIMG&hf=24&data=U&vars=psl" + _BOX,
     _DL + "&group=KIMG&hf=24&data=U&vars=prec_acc" + _BOX,
     _DL + "&group=KIMG&hf=240&data=P&vars=hgt&lvl_lst=500" + _BOX,            # is +240 h available?
-    _DL + "&group=KIML&hf=24&data=P&vars=GPH&lvl_lst=500",                    # whole local domain
-    _DL + "&group=KIML&hf=24&data=P&vars=GPH,T,U,V&lvl_lst=850",
-    _DL + "&group=KIML&hf=24&data=U&vars=MSLP",
-    _DL + "&group=KIML&hf=24&data=U&vars=RAIN",
-    _DL + "&group=KIML&hf=48&data=U&vars=MSLP",                               # is +48 h available?
-    _DL + "&group=KIMR&hf=24&data=P&vars=GPH&lvl_lst=500",                    # regional grid spacing: 3 or 12 km?
+    _DL + "&group=KIMR&hf=24&data=P&vars=GPH&lvl_lst=500",                    # whole regional domain: grid, 3 or 12 km?
+    _DL + "&group=KIMR&hf=24&data=P&vars=GPH,T,U,V&lvl_lst=850",              # several variables at once?
+    _DL + "&group=KIMR&hf=24&data=P&vars=T&lvl_lst=925,850,700,500",          # several levels at once?
+    _DL + "&group=KIMR&hf=24&data=U&vars=MSLP",
+    _DL + "&group=KIMR&hf=24&data=U&vars=RAIN",
+    _DL + "&group=KIMR&hf=87&data=U&vars=MSLP",                               # is +87 h available?
 ]
 
 
@@ -128,7 +127,7 @@ def main():
         import datetime as dt
         tmfc = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).strftime("%Y%m%d00")
         urls = [u.format(tmfc=tmfc) for u in DEFAULTS]
-    md = ["## M8 KMA API Hub (KIM global / local / regional) - measurement only", ""]
+    md = ["## M8 KMA API Hub (KIM global / regional) - measurement only", ""]
     data = {"key_present": bool(key), "requests": []}
 
     # 1) reachability of the hub itself from the runner (GitHub-hosted, outside Korea): 10 tries
@@ -144,7 +143,7 @@ def main():
     hub = {"ok": sum(t.startswith("200") for t in tries), "of": len(tries), "tries": tries}
     data["hub"] = hub
     md += [f"Hub {HUB} from the runner: `{hub}`", f"API key secret present: {bool(key)}", ""]
-    md.append(f"Requests: {'input m8_urls' if os.environ.get('M8_URLS', '').strip() else 'built-in KIM global/local/regional set'}")
+    md.append(f"Requests: {'input m8_urls' if os.environ.get('M8_URLS', '').strip() else 'built-in KIM global/regional set'}")
     rows = []
     for i, u in enumerate(urls):
         full = _with_key(u, key) if key else u
