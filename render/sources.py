@@ -6,6 +6,7 @@ import datetime as dt
 import logging
 
 import requests
+from ecmwf.opendata.client import SPLIT_RESOLUTIONS
 from ecmwf.opendata.urls import URLS
 
 from . import fetch
@@ -36,8 +37,10 @@ class Sources:
         stream = "oper"
         if run.date() < dt.date(2026, 5, 12) and run.hour in (6, 18):
             stream = "scda"   # pre-50r1 layout (see ecmwf-opendata client.patch_stream)
+        resol = self.cfg["data"]["resolution"]
+        split = "-sfc" if resol in SPLIT_RESOLUTIONS else ""   # 0p1: separate -sfc / -pl files
         u = (f"{URLS[source]}/{run:%Y%m%d}/{run:%H}z/{self.cfg['data']['model']}/"
-             f"{self.cfg['data']['resolution']}/{stream}/{run:%Y%m%d%H}0000-{step}h-{stream}-fc.index")
+             f"{resol}/{stream}/{run:%Y%m%d%H}0000-{step}h-{stream}-fc{split}.index")
         t = self._sas_token(source)
         return f"{u}?{t}" if t else u
 

@@ -19,6 +19,7 @@ import matplotlib.patheffects as patheffects  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from cartopy.mpl.ticker import LatitudeFormatter, LongitudeFormatter  # noqa: E402
+from scipy import ndimage  # noqa: E402
 
 from . import derive  # noqa: E402
 
@@ -171,6 +172,8 @@ def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
     if F_prev is not None:
         _tp_fill(cfg, fr, S, _sub(F_prev, fr))
     p = S[("msl", 0)] / 100.0
+    if c.get("smooth_sigma", 0) > 0:           # 0.1 deg: smooth small-scale terrain noise in the isobars
+        p = ndimage.gaussian_filter(p, c["smooth_sigma"], mode="nearest")
     lv = _levels(p, c["interval"])
     widths = [1.6 if (v % c["bold_every"] == 0) else 0.8 for v in lv]
     cs = fr.ax.contour(S.lon, S.lat, p, levels=lv, colors="k", linewidths=widths, transform=PC, zorder=4)

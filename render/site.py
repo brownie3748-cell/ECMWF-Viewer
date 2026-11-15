@@ -1,4 +1,12 @@
-"""Published site: run directories, pruning and the index.json manifest."""
+"""Published site layout and the index.json manifest (schema 2: several models).
+
+Layout in the store (R2 bucket or local directory):
+    index.json                       manifest, written after every change (last)
+    NOTICE.txt                       licence / attribution notice
+    <model>/<run>/<chart>_<step>.png images
+    <model>/<run>/meta.json          written after the run's images (= run complete)
+    _ops/<YYYY-MM>.json              request counter for the monthly budget
+"""
 
 from __future__ import annotations
 
@@ -6,76 +14,63 @@ import datetime as dt
 import json
 import logging
 import pathlib
-import shutil
+
+from . import config as config_mod
 
 log = logging.getLogger(__name__)
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
-def complete_runs(site: pathlib.Path) -> dict[str, dict]:
-    """Runs whose meta.json exists (meta.json is written last, so these are complete)."""
-    out = {}
-    for meta in sorted((site / "runs").glob("*/meta.json")):
-        try:
-            out[meta.parent.name] = json.loads(meta.read_text())
-        except json.JSONDecodeError:
-            log.warning("unreadable %s", meta)
+def run_entry(meta: dict) -> dict:
+    """The part of a run's meta.json that goes into the manifest."""
+    return {"run": meta["run"], "steps": meta["steps"], "wpsh": meta["wpsh"],
+            "rv": meta.get("render_version", 1), "bytes": meta.get("bytes", 0)}
+
+
+def runs_from_manifest(m: dict | None) -> dict[str, dict[str, dict]]:
+    """{model: {run: entry}} from a schema-2 manifest (empty for none or an older schema)."""
+    out: dict[str, dict[str, dict]] = {}
+    if not m or m.get("schema_version") != 2:
+        return out
+    for mod in m.get("models", []):
+        out[mod["id"]] = {r["run"]: r for r in mod.get("runs", [])}
     return out
 
 
-def prune(site: pathlib.Path, keep: set[str]) -> list[str]:
-    """Delete every run directory (complete or partial) not in `keep`."""
-    removed = []
-    runs_dir = site / "runs"
-    if not runs_dir.exists():
-        return removed
-    for d in sorted(runs_dir.iterdir()):
-        if d.is_dir() and d.name not in keep:
-            shutil.rmtree(d)
-            removed.append(d.name)
-    return removed
-
-
-def sync_app(src: pathlib.Path, site: pathlib.Path) -> bool:
-    """Mirror the web app (app/www) into site/app/. Returns True if anything changed."""
-    dst = site / "app"
-    want = {p.relative_to(src): p.read_bytes() for p in src.rglob("*") if p.is_file()}
-    have = {p.relative_to(dst): p.read_bytes() for p in dst.rglob("*") if p.is_file()} if dst.exists() else {}
-    if want == have:
-        return False
-    if dst.exists():
-        shutil.rmtree(dst)
-    for rel, data in want.items():
-        (dst / rel).parent.mkdir(parents=True, exist_ok=True)
-        (dst / rel).write_bytes(data)
-    return True
-
-
-def manifest(cfg: dict) -> dict:
+def manifest(cfg: dict, runs: dict[str, dict[str, dict]]) -> dict:
+    """index.json: per model its charts and complete runs (oldest first) with steps and WPSH per step."""
+    models = []
+    for mid in config_mod.model_ids(cfg):
+        mc = config_mod.for_model(cfg, mid)
+        rs = [dict(r) for _, r in sorted(runs.get(mid, {}).items())]
+        for r in rs:
+            r.pop("bytes", None)
+        models.append({
+            "id": mid,
+            "label": mc["model_label_short"],
+            "title": mc["style"]["model_label"],
+            "attribution": mc["style"]["credit"],
+            "charts": [dict(c) for c in mc["site"]["charts"]],
+            "runs": rs,
+            "latest": rs[-1]["run"] if rs else None,
+        })
     return {
         "schema_version": cfg["site"]["schema_version"],
-        "model": cfg["style"]["model_label"],
+        "generated_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "attribution": cfg["style"]["credit"],
         "kst_offset_h": cfg["style"]["kst_offset_h"],
         "path": cfg["site"]["path"],
-        "charts": [dict(c) for c in cfg["site"]["charts"]],
-        "runs": [],
+        "default_model": config_mod.model_ids(cfg)[0],
+        "models": models,
     }
 
 
-def write_manifest(cfg: dict, site: pathlib.Path) -> dict:
-    """index.json: charts + complete runs (oldest first) with steps and WPSH H / H-50 per step."""
-    m = manifest(cfg)
-    m["generated_utc"] = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    for run, meta in sorted(complete_runs(site).items()):
-        m["runs"].append({"run": run, "steps": meta["steps"], "wpsh": meta["wpsh"]})
-    m["latest"] = m["runs"][-1]["run"] if m["runs"] else None
-    site.mkdir(parents=True, exist_ok=True)
-    (site / "index.json").write_text(json.dumps(m, separators=(",", ":")))
-    (site / "NOTICE.txt").write_text((ROOT / "NOTICE").read_text())
-    (site / "index.html").write_text(
-        "<!doctype html><meta charset=utf-8><title>ECMWF chart viewer data</title>"
-        "<p>Static chart data for the ECMWF chart viewer app. Open the viewer: <a href=app/>app/</a>. "
-        "Manifest: <a href=index.json>index.json</a>. "
-        f"Latest run: {m['latest']}.</p><p>{cfg['style']['credit']} See <a href=NOTICE.txt>NOTICE</a>.</p>")
+def write_manifest(cfg: dict, store, runs: dict[str, dict[str, dict]]) -> dict:
+    m = manifest(cfg, runs)
+    store.put_bytes("index.json", json.dumps(m, separators=(",", ":")).encode(),
+                    cfg["storage"]["manifest_cache_control"])
     return m
+
+
+def write_notice(cfg: dict, store) -> None:
+    store.put_bytes("NOTICE.txt", (ROOT / "NOTICE").read_bytes(), "public, max-age=3600")

@@ -1,5 +1,8 @@
 # Stage 1: renderer and Pages deploy
 
+> Superseded for storage and publishing by [STAGE3.md](STAGE3.md) (Cloudflare R2, several models).
+> The rendering notes below still apply.
+
 ## Pipeline (`.github/workflows/publish.yml`, main only)
 
 Every 30 minutes (and on *Run workflow*):

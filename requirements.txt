@@ -7,3 +7,4 @@ matplotlib==3.11.2
 Cartopy==0.26.0
 pillow==13.0.0
 requests==2.34.2
+boto3==1.44.3                 # Cloudflare R2 (S3 API)

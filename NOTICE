@@ -10,8 +10,9 @@ Weather charts produced by this project are derived from ECMWF open data.
 
 Data source
 -----------
-ECMWF IFS open data (HRES, 0.25 deg), https://data.ecmwf.int/forecasts/
-and its cloud mirrors (AWS, Azure, Google Cloud).
+ECMWF open data, https://data.ecmwf.int/forecasts/ and its cloud mirrors (AWS, Azure, Google Cloud):
+  - IFS deterministic forecast (HRES), 0.25 deg and 0.1 deg
+  - AIFS Single deterministic forecast, 0.25 deg
 
 Copyright: European Centre for Medium-Range Weather Forecasts (ECMWF).
 Licence: Creative Commons Attribution 4.0 International (CC BY 4.0)
@@ -21,7 +22,7 @@ ECMWF Terms of Use: https://www.ecmwf.int/en/terms-use
   (publicly accessible ECMWF content without its own rights notice is available under
   CC BY 4.0; checked against the Terms of Use text on 2026-11-14)
 
-Attribution (shown on every chart):
+Attribution (shown on every chart; AIFS charts name 'ECMWF AIFS Single Forecast Data'):
   Adapted from 'ECMWF IFS 15-day Forecast Data' by ECMWF, licensed under CC BY 4.0,
   available at https://data.ecmwf.int/forecasts/
   (wording follows ECMWF's example attribution for its open data)
