@@ -11,18 +11,17 @@ const CMP_PLAY_MS = 1000;
 const PREFETCH_PARALLEL = 4;      // background downloads at a time
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 
-// Chart picker: one row per level, products side by side. Charts not listed go to a last "기타" row.
-const GROUPS = [
-  { level: "지상", items: [["msl", "기압·강수"]] },
-  { level: "925", items: [["gz925", "기온·바람"], ["mfc925", "수분속"]] },
-  { level: "850", items: [["gz850", "기온·바람"], ["mfc850", "수분속"]] },
-  { level: "700", items: [["gz700", "기온·바람"], ["rh700", "습도"]] },
-  { level: "500", items: [["gz500", "기온·바람"], ["gz500_wide", "광역"]] },
-  { level: "300", items: [["gz300", "풍속"]] },
-  { level: "200", items: [["gz200", "풍속"]] },
+// Chart chips (top, horizontally scrollable): 500 hPa first, then the other levels from the surface up.
+// Charts not listed are appended in manifest order.
+const CHIPS = [
+  ["gz500", "500"], ["gz500_wide", "500 광역"],
+  ["msl", "지상·강수"],
+  ["gz925", "925"], ["mfc925", "925 수분속"],
+  ["gz850", "850"], ["mfc850", "850 수분속"],
+  ["gz700", "700"], ["rh700", "700 습도"],
+  ["gz300", "300"], ["gz200", "200"],
 ];
-const LABELS = {};
-GROUPS.forEach((g) => g.items.forEach(([id, name]) => { LABELS[id] = g.level === "지상" ? `지상 ${name}` : `${g.level} ${name}`; }));
+const LABELS = Object.fromEntries(CHIPS);
 
 const $ = (id) => document.getElementById(id);
 
@@ -207,44 +206,30 @@ function buildRuns() {
 }
 
 function buildChartPicker() {
-  const box = $("charts");
-  box.innerHTML = "";
-  const all = new Set();
-  state.m.models.forEach((mod) => mod.charts.forEach((c) => { if (!c.overlay_of) all.add(c.id); }));
-  const groups = GROUPS.map((g) => ({ level: g.level, items: g.items.filter(([id]) => all.has(id)) }));
-  const listed = new Set(GROUPS.flatMap((g) => g.items.map(([id]) => id)));
-  const other = [...all].filter((id) => !listed.has(id));
-  if (other.length) groups.push({ level: "기타", items: other.map((id) => [id, id]) });
-  groups.filter((g) => g.items.length).forEach((g) => {
-    const row = document.createElement("div");
-    row.className = "crow";
-    const lv = document.createElement("div");
-    lv.className = "clevel";
-    lv.textContent = g.level === "지상" ? "지상" : `${g.level}`;
-    if (g.level !== "지상" && g.level !== "기타") { const u = document.createElement("small"); u.textContent = "hPa"; lv.append(u); }
-    row.append(lv);
-    const btns = document.createElement("div");
-    btns.className = "cbtns";
-    g.items.forEach(([id, name]) => {
-      const b = document.createElement("button");
-      b.className = "cbtn";
-      b.dataset.id = id;
-      b.textContent = name;
-      b.onclick = () => { if (!b.disabled && id !== state.chart) selectChart(id); };
-      btns.append(b);
-    });
-    row.append(btns);
-    box.append(row);
+  const nav = $("charts");
+  nav.innerHTML = "";
+  const all = [];
+  state.m.models.forEach((mod) => mod.charts.forEach((c) => { if (!c.overlay_of && !all.includes(c.id)) all.push(c.id); }));
+  const order = CHIPS.map(([id]) => id).filter((id) => all.includes(id)).concat(all.filter((id) => !LABELS[id]));
+  order.forEach((id) => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.dataset.id = id;
+    b.textContent = LABELS[id] || id;
+    b.onclick = () => { if (!b.disabled && id !== state.chart) selectChart(id); };
+    nav.append(b);
   });
 }
 
 function updateChartPicker() {
-  document.querySelectorAll(".cbtn").forEach((b) => {
+  document.querySelectorAll(".chip").forEach((b) => {
     const ok = !!chartIn(M(), b.dataset.id);
     b.disabled = !ok;
     b.title = ok ? "" : `${M().label}에는 없는 차트`;
     b.classList.toggle("on", b.dataset.id === state.chart);
   });
+  const on = document.querySelector(".chip.on");
+  if (on) on.scrollIntoView({ inline: "nearest", block: "nearest" });
 }
 
 function currentValid() { return addH(parseRun(run().run), state.step); }
