@@ -54,7 +54,7 @@ def main():
 
     # ---- tp accumulation basis ----
     files, src = fetch_tp_series(run)
-    reg = CFG["domains"]["default"]
+    reg = dict(CFG["domains"]["default"], **__import__("render.plot", fromlist=["x"]).domain_geometry(CFG["domains"]["default"])["bbox"])
     tp = {}
     tp_meta = {}
     for st, p in sorted(files.items()):

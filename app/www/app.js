@@ -421,9 +421,9 @@ function openCompare() {
     const o = overlayUrl(f.run, f.step);
     if (o) preloadUrl(o);
   });
-  cmpRender();
+  $("cmp-slider").max = String(Math.max(0, frames.length - 1));
+  cmpRender();                                     // opens on the newest run; play only when asked
   $("compare-dlg").showModal();
-  if (frames.length > 1) { state.cmp.idx = 0; cmpRender(); cmpPlay(); }
 }
 
 function preloadUrl(u) {
@@ -460,6 +460,7 @@ function cmpRender(fromLoad) {
   }
   document.querySelector("#compare-dlg .viewer").classList.toggle("newest", newest);
   document.querySelectorAll("#cmp-dots .dot").forEach((d, i) => d.classList.toggle("on", i === idx));
+  $("cmp-slider").value = String(idx);
   $("cmp-prev").disabled = idx === 0;
   $("cmp-next").disabled = idx === frames.length - 1;
 }
@@ -556,6 +557,7 @@ function wire() {
   $("cmp-close").onclick = closeCompare;
   $("cmp-prev").onclick = () => { cmpStop(); state.cmp.idx -= 1; cmpRender(); };
   $("cmp-next").onclick = () => { cmpStop(); state.cmp.idx += 1; cmpRender(); };
+  $("cmp-slider").oninput = (e) => { cmpStop(); state.cmp.idx = +e.target.value; cmpRender(); };
   $("cmp-play").onclick = () => { if (!state.cmp.timer && state.cmp.idx >= state.cmp.frames.length - 1) state.cmp.idx = 0; cmpPlay(); };
   $("compare-dlg").addEventListener("close", cmpStop);
   enableZoom($("viewer"), $("zoom"));

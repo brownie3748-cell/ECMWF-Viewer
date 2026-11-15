@@ -61,7 +61,7 @@ class Models(unittest.TestCase):
         hi = config.for_model(CFG, "ifs01")
         self.assertEqual(hi["data"]["resolution"], "0p1")
         self.assertEqual(hi["domains"]["default"]["barb_every"], 20)
-        self.assertEqual(hi["domains"]["default"]["lat_min"], CFG["domains"]["default"]["lat_min"])  # merged
+        self.assertEqual(hi["domains"]["default"]["extent_m"], CFG["domains"]["default"]["extent_m"])  # merged
         self.assertEqual(CFG["data"]["resolution"], "0p25")                                         # base intact
         ai = config.for_model(CFG, "aifs")
         self.assertEqual(ai["data"]["model"], "aifs-single")

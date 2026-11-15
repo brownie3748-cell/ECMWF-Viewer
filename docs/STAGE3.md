@@ -109,3 +109,10 @@ The job summary shows: hub reachability from the runner, HTTP status, size, spee
   The first backfill (9 runs per model in the 18-cycle window) therefore spreads over about 4 days (estimated).
 - UNVERIFIED until the first CI smoke render: units and value ranges of the KIM fields (`field_ranges` in each
   run's meta.json lists min/max per field), whether `prec_acc` / `RAIN` accumulate from the run start.
+
+## Map (render_version 7)
+
+The default domain is `projection = "lcc"` with `extent_m` in the KIM regional grid's own Lambert x/y
+(`plot.domain_geometry`): every model is drawn on that rectangle, so switching models never moves the map and
+KIM regional fills it. Data are cropped to the rectangle's lat/lon bounding box (about 25.4-49.6N,
+104.2-147.8E), hence the KIM global request box 101-151E, 22-53N.
