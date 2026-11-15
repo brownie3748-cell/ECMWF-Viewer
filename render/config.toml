@@ -291,6 +291,7 @@ credit = "Adapted from 'ECMWF AIFS Single Forecast Data' by ECMWF, CC BY 4.0 (ht
 [[models]]
 id = "kimg"
 label = "KIM 전구"
+enabled = false                 # owner 2026-11-15: off; a 0-240 h run (~1230 requests) takes ~100 min (measured rate)
 charts = ["msl", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500", "wpsh500", "gz300", "gz200"]
 [models.override.data]
 source = "kma"                  # render.kim: KMA API Hub, one field per request
@@ -348,12 +349,12 @@ charts = ["msl", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500"
 source = "kma"
 run_hours = [0, 12]
 grid_deg = 0.05
-max_step_main = 84               # measured +87 h available; 6-hourly -> 84
+max_step_main = 84               # measured +87 h available
 max_step_short = 84
-publish_every_h = 6
-publish_every_h_long = 6
-tp_short_accum_h = 6
-tp_long_accum_h = 6
+publish_every_h = 3              # owner 2026-11-15: 3-hourly
+publish_every_h_long = 3
+tp_short_accum_h = 3
+tp_long_accum_h = 3
 read_region = { lat_min = 22.0, lat_max = 53.0, lon_min = 101.0, lon_max = 151.0 }
 [[models.override.data.groups]]
 levtype = "sfc"

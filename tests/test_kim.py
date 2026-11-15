@@ -86,16 +86,16 @@ class Quota(unittest.TestCase):
 
 class Config(unittest.TestCase):
     def test_kim_models(self):
-        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "kimg", "kimr"])
+        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "kimr"])
         r = config.for_model(CFG, "kimr")
         ids = [c["id"] for c in r["site"]["charts"]]
         self.assertNotIn("wpsh500", ids)                         # regional domain does not reach 180E
-        self.assertEqual(kim.run_cost(r, 15)[0], 330)
+        self.assertEqual(kim.run_cost(r, 29)[0], 638)
         g = config.for_model(CFG, "kimg")
         self.assertEqual(kim.run_cost(g, 41)[0], 1230)
-        # one day of 00/12Z for both models stays inside the guard
-        calls = 2 * (kim.run_cost(g, 41)[0] + kim.run_cost(r, 15)[0])
-        nbytes = 2 * (kim.run_cost(g, 41)[1] + kim.run_cost(r, 15)[1])
+        # one day of 00/12Z KIM regional (3-hourly, 29 steps) stays inside the guard
+        calls = 2 * kim.run_cost(r, 29)[0]
+        nbytes = 2 * kim.run_cost(r, 29)[1]
         self.assertLess(calls, CFG["kma_quota"]["max_calls_per_day"])
         self.assertLess(nbytes, CFG["kma_quota"]["max_bytes_per_day"])
 

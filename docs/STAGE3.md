@@ -92,6 +92,11 @@ The job summary shows: hub reachability from the runner, HTTP status, size, spee
 
 ## KIM models (render/kim.py)
 
+Owner decision 2026-11-15: KIM global is disabled (`enabled = false`; a 0-240 h run is about 1230 requests,
+about 100 min at the measured rate of 2 requests in parallel with a 15 s timeout). KIM regional runs 3-hourly to +84 h
+(29 steps, about 640 requests per run, estimated 70-80 min). Whether KIM regional is output every 3 h is checked by the CI smoke (step 3).
+
+
 - `data.source = "kma"` selects `kim.KimSource` (same interface as `sources.Sources`).
 - One request per field and lead time; fields are labelled from the request (the GRIB headers are wrong, M8).
   4 requests in parallel, 4 tries each. The key comes from `KMA_APIHUB_KEY` and is never logged.

@@ -43,7 +43,7 @@ class Steps(unittest.TestCase):
 
 class Models(unittest.TestCase):
     def test_model_ids(self):
-        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "kimg", "kimr"])
+        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "kimr"])
 
     def test_chart_lists(self):
         ifs = config.for_model(CFG, "ifs")
@@ -175,7 +175,7 @@ class Manifest(unittest.TestCase):
                             for r in ("2026111506", "2026111500")}}
             m = site.write_manifest(CFG, st, runs)
             self.assertEqual(m["schema_version"], 2)
-            self.assertEqual([x["id"] for x in m["models"]], ["ifs", "ifs01", "aifs", "kimg", "kimr"])
+            self.assertEqual([x["id"] for x in m["models"]], ["ifs", "ifs01", "aifs", "kimr"])
             ifs = m["models"][0]
             self.assertEqual([r["run"] for r in ifs["runs"]], ["2026111500", "2026111506"])   # oldest first
             self.assertEqual(ifs["latest"], "2026111506")
