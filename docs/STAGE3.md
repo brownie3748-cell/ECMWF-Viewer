@@ -34,7 +34,9 @@ _ops/<YYYY-MM>.json                request counter (monthly budget)
 2. Nothing to do -> stop (no writes).
 3. Otherwise list the bucket (actual sizes), drop runs that left the window from the manifest first, then
    delete their objects; delete orphaned prefixes from interrupted uploads.
-4. Render missing runs newest cycle first, all models per cycle, within the time budget. Before each upload
+4. Render missing runs newest cycle first; within a cycle `site.process_order` (IFS, AIFS, IFS 0.1: lightest
+   first). After every uploaded run the newest two cycles are re-checked, and a run published meanwhile
+   goes to the front of the queue. All within the time budget. Before each upload
    the guard checks `bucket size - replaced + new <= storage.max_bytes` (9 GB) and the monthly Class A
    count; if either fails nothing of that run is uploaded and the job fails (red run = alert).
 5. Upload images, then `meta.json`, then rewrite `index.json` (so the app never sees a half-uploaded run).
