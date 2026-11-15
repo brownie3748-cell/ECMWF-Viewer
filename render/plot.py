@@ -202,6 +202,13 @@ def _underground(F, level):
 
 
 # ---------------------------------------------------------------------- charts
+def _contourf(fr, S, z, **kw):
+    """Filled contours computed in map x/y (transform_first). Reprojecting the filled polygons onto the
+    Lambert map can invert one of them, which then floods the whole map with one colour (AIFS +192 h tp)."""
+    lon2, lat2 = np.meshgrid(S.lon, S.lat)
+    return fr.ax.contourf(lon2, lat2, z, transform_first=True, **kw)
+
+
 def _tp_fill(cfg, fr, S, P):
     """Shade precipitation accumulated between P and S (mm) with the tp colour table + colour bar."""
     c = cfg["charts"]["tp"]
@@ -209,7 +216,7 @@ def _tp_fill(cfg, fr, S, P):
     cmap = mcolors.ListedColormap(c["colors"][:-1])
     cmap.set_over(c["colors"][-1])
     norm = mcolors.BoundaryNorm(c["levels"], cmap.N)
-    cf = fr.ax.contourf(S.lon, S.lat, acc, levels=c["levels"], cmap=cmap, norm=norm, extend="max",
+    cf = _contourf(fr, S, acc, levels=c["levels"], cmap=cmap, norm=norm, extend="max",
                         transform=PC, zorder=1)
     fr.colorbar(cf, label="mm", ticks=c["levels"])
     return acc
@@ -293,7 +300,7 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
         lo, hi = c["t_fill_range"][lvkey]
         cmap, norm = temp_colormap(cfg)
         tl = np.arange(lo, hi + fc["step"] / 2, fc["step"])
-        cf = fr.ax.contourf(S.lon, S.lat, t, levels=tl, cmap=cmap, norm=norm, extend="both", transform=PC,
+        cf = _contourf(fr, S, t, levels=tl, cmap=cmap, norm=norm, extend="both", transform=PC,
                             zorder=1)
         fr.colorbar(cf, label="deg C", ticks=[x for x in tl if x % 5 == 0])
         iso = _levels(t, ti)
@@ -303,7 +310,7 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
     elif temp_style == "A":
         lo, hi = c["t_fill_range"][lvkey]
         tl = np.arange(lo, hi + ti / 2, ti)
-        cf = fr.ax.contourf(S.lon, S.lat, t, levels=tl, cmap=c["t_cmap"], extend="both", transform=PC,
+        cf = _contourf(fr, S, t, levels=tl, cmap=c["t_cmap"], extend="both", transform=PC,
                             zorder=1, alpha=0.85)
         fr.colorbar(cf, label="deg C", ticks=tl[::2])
     else:
@@ -316,7 +323,7 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
                 "wspd", [(k / wf["max"], col) for k, col in a], N=512)
             cmap.set_over(a[-1][1])
             wl = np.arange(0, wf["max"] + wf["step"] / 2, wf["step"])
-            cf = fr.ax.contourf(S.lon, S.lat, spd, levels=wl, cmap=cmap, vmin=0, vmax=wf["max"], extend="max",
+            cf = _contourf(fr, S, spd, levels=wl, cmap=cmap, vmin=0, vmax=wf["max"], extend="max",
                                 transform=PC, zorder=1)
             fr.colorbar(cf, label="kt", ticks=wl[::5])
             iso_col = wf["isotherm_color"]
@@ -352,7 +359,7 @@ def chart_rh700(cfg, F, run, step):
     a = c["anchors"]
     cmap = mcolors.LinearSegmentedColormap.from_list("rh", [(v / 100, col) for v, col in a], N=256)
     lv = np.arange(0, 100 + c["step"] / 2, c["step"])
-    cf = fr.ax.contourf(S.lon, S.lat, rh, levels=lv, cmap=cmap, vmin=0, vmax=100, transform=PC, zorder=1)
+    cf = _contourf(fr, S, rh, levels=lv, cmap=cmap, vmin=0, vmax=100, transform=PC, zorder=1)
     fr.colorbar(cf, label="%", ticks=lv[::2])
     gh = S[("gh", 700)]
     cs = fr.ax.contour(S.lon, S.lat, gh, levels=_levels(gh, cfg["charts"]["gz"]["gh_interval"]["700"]),
@@ -376,7 +383,7 @@ def chart_mfc(cfg, F, level, run, step):
     cmap = mcolors.ListedColormap(list(reversed(c["shade_colors"])))
     cmap.set_under(c["shade_colors"][-1])
     norm = mcolors.BoundaryNorm(sl, cmap.N)
-    cf = fr.ax.contourf(S.lon, S.lat, shade, levels=sl, cmap=cmap, norm=norm, extend="min", transform=PC,
+    cf = _contourf(fr, S, shade, levels=sl, cmap=cmap, norm=norm, extend="min", transform=PC,
                         zorder=1)
     fr.colorbar(cf, ticks=sl)
     ci = c["contour_interval"]
