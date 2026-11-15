@@ -1,5 +1,5 @@
-/* ECMWF 뷰어: static chart viewer for the manifest published by the Stage 1 pipeline.
- * Runs both in a browser (served from <site>/app/) and inside the Capacitor Android app.
+/* ECMWF 뷰어: static chart viewer for the manifest (schema 2) stored in Cloudflare R2.
+ * Runs both in a browser (GitHub Pages <site>/app/) and inside the Capacitor Android app.
  */
 "use strict";
 
@@ -8,14 +8,21 @@ const DATA_BASE = "https://pub-07aea3ace26c452cbe6112df32e49088.r2.dev/";
 const SCHEMA = 2;
 const PLAY_MS = 700;
 const CMP_PLAY_MS = 1000;
+const PREFETCH_PARALLEL = 4;      // background downloads at a time
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 
-// Korean tab labels; charts not listed here fall back to the manifest title.
-const LABELS = {
-  msl: "지상·강수", gz925: "925", gz850: "850", gz700: "700", gz500: "500",
-  gz300: "300", gz200: "200", rh700: "700 습도", mfc925: "925 수분속", mfc850: "850 수분속",
-  gz500_wide: "500 광역",
-};
+// Chart picker: one row per level, products side by side. Charts not listed go to a last "기타" row.
+const GROUPS = [
+  { level: "지상", items: [["msl", "기압·강수"]] },
+  { level: "925", items: [["gz925", "기온·바람"], ["mfc925", "수분속"]] },
+  { level: "850", items: [["gz850", "기온·바람"], ["mfc850", "수분속"]] },
+  { level: "700", items: [["gz700", "기온·바람"], ["rh700", "습도"]] },
+  { level: "500", items: [["gz500", "기온·바람"], ["gz500_wide", "광역"]] },
+  { level: "300", items: [["gz300", "풍속"]] },
+  { level: "200", items: [["gz200", "풍속"]] },
+];
+const LABELS = {};
+GROUPS.forEach((g) => g.items.forEach(([id, name]) => { LABELS[id] = g.level === "지상" ? `지상 ${name}` : `${g.level} ${name}`; }));
 
 const $ = (id) => document.getElementById(id);
 
@@ -36,6 +43,21 @@ const state = {
   timer: null,
   cmp: { frames: [], idx: 0, timer: null },
 };
+
+// ------------------------------------------------------------------ theme
+function applyTheme() {
+  const saved = localStorage.getItem("theme");
+  const dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  $("theme").textContent = dark ? "☀" : "🌙";
+  $("theme").setAttribute("aria-label", dark ? "밝은 테마로" : "어두운 테마로");
+  document.querySelector('meta[name="theme-color"]').content = dark ? "#121417" : "#0f8f80";
+}
+function toggleTheme() {
+  const dark = document.documentElement.dataset.theme === "dark";
+  localStorage.setItem("theme", dark ? "light" : "dark");
+  applyTheme();
+}
 
 // ------------------------------------------------------------------ time helpers
 function parseRun(s) {
@@ -61,8 +83,14 @@ function runLabel(s) {
 
 // ------------------------------------------------------------------ manifest helpers
 const M = () => state.m.models.find((x) => x.id === state.model) || state.m.models[0];
+const chartIn = (mod, id) => mod.charts.find((c) => c.id === id && !c.overlay_of);
 const chartDef = (id) => M().charts.find((c) => c.id === id);
-const overlayOf = (id) => M().charts.find((c) => c.overlay_of === id);
+// WPSH line overlay for any chart on the same map domain (the overlay is drawn on the identical pixel frame).
+function overlayOf(id) {
+  const c = chartDef(id);
+  if (!c) return null;
+  return M().charts.find((o) => o.overlay_of && (chartDef(o.overlay_of) || {}).domain === c.domain) || null;
+}
 const run = () => M().runs[state.runIdx];
 function stepsFor(r, chartId) {
   const min = chartDef(chartId).min_step || 0;
@@ -79,6 +107,7 @@ function wpshFor(r, step) {
   if (!v) return { drawn: false, why: "이 시각엔 고기압 중심이 없어요" };
   return { drawn: true, H: v[0], line: v[1] };
 }
+function chartLabel(id) { return LABELS[id] || (chartDef(id) || {}).title || id; }
 
 // ------------------------------------------------------------------ loading
 async function loadManifest() {
@@ -98,6 +127,7 @@ async function init(keepView) {
     state.m = await loadManifest();
     $("notice-link").href = state.base + "NOTICE.txt";
     buildModels();
+    buildChartPicker();
     selectModel(state.model, keepView ? prev : null, prevValid);
   } catch (e) {
     console.error(e);
@@ -113,22 +143,30 @@ function selectModel(id, keepRun, keepValid) {
   state.model = mod.id;
   localStorage.setItem("model", mod.id);
   $("attribution").textContent = mod.attribution || state.m.attribution;
-  document.querySelectorAll(".model").forEach((b) => b.classList.toggle("on", b.dataset.id === mod.id));
   buildRuns();
-  buildChips();
   state.runIdx = mod.runs.length - 1;
   if (keepRun) {
     const i = mod.runs.findIndex((r) => r.run === keepRun);
     if (i >= 0) state.runIdx = i;
   }
-  if (!chartDef(state.chart) || chartDef(state.chart).overlay_of) {
-    state.chart = chartDef("gz500") ? "gz500" : mod.charts.find((c) => !c.overlay_of).id;
-  }
+  if (!chartIn(mod, state.chart)) state.chart = chartIn(mod, "gz500") ? "gz500" : mod.charts.find((c) => !c.overlay_of).id;
   $("run").value = String(state.runIdx);
   setStepNear(keepValid);
   render();
 }
 
+function selectChart(id) {
+  stop();
+  const v = currentValid();
+  state.chart = id;
+  localStorage.setItem("chart", id);
+  setStepNear(v);
+  render();
+}
+
+function setStatus(msg) { const s = $("status"); s.textContent = msg; s.hidden = !msg; }
+
+// ------------------------------------------------------------------ UI builders
 function buildModels() {
   const nav = $("models");
   nav.innerHTML = "";
@@ -137,9 +175,8 @@ function buildModels() {
     b.className = "model";
     b.textContent = mod.label;
     b.dataset.id = mod.id;
-    b.disabled = !mod.runs.length;
     b.onclick = () => {
-      if (mod.id === state.model) return;
+      if (mod.id === state.model || b.disabled) return;
       stop();
       selectModel(mod.id, run() ? run().run : null, currentValid());
     };
@@ -147,9 +184,17 @@ function buildModels() {
   });
 }
 
-function setStatus(msg) { const s = $("status"); s.textContent = msg; s.hidden = !msg; }
+// A model button is disabled while it has no runs or does not offer the chart on screen.
+function updateModels() {
+  document.querySelectorAll(".model").forEach((b) => {
+    const mod = state.m.models.find((x) => x.id === b.dataset.id);
+    const ok = mod.runs.length && chartIn(mod, state.chart);
+    b.disabled = !ok;
+    b.title = ok ? "" : (mod.runs.length ? `${mod.label}에는 이 차트가 없어요` : "자료 준비 중");
+    b.classList.toggle("on", mod.id === state.model);
+  });
+}
 
-// ------------------------------------------------------------------ UI builders
 function buildRuns() {
   const sel = $("run");
   sel.innerHTML = "";
@@ -161,16 +206,44 @@ function buildRuns() {
   });
 }
 
-function buildChips() {
-  const nav = $("charts");
-  nav.innerHTML = "";
-  M().charts.filter((c) => !c.overlay_of).forEach((c) => {
-    const b = document.createElement("button");
-    b.className = "chip";
-    b.textContent = LABELS[c.id] || c.title;
-    b.dataset.id = c.id;
-    b.onclick = () => { stop(); state.chart = c.id; localStorage.setItem("chart", c.id); setStepNear(currentValid()); render(); };
-    nav.appendChild(b);
+function buildChartPicker() {
+  const box = $("charts");
+  box.innerHTML = "";
+  const all = new Set();
+  state.m.models.forEach((mod) => mod.charts.forEach((c) => { if (!c.overlay_of) all.add(c.id); }));
+  const groups = GROUPS.map((g) => ({ level: g.level, items: g.items.filter(([id]) => all.has(id)) }));
+  const listed = new Set(GROUPS.flatMap((g) => g.items.map(([id]) => id)));
+  const other = [...all].filter((id) => !listed.has(id));
+  if (other.length) groups.push({ level: "기타", items: other.map((id) => [id, id]) });
+  groups.filter((g) => g.items.length).forEach((g) => {
+    const row = document.createElement("div");
+    row.className = "crow";
+    const lv = document.createElement("div");
+    lv.className = "clevel";
+    lv.textContent = g.level === "지상" ? "지상" : `${g.level}`;
+    if (g.level !== "지상" && g.level !== "기타") { const u = document.createElement("small"); u.textContent = "hPa"; lv.append(u); }
+    row.append(lv);
+    const btns = document.createElement("div");
+    btns.className = "cbtns";
+    g.items.forEach(([id, name]) => {
+      const b = document.createElement("button");
+      b.className = "cbtn";
+      b.dataset.id = id;
+      b.textContent = name;
+      b.onclick = () => { if (!b.disabled && id !== state.chart) selectChart(id); };
+      btns.append(b);
+    });
+    row.append(btns);
+    box.append(row);
+  });
+}
+
+function updateChartPicker() {
+  document.querySelectorAll(".cbtn").forEach((b) => {
+    const ok = !!chartIn(M(), b.dataset.id);
+    b.disabled = !ok;
+    b.title = ok ? "" : `${M().label}에는 없는 차트`;
+    b.classList.toggle("on", b.dataset.id === state.chart);
   });
 }
 
@@ -185,16 +258,95 @@ function setStepNear(valid) {
   state.step = best;
 }
 
+// ------------------------------------------------------------------ step grid + background prefetch
+const loaded = new Set();                 // image URLs known to be in the browser cache
+const pf = { gen: 0, queue: [], active: 0 };
+
+// Every step any run of this model has (so a short 06/18Z run shows the later steps as unavailable).
+function gridSteps() {
+  const s = new Set();
+  M().runs.forEach((r) => r.steps.forEach((x) => s.add(x)));
+  return [...s].sort((a, b) => a - b);
+}
+
+function overlayUrl(r, step) {
+  const ov = overlayOf(state.chart);
+  return ov && state.wpsh && wpshFor(r, step).drawn ? url(r.run, ov.id, step) : null;
+}
+
+function buildStepGrid() {
+  const grid = $("steps");
+  grid.innerHTML = "";
+  const r = run();
+  const avail = new Set(stepsFor(r, state.chart));
+  gridSteps().forEach((s) => {
+    const b = document.createElement("button");
+    b.className = "step";
+    b.dataset.step = String(s);
+    b.textContent = String(s).padStart(3, "0");
+    if (!avail.has(s)) { b.classList.add("na"); b.disabled = true; }
+    b.onclick = () => { if (!b.disabled) { stop(); state.step = s; render(); } };
+    grid.append(b);
+  });
+  updateStepGrid();
+}
+
+function updateStepGrid() {
+  const r = run();
+  let n = 0, total = 0;
+  document.querySelectorAll("#steps .step").forEach((b) => {
+    const s = +b.dataset.step;
+    b.classList.toggle("cur", s === state.step);
+    if (b.disabled) return;
+    total++;
+    const ok = loaded.has(url(r.run, state.chart, s));
+    b.classList.toggle("ok", ok);
+    if (ok) n++;
+  });
+  $("steps-count").textContent = `${n} / ${total}`;
+}
+
+// Download every step of the chart on screen, nearest to the current step first.
+function prefetch() {
+  const gen = ++pf.gen;
+  const r = run();
+  const steps = stepsFor(r, state.chart).slice().sort((a, b) => Math.abs(a - state.step) - Math.abs(b - state.step));
+  pf.queue = [];
+  steps.forEach((s) => {
+    pf.queue.push(url(r.run, state.chart, s));
+    const o = overlayUrl(r, s);
+    if (o) pf.queue.push(o);
+  });
+  pump(gen);
+}
+function pump(gen) {
+  while (gen === pf.gen && pf.active < PREFETCH_PARALLEL && pf.queue.length) {
+    const u = pf.queue.shift();
+    if (loaded.has(u)) continue;
+    pf.active++;
+    const im = new Image();
+    const done = (ok) => {
+      pf.active--;
+      if (ok) loaded.add(u);
+      updateStepGrid();
+      pump(pf.gen);
+    };
+    im.onload = () => done(true);
+    im.onerror = () => done(false);
+    im.src = u;
+  }
+}
+
 // ------------------------------------------------------------------ main render
+let gridKey = "";
 function render() {
   const r = run();
   const steps = stepsFor(r, state.chart);
   const i = Math.max(0, steps.indexOf(state.step));
   state.step = steps[i];
 
-  document.querySelectorAll(".chip").forEach((b) => b.classList.toggle("on", b.dataset.id === state.chart));
-  const active = document.querySelector(".chip.on");
-  if (active) active.scrollIntoView({ inline: "nearest", block: "nearest" });
+  updateModels();
+  updateChartPicker();
 
   const slider = $("slider");
   slider.max = String(steps.length - 1);
@@ -204,9 +356,9 @@ function render() {
 
   const valid = addH(parseRun(r.run), state.step);
   $("valid-kst").textContent = fmtKst(valid);
-  $("valid-sub").textContent = `${fmtUtc(valid)} · +${state.step}h`;
+  $("valid-sub").textContent = `${fmtUtc(valid)} · +${state.step}h · ${M().label} ${chartLabel(state.chart)}`;
 
-  // WPSH overlay
+  // WPSH overlay (any chart on the same map domain as a WPSH overlay)
   const ov = overlayOf(state.chart);
   const wrap = $("wpsh-wrap");
   wrap.hidden = !ov;
@@ -214,28 +366,26 @@ function render() {
   let info = "";
   if (ov) {
     const w = wpshFor(r, state.step);
-    info = w.drawn ? `H = ${w.H} gpm · 빨간 선 = ${w.line} gpm` : w.why;
+    info = w.drawn ? `H = ${w.H} gpm · 빨간 선 = ${w.line} gpm (500 hPa)` : w.why;
     wrap.classList.toggle("disabled", !w.drawn);
   }
   $("wpsh-info").textContent = ov ? info : "";
-  showImages($("img-base"), $("img-overlay"), url(r.run, state.chart, state.step),
-    ov && state.wpsh && wpshFor(r, state.step).drawn ? url(r.run, ov.id, state.step) : null, true);
-  preload(steps[i + 1]);
-  preload(steps[i - 1]);
+  const baseUrl = url(r.run, state.chart, state.step);
+  showImages($("img-base"), $("img-overlay"), baseUrl, overlayUrl(r, state.step), true);
+
+  const key = `${M().id}|${r.run}|${state.chart}|${state.wpsh}`;
+  if (key !== gridKey) { gridKey = key; buildStepGrid(); prefetch(); } else updateStepGrid();
 }
 
-function showImages(base, overlay, baseUrl, overlayUrl, withSpinner) {
-  if (withSpinner) $("loading").hidden = false;
-  base.onload = () => { if (withSpinner) $("loading").hidden = true; };
+function showImages(base, overlay, baseUrl, ovUrl, withSpinner) {
+  if (withSpinner) $("loading").hidden = loaded.has(baseUrl);
+  base.onload = () => {
+    loaded.add(baseUrl);
+    if (withSpinner) { $("loading").hidden = true; updateStepGrid(); }
+  };
   base.onerror = () => { if (withSpinner) $("loading").hidden = true; setStatus("이미지를 불러오지 못했어요."); };
   if (base.getAttribute("src") !== baseUrl) base.src = baseUrl; else if (withSpinner) $("loading").hidden = true;
-  if (overlayUrl) { overlay.src = overlayUrl; overlay.hidden = false; } else { overlay.hidden = true; overlay.removeAttribute("src"); }
-}
-
-function preload(step) {
-  if (step === undefined) return;
-  const im = new Image();
-  im.src = url(run().run, state.chart, step);
+  if (ovUrl) { overlay.src = ovUrl; overlay.hidden = false; } else { overlay.hidden = true; overlay.removeAttribute("src"); }
 }
 
 // ------------------------------------------------------------------ time controls
@@ -270,7 +420,7 @@ function openCompare() {
   }
   state.cmp.frames = frames;                       // oldest -> newest
   state.cmp.idx = frames.length - 1;
-  $("cmp-title").textContent = `과거 런 비교 · ${M().label} ${LABELS[state.chart] || chartDef(state.chart).title}`;
+  $("cmp-title").textContent = `과거 런 비교 · ${M().label} ${chartLabel(state.chart)}`;
   $("cmp-sub").textContent = `${fmtKst(valid)} (${fmtUtc(valid)}) 예상 · 런 ${frames.length}개`;
   const dots = $("cmp-dots");
   dots.innerHTML = "";
@@ -293,16 +443,15 @@ function cmpRender() {
   const newest = idx === frames.length - 1;
   const ov = overlayOf(state.chart);
   const w = ov ? wpshFor(f.run, f.step) : null;
-  showImages($("cmp-base"), $("cmp-overlay"), url(f.run.run, state.chart, f.step),
-    ov && state.wpsh && w.drawn ? url(f.run.run, ov.id, f.step) : null, false);
+  showImages($("cmp-base"), $("cmp-overlay"), url(f.run.run, state.chart, f.step), overlayUrl(f.run, f.step), false);
   const lbl = $("cmp-label");
   lbl.className = "cmp-label" + (newest ? " newest" : "");
   lbl.innerHTML = "";
   lbl.append(`${runLabel(f.run.run)} · +${f.step}h`);
   if (newest) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "최신"; lbl.append(b); }
-  if (ov) {
+  if (ov && state.wpsh) {
     const d = document.createElement("div");
-    d.style.fontWeight = "400"; d.style.fontSize = ".9rem";
+    d.className = "cmp-wpsh";
     d.textContent = w.drawn ? `H−50 = ${w.line} gpm (H ${w.H})` : w.why;
     lbl.append(d);
   }
@@ -387,6 +536,11 @@ function enableZoom(viewer, layer) {
 
 // ------------------------------------------------------------------ wiring
 function wire() {
+  applyTheme();
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+  $("theme").onclick = toggleTheme;
+  $("info").onclick = () => $("info-dlg").showModal();
+  $("info-close").onclick = () => $("info-dlg").close();
   $("run").onchange = (e) => { stop(); const v = currentValid(); state.runIdx = +e.target.value; setStepNear(v); render(); };
   $("reload").onclick = () => { stop(); init(true); };
   $("prev").onclick = () => { stop(); move(-1); };
@@ -404,11 +558,13 @@ function wire() {
   enableZoom(document.querySelector("#compare-dlg .viewer"), $("cmp-zoom"));
   document.addEventListener("visibilitychange", () => { if (document.hidden) { stop(); cmpStop(); } });
 
-  // Android back button (Capacitor App plugin): close the sheet first, then leave the app.
+  // Android back button (Capacitor App plugin): close an open sheet first, then leave the app.
   const App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
   if (App) {
     App.addListener("backButton", () => {
-      if ($("compare-dlg").open) closeCompare(); else App.exitApp();
+      if ($("compare-dlg").open) closeCompare();
+      else if ($("info-dlg").open) $("info-dlg").close();
+      else App.exitApp();
     });
     App.addListener("resume", () => init(true));
   }
