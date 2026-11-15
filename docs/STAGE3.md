@@ -89,3 +89,23 @@ The job summary shows: hub reachability from the runner, HTTP status, size, spee
 - Consequence for a KIM pipeline: about 30 fields per step means 30 requests per step (estimated: global 65 steps
   about 2000 requests and 3 GB per run; regional 30 steps about 900 requests and 2.4 GB per run). The API Hub daily
   request quota per key is UNVERIFIED.
+
+## KIM models (render/kim.py)
+
+- `data.source = "kma"` selects `kim.KimSource` (same interface as `sources.Sources`).
+- One request per field and lead time; fields are labelled from the request (the GRIB headers are wrong, M8).
+  4 requests in parallel, 4 tries each. The key comes from `KMA_APIHUB_KEY` and is never logged.
+- KIM global: `box` = default map + margin; gh500 alone uses `wide_box_gh500` (100-180E) for the WPSH line.
+  Fields are placed by index on a 1/12 deg lattice (no interpolation).
+- KIM regional: whole Lambert domain, bilinear interpolation to a 0.05 deg lat/lon grid with pyproj
+  (the projection's x/y lattice is checked against the GRIB point coordinates, max error 500 m).
+  `QVAPOR` (mixing ratio) is converted to specific humidity.
+- Precipitation (`prec_acc`, `RAIN`, kg m-2 accumulated) is converted to m like IFS `tp`; the previous step's
+  value is cached, so a 6 h window needs no extra request.
+- Completeness: a run counts as complete when its last step's MSLP downloads (KIM global: a 1 deg cut), at most
+  once per 30 min per run and not before 4 h after the run time. Runs already in the store are not probed.
+- Daily guard: calls and bytes per KST day are stored in the bucket (`_ops/kma-<date>.json`). A KIM run is not
+  started when its estimated cost (`kma.est_bytes_per_field`) would pass `kma_quota`; it waits for the next day.
+  The first backfill (9 runs per model in the 18-cycle window) therefore spreads over about 4 days (estimated).
+- UNVERIFIED until the first CI smoke render: units and value ranges of the KIM fields (`field_ranges` in each
+  run's meta.json lists min/max per field), whether `prec_acc` / `RAIN` accumulate from the run start.

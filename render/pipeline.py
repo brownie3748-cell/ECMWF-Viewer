@@ -130,6 +130,8 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
         "wall_seconds": round(time.monotonic() - t0, 1),
         "render_seconds_sum": round(sum(r["seconds"] for r in results), 1),
     }
+    if getattr(sources, "stats", None):
+        meta["field_ranges"] = dict(sources.stats)      # KIM: min/max per field, a units sanity check
     (rdir / "meta.json").write_text(json.dumps(meta, indent=1))
     log.info("%s run %s: %d images, %.0f MB, wall %.0f s", model, run_s, meta["images"], meta["bytes"] / 1e6,
              meta["wall_seconds"])
