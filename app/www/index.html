@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f8f80">
+  <meta name="color-scheme" content="light dark">
   <title>ECMWF 뷰어</title>
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -17,10 +18,11 @@
       <select id="run"></select>
     </label>
     <button id="reload" class="icon-btn" aria-label="새로고침" title="새로고침">⟳</button>
+    <button id="theme" class="icon-btn" aria-label="테마" title="테마">🌙</button>
+    <button id="info" class="icon-btn" aria-label="앱 정보" title="앱 정보">ⓘ</button>
   </header>
 
   <nav id="models" class="models" aria-label="모델 선택"></nav>
-  <nav id="charts" class="chips" aria-label="차트 선택"></nav>
 
   <main>
     <div id="status" class="status" hidden></div>
@@ -33,29 +35,49 @@
       <div class="loading" id="loading" hidden>불러오는 중…</div>
     </section>
 
-    <section class="timebar">
+    <section class="card timebar">
       <div class="valid">
         <div class="valid-kst" id="valid-kst">–</div>
         <div class="valid-sub" id="valid-sub">–</div>
       </div>
       <div class="controls">
-        <button id="prev" class="btn" aria-label="6시간 전">◀</button>
+        <button id="prev" class="btn" aria-label="이전 시각">◀</button>
         <button id="play" class="btn primary" aria-label="재생">▶ 재생</button>
-        <button id="next" class="btn" aria-label="6시간 후">▶</button>
+        <button id="next" class="btn" aria-label="다음 시각">▶</button>
       </div>
       <input id="slider" type="range" min="0" max="0" value="0" aria-label="예보 시간">
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <span class="card-title">예보 시간</span>
+        <span class="legend"><i class="lg ok"></i>받음 <i class="lg"></i>받는 중 <i class="lg na"></i>없음</span>
+        <span class="count" id="steps-count"></span>
+      </div>
+      <div class="steps" id="steps" role="group" aria-label="예보 시간 선택"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><span class="card-title">차트</span></div>
+      <div class="charts" id="charts" role="group" aria-label="차트 선택"></div>
     </section>
 
     <section class="toggles">
       <label class="switch" id="wpsh-wrap">
         <input type="checkbox" id="wpsh" checked>
-        <span>북태평양고기압선 (H−50)</span>
+        <span>북태평양고기압선 (500 hPa H−50, 모든 층에 겹쳐 보기)</span>
       </label>
       <div class="wpsh-info" id="wpsh-info"></div>
       <button id="compare" class="btn wide">과거 런 비교 (같은 시각)</button>
     </section>
+  </main>
 
-    <section class="help">
+  <dialog id="info-dlg" class="sheet">
+    <div class="sheet-head">
+      <div class="sheet-title">앱 정보</div>
+      <button class="icon-btn" id="info-close" aria-label="닫기">✕</button>
+    </div>
+    <div class="help">
       <details>
         <summary>이 앱은?</summary>
         <p>ECMWF(유럽중기예보센터) 공개 예보자료로 자동 생성한 예상일기도입니다.
@@ -92,7 +114,14 @@
         <summary>북태평양고기압선이란?</summary>
         <p>500 hPa에서 북위 10–40°, 동경 120–180° 안의 가장 높은 국지 고도 중심값 H를 찾고,
           그보다 50 gpm 낮은 등고선을 빨간 선으로 그린 것입니다. 기상청 공식 정의가 아닌 이 앱의 작업 정의이며,
-          00·12 UTC 런에만 표시합니다(06·18 UTC 런은 고도가 체계적으로 낮게 나와 제외).</p>
+          00·12 UTC 런에만 표시합니다(06·18 UTC 런은 고도가 체계적으로 낮게 나와 제외).
+          켜 두면 500 hPa가 아닌 다른 층 차트 위에도 같은 선을 겹쳐 보여줘요.</p>
+      </details>
+      <details>
+        <summary>예보 시간 표</summary>
+        <p>슬라이더 아래 숫자는 예보 시간(+h)이에요. 색이 채워진 칸은 이미 내려받아 바로 볼 수 있는 시각,
+          빈 칸은 아직 받는 중, 점선 칸은 이 런에 없는 시각입니다. 숫자를 누르면 그 시각으로 이동해요.
+          차트를 고르면 그 차트의 모든 시각을 가까운 시각부터 미리 받아 둡니다.</p>
       </details>
       <details>
         <summary>시간 표시</summary>
@@ -104,8 +133,8 @@
         <p id="attribution">Adapted from 'ECMWF IFS 15-day Forecast Data' by ECMWF, licensed under CC BY 4.0.</p>
         <p><a id="notice-link" href="#" target="_blank" rel="noopener">라이선스·고지 전문 보기</a></p>
       </details>
-    </section>
-  </main>
+    </div>
+  </dialog>
 
   <dialog id="compare-dlg" class="sheet">
     <div class="sheet-head">

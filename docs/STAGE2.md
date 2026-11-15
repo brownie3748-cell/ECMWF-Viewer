@@ -3,7 +3,9 @@
 ## What it is
 
 - `app/www/`: the viewer (plain HTML/CSS/JS, no build step). Korean UI, mint/teal palette.
-  - Chart tabs, run selector, forecast-hour slider / step buttons / play, pinch-zoom (double tap: 2.5x).
+  - (0.4.0) Chart picker by level x product, forecast-hour grid with download state, background prefetch,
+  WPSH overlay on every chart of the same domain, info sheet, light/dark theme.
+- Chart tabs, run selector, forecast-hour slider / step buttons / play, pinch-zoom (double tap: 2.5x).
   - WPSH red line toggle on 500 hPa charts (00/12Z runs only; 06/18Z shows why there is no line).
   - **Past-run comparison**: for the current chart and valid time, plays every run that has that frame,
     oldest to newest; the newest run is highlighted; labels show the run time and H-50 on 500 hPa.
