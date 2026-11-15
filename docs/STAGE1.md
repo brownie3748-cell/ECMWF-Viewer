@@ -9,7 +9,7 @@ Every 30 minutes (and on *Run workflow*):
    - looks at the last `site.lookback_runs` (16) 6-hourly cycles and asks the sources, in
      `data.source_order` (google → ecmwf → azure), whether the run's final step (+240 h for
      00/12Z, +144 h for 06/18Z) is published;
-   - target window = the newest `site.retention_runs` (10) complete runs;
+   - target window = the newest `site.retention_runs` (12) complete runs;
    - **prunes first**: deletes run directories outside the window and partial leftovers;
    - renders missing runs, newest first, until the time budget (150 min) is used up — the
      rest is picked up by the next poll;
