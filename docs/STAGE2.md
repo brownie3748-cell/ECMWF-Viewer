@@ -8,8 +8,8 @@
   - **Past-run comparison**: for the current chart and valid time, plays every run that has that frame,
     oldest to newest; the newest run is highlighted; labels show the run time and H-50 on 500 hPa.
   - Help sections collapsed by default; attribution + link to NOTICE.
-- Data: `index.json` and images from GitHub Pages. In the web preview (`<site>/app/`) the data base is
-  the parent directory; inside the APK it is `https://brownie3748-cell.github.io/ECMWF-Viewer/`.
+- Data: `index.json` and images from Cloudflare R2 (`DATA_BASE` in `app.js`, since Stage 3; see
+  docs/STAGE3.md). `?data=<url>` overrides it in a browser.
   `?data=<url>` overrides it (local testing). `index.json` is fetched with a cache-busting query.
 - `app/android/`: Capacitor 8 Android project (`appId io.github.brownie3748cell.ecmwfviewer`,
   name "ECMWF 뷰어"). Back button closes the comparison sheet first; the manifest is reloaded on resume.

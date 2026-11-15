@@ -19,6 +19,7 @@
     <button id="reload" class="icon-btn" aria-label="새로고침" title="새로고침">⟳</button>
   </header>
 
+  <nav id="models" class="models" aria-label="모델 선택"></nav>
   <nav id="charts" class="chips" aria-label="차트 선택"></nav>
 
   <main>
@@ -57,9 +58,20 @@
     <section class="help">
       <details>
         <summary>이 앱은?</summary>
-        <p>ECMWF(유럽중기예보센터) IFS 0.25° 공개 예보자료로 자동 생성한 예상일기도입니다.
+        <p>ECMWF(유럽중기예보센터) 공개 예보자료로 자동 생성한 예상일기도입니다.
           공식 예보가 아니며, 자료 처리 과정에서 오류가 있을 수 있습니다.
           새 런은 발표 후 약 7시간 뒤에 모든 예보시간이 갖춰지고, 그 뒤 30분~1시간 안에 반영됩니다. 최근 3일(12개 런)을 보관합니다.</p>
+      </details>
+      <details>
+        <summary>모델 (IFS 0.25° · IFS 0.1° · AIFS)</summary>
+        <ul>
+          <li><b>IFS 0.25°</b>: ECMWF 수치모델(IFS) 결정론 예보를 0.25° 격자로 받은 자료.</li>
+          <li><b>IFS 0.1°</b>: 같은 IFS 예보의 0.1° 격자 자료. 지형·해안선 근처 표현이 더 세밀해요.
+            300·200 hPa와 500 광역은 제공하지 않아요.</li>
+          <li><b>AIFS</b>: ECMWF의 기계학습 예보모델(AIFS Single) 0.25° 자료. 6시간 간격이라 강수는 늘 6시간 누적이고,
+            700 hPa 습도는 비습과 기온으로 계산한 값이에요.</li>
+        </ul>
+        <p>모델을 바꿔도 같은 런·같은 예보 시각을 최대한 유지해요.</p>
       </details>
       <details>
         <summary>차트 설명</summary>

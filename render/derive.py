@@ -99,3 +99,26 @@ def wpsh_centre(gh500, lat, lon, cfg, grid_deg=0.25):
         "centre": (la, lo),
         "line_gpm": h - w["level_offset_gpm"],
     }
+
+
+def relative_humidity(q: np.ndarray, t_k: np.ndarray, p_hpa: float) -> np.ndarray:
+    """Relative humidity (%) from specific humidity (kg/kg) and temperature (K) on a pressure level.
+
+    Saturation vapour pressure follows the IFS convention: water above 0 C, ice below -23 C and a
+    quadratic blend in between (IFS documentation Part IV, section 7.2.1), so values are comparable
+    with the IFS `r` field. Used for AIFS, which does not provide `r`.
+    """
+    t0, tice = 273.16, 250.16
+    es_w = 611.21 * np.exp(17.502 * (t_k - t0) / (t_k - 32.19))
+    es_i = 611.21 * np.exp(22.587 * (t_k - t0) / (t_k + 0.7))
+    alpha = np.clip((t_k - tice) / (t0 - tice), 0.0, 1.0) ** 2
+    es = alpha * es_w + (1.0 - alpha) * es_i
+    p = p_hpa * 100.0
+    e = q * p / (0.622 + 0.378 * q)                 # vapour pressure from specific humidity
+    return (100.0 * e / es).astype(np.float32)
+
+
+def ensure_rh(F, level: int) -> None:
+    """Add ("r", level) to a grib.Fields from q and t when the model does not provide it."""
+    if ("r", level) not in F.data and ("q", level) in F.data and ("t", level) in F.data:
+        F.data[("r", level)] = relative_humidity(F.data[("q", level)], F.data[("t", level)], level)

@@ -1,7 +1,9 @@
-name: publish (Stage 1)
+name: publish
 
-# Poll for complete ECMWF runs, render the missing ones, deploy the site to GitHub Pages.
-# Idempotent: a run already on the site is never re-rendered. Publishing runs only from main.
+# Poll for complete ECMWF runs of every model (IFS 0.25, IFS 0.1, AIFS), render the missing ones and
+# upload them to Cloudflare R2, with a hard storage cap (render/config.toml [storage]).
+# Idempotent: a run already in the bucket is not re-rendered. Publishing runs only from main.
+# The web app itself is deployed to GitHub Pages by pages.yml.
 on:
   schedule:
     - cron: "7,37 * * * *"        # every 30 min (GitHub cron is best-effort; may be late or skipped)
@@ -29,8 +31,6 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 180
-    outputs:
-      changed: ${{ steps.poll.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,50 +46,29 @@ jobs:
           path: ~/.local/share/cartopy
           key: cartopy-naturalearth-v1
 
-      - name: Restore previous site
-        id: restore
-        uses: actions/cache/restore@v4
-        with:
-          path: site
-          key: site-v1-${{ github.run_id }}
-          restore-keys: site-v1-
-
       - name: Install
         run: pip install -r requirements.lock
 
-      - name: Poll, prune, render, manifest
-        id: poll
+      - name: Poll, render, upload to R2, prune, manifest
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m render poll --store r2 --work work --time-budget-min "${{ inputs.time_budget_min || '150' }}"
+
+      - name: Check the public URL (index.json + CORS)
+        if: always()
         run: |
-          echo "Site restored from cache: ${{ steps.restore.outputs.cache-matched-key || 'none (runs will be re-rendered from the mirrors)' }}" >> "$GITHUB_STEP_SUMMARY"
-          python -m render poll --site site --work work --app-dir app/www --time-budget-min "${{ inputs.time_budget_min || '150' }}"
-
-      - name: Save site
-        if: steps.poll.outputs.changed == 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: site
-          key: site-v1-${{ github.run_id }}
-
-      - name: Upload Pages artifact
-        if: steps.poll.outputs.changed == 'true'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-  deploy:
-    needs: build
-    if: github.ref == 'refs/heads/main' && needs.build.outputs.changed == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
+          BASE=$(python -c "from render import config; print(config.load()['storage']['public_base'])")
+          {
+            echo "## Public URL check"
+            echo '```'
+            curl -sS -D - -o /tmp/index.json -H "Origin: https://brownie3748-cell.github.io" "${BASE}index.json" \
+              | grep -iE "^(HTTP|content-type|cache-control|access-control-allow-origin)" || true
+            echo '```'
+            python -c "import json; m=json.load(open('/tmp/index.json')); print('Runs per model:', {x['id']: len(x['runs']) for x in m['models']})" || true
+          } >> "$GITHUB_STEP_SUMMARY"
 
   keepalive:
     # Scheduled workflows are disabled after 60 days without repository activity.

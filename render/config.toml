@@ -193,9 +193,9 @@ jump_flag_gpm = 40.0            # M4: flag H changes larger than this between co
 retention_runs = 12             # newest complete runs kept on the published site (3 days)
 lookback_runs = 18              # how many past 6-hourly cycles to consider when polling
 workers = 4                     # parallel render processes
-path = "runs/{run}/{chart}_{step:03d}.png"
-schema_version = 1
-render_version = 4              # bump when chart content changes: runs rendered with an older version are re-rendered
+path = "{model}/{run}/{chart}_{step:03d}.png"
+schema_version = 2
+render_version = 5              # bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
@@ -212,6 +212,85 @@ charts = [
   { id = "gz300", title = "300hPa", level = 300, domain = "default" },
   { id = "gz200", title = "200hPa", level = 200, domain = "default" },
 ]
+
+# ---------------------------------------------------------------------------------------------
+# Models. Each model renders with the base config above deep-merged with its `override` table;
+# `charts` selects (in display order) which of site.charts it publishes.
+[[models]]
+id = "ifs"
+label = "IFS 0.25°"
+charts = "all"
+override = {}
+
+[[models]]
+id = "ifs01"
+label = "IFS 0.1°"
+charts = ["msl", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500", "wpsh500"]
+[models.override.data]
+resolution = "0p1"
+grid_deg = 0.1
+[[models.override.data.groups]]
+levtype = "sfc"
+param = ["msl", "sp", "tp"]
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [925, 850]
+param = ["gh", "t", "u", "v", "q"]
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [700]
+param = ["gh", "t", "u", "v", "r"]
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [500]
+param = ["gh", "t", "u", "v"]
+[models.override.domains.default]
+barb_every = 20                 # same spacing in degrees as 8 points at 0.25 deg
+vector_every = 8
+[models.override.charts.mfc]
+smooth_sigma = 4.0              # 0.4 deg: 0.1 deg divergence is much noisier than 0.25 deg (smoke render)
+[models.override.charts.msl]
+smooth_sigma = 2.0              # 0.2 deg gaussian on MSLP before contouring (terrain noise over land)
+[models.override.style]
+model_label = "ECMWF IFS 0.1deg"
+
+[[models]]
+id = "aifs"
+label = "AIFS"
+charts = "all"
+[models.override.data]
+model = "aifs-single"
+tp_short_accum_h = 6            # AIFS output is 6-hourly only
+[[models.override.data.groups]]
+levtype = "sfc"
+param = ["msl", "sp", "tp"]
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [925, 850]
+param = ["gh", "t", "u", "v", "q"]
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [700]
+param = ["gh", "t", "u", "v", "q"]   # AIFS has no r: 700 hPa RH is derived from q and t
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [500, 300, 200]
+param = ["gh", "t", "u", "v"]
+[models.override.style]
+model_label = "ECMWF AIFS Single 0.25deg"
+credit = "Adapted from 'ECMWF AIFS Single Forecast Data' by ECMWF, CC BY 4.0 (https://data.ecmwf.int/forecasts/). Modified: cropped, derived and rendered."
+
+# ---------------------------------------------------------------------------------------------
+# Cloudflare R2 storage (S3 API). Credentials come from the environment: R2_ACCOUNT_ID,
+# R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY (GitHub secrets); R2_BUCKET overrides `bucket`.
+[storage]
+bucket = "ecmwf-viewer"
+public_base = "https://pub-07aea3ace26c452cbe6112df32e49088.r2.dev/"
+max_bytes = 9_000_000_000               # hard cap: never upload past this (free tier is 10 GB)
+max_class_a_per_month = 900_000         # writes + lists; stop uploading before the free 1M
+image_cache_control = "public, max-age=86400"
+manifest_cache_control = "no-cache, max-age=0"
+upload_threads = 16
 
 [output]
 format = "png8"                 # png | png8 | webp (decided after M3)

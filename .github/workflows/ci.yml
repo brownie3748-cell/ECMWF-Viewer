@@ -1,6 +1,6 @@
 name: ci
 
-# Branch / PR check: unit tests + a smoke render of a few steps of the latest 00/12Z run.
+# Branch / PR check: unit tests + a smoke render of a few steps of the latest 00/12Z run (all models).
 # Never deploys.
 on:
   workflow_dispatch:
@@ -42,15 +42,20 @@ jobs:
       - run: pip install -r requirements.lock
       - name: Unit tests
         run: python -m unittest -v
-      - name: Smoke render (steps 0, 6, 144, 150, 240)
+      - name: Smoke render (IFS steps 0, 6, 144, 150, 240; IFS 0.1 and AIFS steps 0, 150)
         run: |
           RUN=$(python -m render latest --main-only)
-          python -m render render-run --run "$RUN" --steps 0,6,144,150,240 --site smoke-site --work work
+          python -m render render-run --model ifs --run "$RUN" --steps 0,6,144,150,240 --site smoke-site --work work
+          python -m render render-run --model ifs01 --run "$RUN" --steps 0,150 --site smoke-site --work work
+          python -m render render-run --model aifs --run "$RUN" --steps 0,150 --site smoke-site --work work
           {
             echo "## Smoke render: run $RUN"
-            echo '```json'
-            cat smoke-site/runs/$RUN/meta.json
-            echo '```'
+            for m in ifs ifs01 aifs; do
+              echo "### $m"
+              echo '```json'
+              cat smoke-site/$m/$RUN/meta.json
+              echo '```'
+            done
             echo "Files: $(find smoke-site -type f | wc -l), size: $(du -sh smoke-site | cut -f1)"
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4

@@ -68,6 +68,9 @@ def read(path: str, region: dict | None = None) -> Fields:
             vals = np.concatenate([vals, vals[:, :1]], axis=1)
             if out is None:
                 out = Fields(lat, lon)
+            if meta["shortName"] == "tp" and meta["units"] == "kg m**-2":
+                vals = vals / 1000.0         # AIFS: kg m-2 (= mm) -> m, the IFS unit used downstream
+                meta["units"] = "m"
             key = (meta["shortName"], int(meta["level"]))
             out.data[key] = vals
             out.meta[key] = meta

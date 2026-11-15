@@ -19,9 +19,11 @@ Full project brief: [docs/SPEC.md](docs/SPEC.md). Read it first.
 
 ## Layout
 - `render/` renderer package; `render/config.toml` is the single config (domains, charts, thresholds, style).
-- `python -m render {poll,render-run,latest,manifest}`: Stage 1 pipeline (`render/pipeline.py`, `render/site.py`).
+- `python -m render {poll,render-run,latest}`: pipeline (`render/pipeline.py`), manifest (`render/site.py`),
+  storage with the size / request guard (`render/store.py`, Cloudflare R2). Models: `[[models]]` in the config
+  (`config.for_model`). See `docs/STAGE3.md`.
 - `app/`: viewer (`app/www`, plain JS) + Capacitor Android project (`app/android`); see `docs/STAGE2.md`.
-- Workflows: `publish.yml` (main only: poll, render, deploy Pages + web app), `ci.yml` (branches: tests + smoke render),
+- Workflows: `publish.yml` (main only: poll, render, upload to R2), `pages.yml` (main only: web app to Pages), `ci.yml` (branches: tests + smoke render),
   `android.yml` (debug APK on branches; signed release from main only),
   `measure.yml` (Stage 0 measurements, manual), `pages-test.yml` (M6, manual).
 - Design notes: `docs/STAGE1.md`; decisions: `docs/DECISIONS.md`.

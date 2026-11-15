@@ -3,7 +3,9 @@
  */
 "use strict";
 
-const REMOTE_BASE = "https://brownie3748-cell.github.io/ECMWF-Viewer/";
+// Chart images and index.json live in Cloudflare R2 (public bucket URL); `?data=<url>` overrides it.
+const DATA_BASE = "https://pub-07aea3ace26c452cbe6112df32e49088.r2.dev/";
+const SCHEMA = 2;
 const PLAY_MS = 700;
 const CMP_PLAY_MS = 1000;
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
@@ -20,14 +22,13 @@ const $ = (id) => document.getElementById(id);
 function dataBase() {
   const q = new URLSearchParams(location.search).get("data");
   if (q) return new URL(q, location.href).href;
-  const native = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
-  if (native || location.protocol === "file:") return REMOTE_BASE;
-  return new URL("../", location.href).href;      // web preview: site/app/ -> site/
+  return DATA_BASE;
 }
 
 const state = {
   base: dataBase(),
   m: null,            // manifest
+  model: localStorage.getItem("model") || "",
   runIdx: 0,
   chart: localStorage.getItem("chart") || "gz500",
   step: 0,
@@ -59,15 +60,16 @@ function runLabel(s) {
 }
 
 // ------------------------------------------------------------------ manifest helpers
-const chartDef = (id) => state.m.charts.find((c) => c.id === id);
-const overlayOf = (id) => state.m.charts.find((c) => c.overlay_of === id);
-const run = () => state.m.runs[state.runIdx];
+const M = () => state.m.models.find((x) => x.id === state.model) || state.m.models[0];
+const chartDef = (id) => M().charts.find((c) => c.id === id);
+const overlayOf = (id) => M().charts.find((c) => c.overlay_of === id);
+const run = () => M().runs[state.runIdx];
 function stepsFor(r, chartId) {
   const min = chartDef(chartId).min_step || 0;
   return r.steps.filter((s) => s >= min);
 }
 function url(runId, chartId, step) {
-  const p = state.m.path.replace("{run}", runId).replace("{chart}", chartId)
+  const p = state.m.path.replace("{model}", M().id).replace("{run}", runId).replace("{chart}", chartId)
     .replace("{step:03d}", String(step).padStart(3, "0"));
   return state.base + p;
 }
@@ -84,8 +86,8 @@ async function loadManifest() {
   const res = await fetch(state.base + "index.json?t=" + Date.now(), { cache: "no-store" });
   if (!res.ok) throw new Error("HTTP " + res.status);
   const m = await res.json();
-  if (m.schema_version !== 1) setStatus("앱보다 새로운 자료 형식이에요. 앱을 업데이트해 주세요.");
-  if (!m.runs || !m.runs.length) throw new Error("no runs");
+  if (m.schema_version !== SCHEMA) throw new Error("자료 형식이 앱과 달라요(" + m.schema_version + "). 앱을 업데이트해 주세요");
+  if (!m.models || !m.models.some((x) => x.runs.length)) throw new Error("no runs");
   return m;
 }
 
@@ -94,23 +96,55 @@ async function init(keepView) {
     const prev = state.m && run() ? run().run : null;
     const prevValid = state.m && prev ? addH(parseRun(prev), state.step) : null;
     state.m = await loadManifest();
-    $("attribution").textContent = state.m.attribution;
     $("notice-link").href = state.base + "NOTICE.txt";
-    buildRuns();
-    buildChips();
-    state.runIdx = state.m.runs.length - 1;
-    if (keepView && prev) {
-      const i = state.m.runs.findIndex((r) => r.run === prev);
-      if (i >= 0) state.runIdx = i;
-    }
-    if (!chartDef(state.chart) || chartDef(state.chart).overlay_of) state.chart = "gz500";
-    $("run").value = String(state.runIdx);
-    setStepNear(prevValid);
-    render();
+    buildModels();
+    selectModel(state.model, keepView ? prev : null, prevValid);
   } catch (e) {
     console.error(e);
     setStatus("자료를 불러오지 못했어요. 인터넷 연결을 확인하고 ⟳ 를 눌러 주세요. (" + e.message + ")");
   }
+}
+
+// Switch model, keeping the run (if that model has it) and the valid time as close as possible.
+function selectModel(id, keepRun, keepValid) {
+  const has = (x) => x && x.runs.length;
+  let mod = state.m.models.find((x) => x.id === id);
+  if (!has(mod)) mod = state.m.models.find((x) => x.id === state.m.default_model && has(x)) || state.m.models.find(has);
+  state.model = mod.id;
+  localStorage.setItem("model", mod.id);
+  $("attribution").textContent = mod.attribution || state.m.attribution;
+  document.querySelectorAll(".model").forEach((b) => b.classList.toggle("on", b.dataset.id === mod.id));
+  buildRuns();
+  buildChips();
+  state.runIdx = mod.runs.length - 1;
+  if (keepRun) {
+    const i = mod.runs.findIndex((r) => r.run === keepRun);
+    if (i >= 0) state.runIdx = i;
+  }
+  if (!chartDef(state.chart) || chartDef(state.chart).overlay_of) {
+    state.chart = chartDef("gz500") ? "gz500" : mod.charts.find((c) => !c.overlay_of).id;
+  }
+  $("run").value = String(state.runIdx);
+  setStepNear(keepValid);
+  render();
+}
+
+function buildModels() {
+  const nav = $("models");
+  nav.innerHTML = "";
+  state.m.models.forEach((mod) => {
+    const b = document.createElement("button");
+    b.className = "model";
+    b.textContent = mod.label;
+    b.dataset.id = mod.id;
+    b.disabled = !mod.runs.length;
+    b.onclick = () => {
+      if (mod.id === state.model) return;
+      stop();
+      selectModel(mod.id, run() ? run().run : null, currentValid());
+    };
+    nav.appendChild(b);
+  });
 }
 
 function setStatus(msg) { const s = $("status"); s.textContent = msg; s.hidden = !msg; }
@@ -119,10 +153,10 @@ function setStatus(msg) { const s = $("status"); s.textContent = msg; s.hidden =
 function buildRuns() {
   const sel = $("run");
   sel.innerHTML = "";
-  state.m.runs.forEach((r, i) => {
+  M().runs.forEach((r, i) => {
     const o = document.createElement("option");
     o.value = String(i);
-    o.textContent = runShort(r.run) + (i === state.m.runs.length - 1 ? " 최신" : "");
+    o.textContent = runShort(r.run) + (i === M().runs.length - 1 ? " 최신" : "");
     sel.appendChild(o);
   });
 }
@@ -130,7 +164,7 @@ function buildRuns() {
 function buildChips() {
   const nav = $("charts");
   nav.innerHTML = "";
-  state.m.charts.filter((c) => !c.overlay_of).forEach((c) => {
+  M().charts.filter((c) => !c.overlay_of).forEach((c) => {
     const b = document.createElement("button");
     b.className = "chip";
     b.textContent = LABELS[c.id] || c.title;
@@ -230,13 +264,13 @@ function openCompare() {
   stop();
   const valid = currentValid();
   const frames = [];
-  for (const r of state.m.runs) {
+  for (const r of M().runs) {
     const step = (valid - parseRun(r.run)) / 3600e3;
     if (stepsFor(r, state.chart).includes(step)) frames.push({ run: r, step });
   }
   state.cmp.frames = frames;                       // oldest -> newest
   state.cmp.idx = frames.length - 1;
-  $("cmp-title").textContent = `과거 런 비교 · ${LABELS[state.chart] || chartDef(state.chart).title}`;
+  $("cmp-title").textContent = `과거 런 비교 · ${M().label} ${LABELS[state.chart] || chartDef(state.chart).title}`;
   $("cmp-sub").textContent = `${fmtKst(valid)} (${fmtUtc(valid)}) 예상 · 런 ${frames.length}개`;
   const dots = $("cmp-dots");
   dots.innerHTML = "";

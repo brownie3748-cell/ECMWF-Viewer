@@ -1,4 +1,4 @@
-"""Stage 1 pipeline: render every published step of one run into the site directory.
+"""Pipeline: render every published step of one run of one model into a local staging directory.
 
 Downloads run in the main process (one step ahead of rendering); rendering and encoding run in
 a process pool. GRIB files are deleted as soon as a step is rendered, so disk use stays small.
@@ -15,16 +15,16 @@ import shutil
 import time
 
 from . import config as config_mod
-from . import encode, fetch, grib, plot
+from . import derive, encode, fetch, grib, plot
 
 log = logging.getLogger(__name__)
 
 _CFG: dict | None = None
 
 
-def _init_worker(cfg_path: str | None):
+def _init_worker(cfg_path: str | None, model_id: str):
     global _CFG
-    _CFG = config_mod.load(cfg_path)
+    _CFG = config_mod.for_model(config_mod.load(cfg_path), model_id)
 
 
 def chart_jobs(cfg, F, P, run, step):
@@ -51,20 +51,26 @@ def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None,
     fmt = cfg["output"]["format"]
     F = grib.read(grib_path, cfg["data"]["read_region"])
     P = grib.read(tp_prev_path, cfg["data"]["read_region"]) if tp_prev_path else None
+    derive.ensure_rh(F, 700)
     sizes = {}
+    want = [c["id"] for c in cfg["site"]["charts"]]
 
     def save(chart_id, frame):
         data = encode.encode(frame.png_bytes(), fmt, cfg["output"]["png8_colors"], cfg["output"]["webp_quality"])
-        path = out / cfg["site"]["path"].format(run=run_s, chart=chart_id, step=step).split("/", 2)[-1]
+        path = out / cfg["site"]["path"].format(model=cfg["model_id"], run=run_s, chart=chart_id,
+                                                step=step).split("/", 2)[-1]
         path.write_bytes(data)
         sizes[chart_id] = len(data)
 
-    for cid, fn in chart_jobs(cfg, F, P, run, step).items():
-        save(cid, fn())
-    fr, res = plot.overlay_wpsh(cfg, F, run, step)
-    save("wpsh500", fr)
-    fr_w, _ = plot.overlay_wpsh(cfg, F, run, step, "wide")
-    save("wpsh500_wide", fr_w)
+    jobs = chart_jobs(cfg, F, P, run, step)
+    for cid in want:
+        if cid in jobs:
+            save(cid, jobs[cid]())
+    fr, res = plot.overlay_wpsh(cfg, F, run, step)     # also gives H / H-50 for the manifest
+    if "wpsh500" in want:
+        save("wpsh500", fr)
+    if "wpsh500_wide" in want:
+        save("wpsh500_wide", plot.overlay_wpsh(cfg, F, run, step, "wide")[0])
     for p in (grib_path, tp_prev_path):
         if p:
             pathlib.Path(p).unlink(missing_ok=True)
@@ -75,19 +81,20 @@ def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None,
 
 def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: pathlib.Path,
                steps: list[int] | None = None, cfg_path: str | None = None) -> dict:
-    """Render one run into site/runs/<run>/ and write its meta.json (written last = complete)."""
+    """Render one run of cfg's model into site/<model>/<run>/ and write its meta.json (written last)."""
     run_s = f"{run:%Y%m%d%H}"
-    rdir = site / "runs" / run_s
+    model = cfg["model_id"]
+    rdir = site / model / run_s
     if rdir.exists():
         shutil.rmtree(rdir)          # partial leftovers from an interrupted job
     rdir.mkdir(parents=True)
-    gdir = work / "grib" / run_s
+    gdir = work / "grib" / model / run_s
     gdir.mkdir(parents=True, exist_ok=True)
     steps = steps if steps is not None else fetch.published_steps(run.hour, cfg)
     t0 = time.monotonic()
     results, dl_seconds, srcs = [], 0.0, set()
     with cf.ProcessPoolExecutor(cfg["site"]["workers"], initializer=_init_worker,
-                                initargs=(cfg_path,)) as pool:
+                                initargs=(cfg_path, model)) as pool:
         futures = []
         for step in steps:
             r = sources.fetch_step(run, step, gdir)
@@ -110,6 +117,7 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
     if run.hour in cfg["wpsh"]["run_hours"]:
         wpsh = {str(r["step"]): r["wpsh"] for r in results}
     meta = {
+        "model": model,
         "run": run_s,
         "steps": [r["step"] for r in results],
         "wpsh": wpsh,
@@ -123,6 +131,6 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
         "render_seconds_sum": round(sum(r["seconds"] for r in results), 1),
     }
     (rdir / "meta.json").write_text(json.dumps(meta, indent=1))
-    log.info("run %s: %d images, %.0f MB, wall %.0f s", run_s, meta["images"], meta["bytes"] / 1e6,
+    log.info("%s run %s: %d images, %.0f MB, wall %.0f s", model, run_s, meta["images"], meta["bytes"] / 1e6,
              meta["wall_seconds"])
     return meta
