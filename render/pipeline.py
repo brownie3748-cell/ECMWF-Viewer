@@ -132,6 +132,8 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
     }
     if getattr(sources, "stats", None):
         meta["field_ranges"] = dict(sources.stats)      # KIM: min/max per field, a units sanity check
+    if hasattr(sources, "request_summary"):
+        meta["kma_requests"] = sources.request_summary()
     (rdir / "meta.json").write_text(json.dumps(meta, indent=1))
     log.info("%s run %s: %d images, %.0f MB, wall %.0f s", model, run_s, meta["images"], meta["bytes"] / 1e6,
              meta["wall_seconds"])

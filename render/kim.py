@@ -143,6 +143,7 @@ class KimSource:
         self.lock = threading.Lock()
         self._tp: dict = {}                       # (run, step) -> tp array, so tp windows need no extra request
         self.stats: dict = {}
+        self.req_log: list = []                   # (seconds, HTTP status or exception name) per attempt
 
     # -------------------------------------------------------------------- requests
     def _url(self, run: dt.datetime, step: int, data: str, var: str, level: int | None, box) -> str:
@@ -171,10 +172,12 @@ class KimSource:
             raise RuntimeError("KMA_APIHUB_KEY is not set")
         last = None
         for attempt in range(ATTEMPTS):
+            t0 = time.monotonic()
             try:
                 self.check_budget(1, 0)
                 r = requests.get(url + "&authKey=" + self.key, timeout=TIMEOUT)
                 self._charge(1, len(r.content))
+                self._log(time.monotonic() - t0, r.status_code)
                 if r.status_code == 200 and r.content[:4] == b"GRIB":
                     return r.content
                 last = RuntimeError(f"HTTP {r.status_code}: {r.content[:200]!r}")
@@ -182,8 +185,25 @@ class KimSource:
                 raise
             except Exception as e:  # noqa: BLE001
                 last = e
+                self._log(time.monotonic() - t0, type(e).__name__)
             time.sleep(min(60, 5 * 2 ** attempt))        # 5, 10, 20, 40, 60 s
         raise RuntimeError(f"KMA request failed: {url} ({last!r})")   # url carries no key
+
+    def _log(self, seconds: float, status) -> None:
+        with self.lock:
+            self.req_log.append((round(seconds, 2), status))
+
+    def request_summary(self) -> dict:
+        """Per-request timing for meta.json: count, failures by status, mean/median/max seconds of 200s."""
+        ok = sorted(s for s, st in self.req_log if st == 200)
+        bad: dict = {}
+        for _, st in self.req_log:
+            if st != 200:
+                bad[str(st)] = bad.get(str(st), 0) + 1
+        return {"requests": len(self.req_log), "failed": bad,
+                "ok_mean_s": round(sum(ok) / len(ok), 2) if ok else None,
+                "ok_median_s": ok[len(ok) // 2] if ok else None, "ok_max_s": ok[-1] if ok else None,
+                "parallel": self.k.get("parallel", 4)}
 
     def _field(self, run, step, key: tuple[str, int], box) -> np.ndarray:
         name, level = key
