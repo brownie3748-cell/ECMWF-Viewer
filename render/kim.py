@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 
 BASE = "https://apihub.kma.go.kr/api/typ06/url/nwp_nc_vars_down.php"
 TIMEOUT = 90
-ATTEMPTS = 4
+ATTEMPTS = 6                # 504 Gateway Time-out seen under 4 parallel requests (CI, 2026-11-15)
 KST = dt.timezone(dt.timedelta(hours=9))
 
 
@@ -182,7 +182,7 @@ class KimSource:
                 raise
             except Exception as e:  # noqa: BLE001
                 last = e
-            time.sleep(3 * (attempt + 1))
+            time.sleep(min(60, 5 * 2 ** attempt))        # 5, 10, 20, 40, 60 s
         raise RuntimeError(f"KMA request failed: {url} ({last!r})")   # url carries no key
 
     def _field(self, run, step, key: tuple[str, int], box) -> np.ndarray:

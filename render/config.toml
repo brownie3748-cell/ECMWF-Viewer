@@ -325,7 +325,7 @@ wide_box_gh500 = [100, 5, 180, 50]        # gh500 also covers the WPSH search bo
 probe_box = [126, 37, 127, 38]            # completeness probe: a tiny MSLP cut of the last step
 probe_every_min = 30
 min_age_h = 4
-parallel = 4
+parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
 est_bytes_per_field = 800_000             # measured 1.56 MB for 100-180E x 10-55N; the map box is about 0.43 of it
 grid = { lat_min = 5.0416667, lat_max = 53.0416667, lon_min = 100.0, lon_max = 180.0, step = 0.0833333 }
 vars = { gh = "hgt", t = "T", u = "u", v = "v", q = "q", r = "rh", msl = "psl", sp = "ps", tp = "prec_acc" }
@@ -376,7 +376,7 @@ group = "KIMR"
 # 0.05 deg lat/lon grid so the charts use exactly the same map frame as the other models.
 probe_every_min = 30
 min_age_h = 4
-parallel = 4
+parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
 est_bytes_per_field = 2_700_000           # measured 2.65 MB
 grid = { lat_min = 22.0, lat_max = 53.0, lon_min = 101.0, lon_max = 151.0, step = 0.05 }
 vars = { gh = "GPH", t = "T", u = "U", v = "V", q = "QVAPOR", r = "RH", msl = "MSLP", sp = "PSFC", tp = "RAIN" }
