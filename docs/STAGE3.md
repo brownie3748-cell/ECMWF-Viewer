@@ -66,7 +66,9 @@ the public URL's headers (status, CORS, Cache-Control) in its job summary.
 
 ## M8: KMA API Hub (KIM regional), measurement only
 
-Run `measure` with `only = m8` and `m8_urls` = the request URL(s) from the API Hub page without the key.
+Run `measure` with `only = m8`. `m8_urls` is optional: empty uses a built-in KIM global + regional set (yesterday 00 UTC,
+GRIB2, `nwp_nc_vars_down.php`); otherwise give API Hub request URL(s) without the key. Connections are retried
+(5 tries, counted in the report) because they are often reset from abroad (seen from the build sandbox).
 The key is read from the `KMA_APIHUB_KEY` secret, masked in the log and replaced by `***` in the report.
 The job summary shows: hub reachability from the runner, HTTP status, size, speed, file kind
 (GRIB / NetCDF / JSON ...), and for GRIB the grid definition and the field list.
