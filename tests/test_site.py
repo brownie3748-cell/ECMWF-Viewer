@@ -21,9 +21,14 @@ def C(s):
 
 class Steps(unittest.TestCase):
     def test_published_steps(self):
-        self.assertEqual(len(fetch.published_steps(0, CFG)), 41)
-        self.assertEqual(len(fetch.published_steps(6, CFG)), 25)
+        # IFS: every 3 h to 144 h, then every 6 h; AIFS: every 6 h
+        self.assertEqual(len(fetch.published_steps(0, CFG)), 65)
+        self.assertEqual(len(fetch.published_steps(6, CFG)), 49)
         self.assertEqual(fetch.published_steps(18, CFG)[-1], 144)
+        self.assertEqual(fetch.published_steps(0, CFG)[47:51], [141, 144, 150, 156])
+        aifs = config.for_model(CFG, "aifs")
+        self.assertEqual(len(fetch.published_steps(0, aifs)), 41)
+        self.assertEqual(len(fetch.published_steps(6, aifs)), 25)
 
     def test_tp_window(self):
         self.assertEqual(fetch.tp_window(144, CFG), 3)
@@ -43,7 +48,7 @@ class Models(unittest.TestCase):
     def test_chart_lists(self):
         ifs = config.for_model(CFG, "ifs")
         self.assertEqual(len(ifs["site"]["charts"]), 13)
-        self.assertEqual(41 * 13, 533)
+        self.assertEqual(65 * 13, 845)
         ids = [c["id"] for c in ifs["site"]["charts"]]
         self.assertEqual(ids[0], "msl")
         self.assertEqual(ids[-1], "gz200")
@@ -139,6 +144,8 @@ class Plan(unittest.TestCase):
                 "aifs": {"2026111500": {"run": "2026111500", "rv": rv - 1}},
                 "old": {"2026111400": {"run": "2026111400", "rv": rv}}}
         todo, remove = _poll_plan(CFG, have, complete, rv)
+        self.assertEqual(_poll_plan(CFG, have, complete, {"ifs": rv, "ifs01": rv, "aifs": rv - 1})[0][-1:],
+                         [(C("2026111500"), "ifs01")])       # per-model version: aifs rv-1 is current
         self.assertEqual([(f"{c:%Y%m%d%H}", m) for c, m in todo],
                          [("2026111506", "ifs"), ("2026111506", "aifs"), ("2026111506", "ifs01"),
                           ("2026111500", "aifs"), ("2026111500", "ifs01")])

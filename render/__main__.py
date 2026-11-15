@@ -49,7 +49,9 @@ def process_order(cfg) -> list[str]:
 def _poll_plan(cfg, store_runs, complete_by_model, rv):
     """Work for one poll: (todo [(cycle, model)], remove {model: [run]}).
 
-    Newest cycle first; within a cycle the models in process_order (lightest first)."""
+    Newest cycle first; within a cycle the models in process_order (lightest first).
+    rv: render_version, an int for all models or {model: int}."""
+    rv_of = (lambda m: rv[m]) if isinstance(rv, dict) else (lambda m: rv)
     todo, remove = [], {}
     cycles = sorted({c for cs in complete_by_model.values() for c in cs}, reverse=True)
     for c in cycles:
@@ -57,7 +59,7 @@ def _poll_plan(cfg, store_runs, complete_by_model, rv):
         for mid in process_order(cfg):
             if c in complete_by_model.get(mid, []):
                 have = store_runs.get(mid, {}).get(rs)
-                if not have or have.get("rv") != rv:
+                if not have or have.get("rv") != rv_of(mid):
                     todo.append((c, mid))
     for mid in config.model_ids(cfg):
         target = {f"{c:%Y%m%d%H}" for c in complete_by_model.get(mid, [])}
@@ -88,7 +90,7 @@ def cmd_poll(args, cfg):
     stage = work / "stage"
     t_start = time.monotonic()
     st = store_mod.open_store(cfg, args.store)
-    rv = cfg["site"]["render_version"]
+    rv = {mid: config.for_model(cfg, mid)["site"]["render_version"] for mid in config.model_ids(cfg)}
     old = st.get_json("index.json")
     runs = site.runs_from_manifest(old)
     keep = cfg["site"]["retention_runs"]
