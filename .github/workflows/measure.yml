@@ -8,7 +8,7 @@ on:
         description: "Run only this measurement (e.g. m7, m8); empty = all except m8"
         default: ""
       m8_urls:
-        description: "M8: KMA API Hub request URL(s) without the authKey (space separated); empty = built-in KIM regional set"
+        description: "M8: KMA API Hub request URL(s) without the authKey (space separated); empty = built-in KIM global + local set"
         default: ""
 
 permissions:
