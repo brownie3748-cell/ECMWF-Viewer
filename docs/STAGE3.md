@@ -4,9 +4,9 @@
 
 | id | data | charts | steps |
 |---|---|---|---|
-| `ifs` | IFS HRES 0.25 deg (`ifs/0p25/oper`) | all 13 | 00/12Z: 0-240 h, 06/18Z: 0-144 h, every 6 h |
+| `ifs` | IFS HRES 0.25 deg (`ifs/0p25/oper`) | all 13 | 00/12Z: 0-240 h, 06/18Z: 0-144 h; every 3 h to 144 h, then 6 h |
 | `ifs01` | IFS HRES 0.1 deg (`ifs/0p1/oper`, split `-sfc` / `-pl` files) | all except 300, 200, 500 wide | same |
-| `aifs` | AIFS Single 0.25 deg (`aifs-single/0p25/oper`) | all 13 | same |
+| `aifs` | AIFS Single 0.25 deg (`aifs-single/0p25/oper`) | all 13 | same lengths, every 6 h |
 
 Each model is the base config deep-merged with its `[[models]] override` (`render.config.for_model`).
 Measured on the Google mirror (runs 2026-11-14/15):
@@ -63,3 +63,10 @@ the public URL's headers (status, CORS, Cache-Control) in its job summary.
 - GitHub Pages now serves only the web app (`pages.yml`), at the same `<pages>/app/` URL.
 - The app reads `index.json` from R2 (`DATA_BASE` in `app/www/app.js`). APKs before 0.3.0 read the old
   Pages manifest and stop working once Pages carries only the app: install the 0.3.0 release.
+
+## M8: KMA API Hub (KIM regional), measurement only
+
+Run `measure` with `only = m8` and `m8_urls` = the request URL(s) from the API Hub page without the key.
+The key is read from the `KMA_APIHUB_KEY` secret, masked in the log and replaced by `***` in the report.
+The job summary shows: hub reachability from the runner, HTTP status, size, speed, file kind
+(GRIB / NetCDF / JSON ...), and for GRIB the grid definition and the field list.

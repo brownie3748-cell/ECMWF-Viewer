@@ -33,7 +33,10 @@ def run_steps(run_hour: int, cfg: dict) -> list[int]:
 def published_steps(run_hour: int, cfg: dict) -> list[int]:
     d = cfg["data"]
     max_step = d["max_step_main"] if run_hour in (0, 12) else d["max_step_short"]
-    return list(range(0, max_step + 1, d["publish_every_h"]))
+    switch = min(d["tp_switch_h"], max_step)
+    out = list(range(0, switch + 1, d["publish_every_h"]))
+    long_every = d.get("publish_every_h_long", d["publish_every_h"])
+    return out + [s for s in range(switch + long_every, max_step + 1, long_every) if s % long_every == 0]
 
 
 def tp_window(step: int, cfg: dict) -> int:

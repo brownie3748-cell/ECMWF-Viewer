@@ -10,7 +10,8 @@ preferred_source = "aws"
 source_order = ["google", "ecmwf", "azure"]      # Stage 1 download order (M1: aws returned 503 on every download)
 max_step_main = 240            # 00/12Z runs
 max_step_short = 144           # 06/18Z runs
-publish_every_h = 6
+publish_every_h = 3             # published step spacing up to tp_switch_h (IFS: native 3-hourly to 144 h)
+publish_every_h_long = 6        # spacing after tp_switch_h
 tp_short_accum_h = 3           # accumulation window for step <= tp_switch_h
 tp_long_accum_h = 6            # accumulation window for step > tp_switch_h
 tp_switch_h = 144
@@ -196,7 +197,7 @@ process_order = ["ifs", "aifs", "ifs01"]   # within a cycle: lightest model firs
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
-render_version = 5              # bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 6              # bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
@@ -262,6 +263,9 @@ charts = "all"
 [models.override.data]
 model = "aifs-single"
 tp_short_accum_h = 6            # AIFS output is 6-hourly only
+publish_every_h = 6
+[models.override.site]
+render_version = 5              # AIFS charts unchanged by the IFS 3-hourly switch (version 6)
 [[models.override.data.groups]]
 levtype = "sfc"
 param = ["msl", "sp", "tp"]

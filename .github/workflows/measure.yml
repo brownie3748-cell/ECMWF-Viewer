@@ -5,7 +5,10 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: "Run only this measurement (e.g. m7); empty = all"
+        description: "Run only this measurement (e.g. m7, m8); empty = all except m8"
+        default: ""
+      m8_urls:
+        description: "M8: KMA API Hub request URL(s) without the authKey (space separated)"
         default: ""
 
 permissions:
@@ -79,6 +82,14 @@ jobs:
         if: inputs.only == '' || inputs.only == 'm7'
         continue-on-error: true
         run: python -m measure.m7_stage_delay
+
+      - name: M8 KMA API Hub (KIM regional) reachability and format
+        if: inputs.only == 'm8'
+        continue-on-error: true
+        env:
+          KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
+          M8_URLS: ${{ inputs.m8_urls }}
+        run: python -m measure.m8_kma_apihub
 
       - name: Report to job summary
         if: always()
