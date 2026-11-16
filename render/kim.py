@@ -252,7 +252,7 @@ class KimSource:
             return None                               # asked recently: wait (each probe costs quota)
         probes[pk] = now
         try:
-            self._get(self._url(run, last, "U", self.k["vars"]["msl"], None, self.k["probe_box"]))
+            self._get(self._url(run, last, "U", self.k["vars"]["msl"], None, self.k.get("probe_box")))   # KIMR: whole field
             return "kma"
         except QuotaError:
             raise
