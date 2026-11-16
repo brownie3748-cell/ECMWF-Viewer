@@ -46,7 +46,7 @@ jobs:
         env:
           KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
         run: |
-          RUN=$(python -m render latest --main-only)
+          RUN=$(python -m render latest --main-only --model ifs01)   # 0.1 deg is published last (about +9.7 h)
           python -m render render-run --model ifs --run "$RUN" --steps 0,6,144,150,240 --site smoke-site --work work
           python -m render render-run --model ifs01 --run "$RUN" --steps 0,150 --site smoke-site --work work
           python -m render render-run --model aifs --run "$RUN" --steps 0,150 --site smoke-site --work work
