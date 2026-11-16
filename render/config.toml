@@ -141,6 +141,7 @@ temp_style = "B"                # default: A = colour fill + colour bar, B = das
 temp_style_by_level = { 925 = "C", 850 = "C", 700 = "C", 500 = "A" }
 gz500_variants = []             # Stage 0 A/B review done
 t_cmap = "RdYlBu_r"
+isotherm_a = { color = "#5a1010", width = 0.6 }   # style A: thin dashed labelled isotherms (t_interval)
 mask_underground = [925, 850]
 
 [charts.gz.wind_fill]

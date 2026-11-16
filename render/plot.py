@@ -380,6 +380,11 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
         cf = _contourf(fr, S, t, levels=tl, cmap=c["t_cmap"], extend="both", transform=PC,
                             zorder=1, alpha=0.85)
         fr.colorbar(cf, label="deg C", ticks=tl[::2])
+        ia = c.get("isotherm_a")                 # thin labelled isotherms over the shading (500 hPa)
+        if ia:
+            cs = fr.ax.contour(S.lon, S.lat, t, levels=_levels(t, ti), colors=ia["color"], linewidths=ia["width"],
+                               linestyles="--", transform=PC, zorder=2)
+            _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=ia["color"], inline_spacing=2)
     else:
         iso_col = "#d00000"
         if wind_fill:
