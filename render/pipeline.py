@@ -67,6 +67,12 @@ def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None,
     for cid in want:
         if cid in jobs:
             save(cid, jobs[cid]())
+    z = cfg["site"].get("zoom")
+    if z:                                               # Korea zoom: same charts on the zoom map, prefixed ids
+        zcfg = dict(cfg, domains=dict(cfg["domains"], default=cfg["domains"][z["domain"]]))
+        zjobs = chart_jobs(zcfg, F, P, run, step)
+        for cid in z["charts"]:
+            save(z["prefix"] + cid, zjobs[cid]())
     fr, res = plot.overlay_wpsh(cfg, F, run, step)     # also gives H / H-50 for the manifest
     if "wpsh500" in want:
         save("wpsh500", fr)

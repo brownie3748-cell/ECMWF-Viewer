@@ -79,6 +79,9 @@ class Quota(unittest.TestCase):
         calls = []
         src = kim.KimSource(mc, usage=kim.new_usage())
         src._get = lambda url: calls.append(url) or b"GRIB"
+        self.assertEqual(src.run_complete(dt.datetime(2026, 1, 1, 0)), "kma")   # old run: no probe request
+        self.assertEqual(calls, [])
+        src.k["assume_complete_after_h"] = 10_000                             # probe path below
         old = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None, minute=0, second=0, microsecond=0) \
             - dt.timedelta(hours=12)
         run = old.replace(hour=0) if old.hour >= 12 else old.replace(hour=12) - dt.timedelta(days=1)
@@ -87,6 +90,18 @@ class Quota(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertNotIn("authKey", calls[0])
         self.assertIsNone(src.run_complete(run.replace(hour=6) if run.hour == 0 else run))  # 06Z / too new
+
+
+class HubLimit(unittest.TestCase):
+    def test_403_daily_limit_stops_without_retry(self):
+        from unittest import mock
+        src = kim.KimSource(config.for_model(CFG, "kimr"), usage=kim.new_usage())
+        src.key = "x"
+        resp = mock.Mock(status_code=403, content="{\"message\": \"일일 최대 호출 용량 제한으로 사용할 수 없습니다.\"}".encode())
+        with mock.patch.object(kim.requests, "get", return_value=resp) as g, mock.patch.object(kim.time, "sleep"):
+            with self.assertRaises(kim.QuotaError):
+                src._get("https://example.invalid/?a=1")
+            self.assertEqual(g.call_count, 1)
 
 
 class Config(unittest.TestCase):

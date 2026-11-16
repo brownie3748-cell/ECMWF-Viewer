@@ -51,9 +51,21 @@ grid_step_deg = 5               # graticule spacing
 barb_every = 8                  # grid points between wind barbs
 vector_every = 3                # grid points between MFC vectors
 
+# Korea zoom (KIM regional "확대" charts): same Lambert projection, framed like the owner's KMA RDAPS sample
+# (red box, 2026-11-16): corners about 120.0E 31.1N (SW), 131.9E 31.1N (SE), 119.4E 42.85N (NW), 132.6E 42.85N
+# (NE), so almost all of North Korea is on the map. About 1.13 x 1.28 thousand km: about 1.25 km per pixel.
+[domains.korea]
+projection = "lcc"
+lcc = { lon_0 = 126.0, lat_0 = 30.0, lat_1 = 30.0, lat_2 = 60.0, radius = 6371229.0 }
+extent_m = [-568000.0, 559000.0, 140000.0, 1421000.0]
+map_width_px = 900
+grid_step_deg = 2
+barb_every = 12
+vector_every = 10
+
 [domains.wide]
-lat_min = 10.0
-lat_max = 50.0
+lat_min = 0.0                   # owner 2026-11-16: equator to 60N (was 10-50N)
+lat_max = 60.0
 lon_min = 100.0
 lon_max = 180.0
 map_width_px = 1200
@@ -87,6 +99,16 @@ coast_color_strong = "#000000"   # over full colour fills (style C)
 coast_width_strong = 0.8
 border_color_strong = "#1a1a1a"
 border_width_strong = 0.6
+# Province / metropolitan-city boundaries (Natural Earth 10m admin-1 lines) for these countries.
+admin1_countries = ["KOR", "PRK"]
+admin1_color = "#808080"
+admin1_width = 0.35
+admin1_color_strong = "#333333"
+admin1_width_strong = 0.4
+# Contour labels sit where a line crosses these meridians (render.plot._clabel): a = heights / isobars,
+# b = isotherms, c = highlighted isotherm; fixed places so labels do not jump between runs and steps.
+label_meridians = { korea = { a = [121.5, 126.5, 130.5], b = [123.5, 128.5], c = [125.0] }, default = { a = [112.0, 126.0, 140.0], b = [119.0, 133.0, 146.0], c = [129.5] }, wide = { a = [110.0, 130.0, 150.0, 170.0], b = [120.0, 140.0, 160.0], c = [135.0] } }
+label_min_km = 90
 grid_color = "#999999"
 grid_width = 0.4
 utc_color = "#d00000"
@@ -119,6 +141,7 @@ temp_style = "B"                # default: A = colour fill + colour bar, B = das
 temp_style_by_level = { 925 = "C", 850 = "C", 700 = "C", 500 = "A" }
 gz500_variants = []             # Stage 0 A/B review done
 t_cmap = "RdYlBu_r"
+isotherm_a = { color = "#5a1010", width = 0.6 }   # style A: thin dashed labelled isotherms (t_interval)
 mask_underground = [925, 850]
 
 [charts.gz.wind_fill]
@@ -191,7 +214,8 @@ vector_scale = 6.0              # m/s of flux per map width (larger = shorter ar
 
 [wpsh]
 level_offset_gpm = 50           # red line at H - offset
-search_box = { lat_min = 10.0, lat_max = 40.0, lon_min = 120.0, lon_max = 180.0 }
+search_box = { lat_min = 5.0, lat_max = 40.0, lon_min = 115.0, lon_max = 160.0 }   # owner 2026-11-16 (was 10-40N, 120-180E)
+box_on_wide_map = { color = "#2a2a2a", width = 0.8, alpha = 0.8, label = "WPSH search area" }   # thin dotted frame on the 500 hPa wide chart
 local_window_deg = 5.0          # candidate = max within +/- window
 edge_exclude_deg = 2.0          # drop candidates this close to the box edge
 line_color = "#e00000"
@@ -207,7 +231,7 @@ process_order = ["ifs", "aifs", "kimg", "kimr", "ifs01"]   # within a cycle: lig
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
-render_version = 9              # bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 10             # bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
@@ -278,7 +302,7 @@ model = "aifs-single"
 tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
 [models.override.site]
-render_version = 9              # 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
+render_version = 10             # 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
 [[models.override.data.groups]]
 levtype = "sfc"
 param = ["msl", "sp", "tp", "2t", "10u", "10v"]
@@ -336,6 +360,7 @@ wide_box_gh500 = [100, 5, 180, 50]        # gh500 also covers the WPSH search bo
 probe_box = [126, 37, 127, 38]            # completeness probe: a tiny MSLP cut of the last step
 probe_every_min = 30
 min_age_h = 4
+assume_complete_after_h = 12              # older runs are complete: no probe request
 parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
 est_bytes_per_field = 800_000             # measured 1.56 MB for 100-180E x 10-55N; the map box is about 0.43 of it
 grid = { lat_min = 5.0416667, lat_max = 53.0416667, lon_min = 100.0, lon_max = 180.0, step = 0.0833333 }
@@ -381,12 +406,21 @@ param = ["gh", "t", "u", "v", "r"]
 levtype = "pl"
 levelist = [500]
 param = ["gh", "t", "u", "v"]
+[models.override.site.zoom]
+# Extra charts on the Korea zoom map, published as a separate button "KIM 지역 확대" (manifest model `kimz`,
+# images stored with the kimr run as z_<chart>_<step>.png; no extra API Hub request).
+model_id = "kimz"
+label = "KIM 지역 확대"
+domain = "korea"
+prefix = "z_"
+charts = ["gz500", "msl", "t2m", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700"]
 [models.override.kma]
 group = "KIMR"
 # Lambert 3 km, whole domain (a lon/lat cut of the Lambert grid was not measured); interpolated onto a
 # 0.05 deg lat/lon grid so the charts use exactly the same map frame as the other models.
 probe_every_min = 30
 min_age_h = 4
+assume_complete_after_h = 12              # older runs are complete: no probe request
 parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
 est_bytes_per_field = 2_700_000           # measured 2.65 MB
 grid = { lat_min = 22.0, lat_max = 53.0, lon_min = 101.0, lon_max = 151.0, step = 0.05 }
@@ -407,8 +441,8 @@ credit = "Source: KMA API Hub, KIM regional model (KOGL Type 1, Korea Meteorolog
 
 # KMA API Hub daily limits are 20,000 calls and 5 GB per key (owner, API Hub my page); stop below them.
 [kma_quota]
-max_calls_per_day = 18000
-max_bytes_per_day = 4_500_000_000
+max_calls_per_day = 16000
+max_bytes_per_day = 4_000_000_000   # 2026-11-16: 5 GB was passed (CI smokes were not counted)
 
 # ---------------------------------------------------------------------------------------------
 # Cloudflare R2 storage (S3 API). Credentials come from the environment: R2_ACCOUNT_ID,

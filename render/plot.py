@@ -15,6 +15,7 @@ matplotlib.use("Agg")
 import cartopy.crs as ccrs  # noqa: E402
 import cartopy.feature as cfeature  # noqa: E402
 import matplotlib.colors as mcolors  # noqa: E402
+import matplotlib.patches as mpatches  # noqa: E402
 import matplotlib.patheffects as patheffects  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
@@ -26,6 +27,18 @@ from . import derive  # noqa: E402
 PC = ccrs.PlateCarree()
 MS_TO_KT = 1.0 / 0.514444
 _FEATURES: dict = {}
+
+
+def _admin1(countries: tuple):
+    """Natural Earth 10m admin-1 boundary lines of the given countries (ADM0_A3), cached."""
+    key = ("admin1",) + countries
+    if key not in _FEATURES:
+        import cartopy.io.shapereader as shpreader
+        r = shpreader.Reader(shpreader.natural_earth(resolution="10m", category="cultural",
+                                                     name="admin_1_states_provinces_lines"))
+        geoms = [x.geometry for x in r.records() if x.attributes.get("ADM0_A3") in countries]
+        _FEATURES[key] = cfeature.ShapelyFeature(geoms, PC, facecolor="none")
+    return _FEATURES[key]
 
 
 def _features(res):
@@ -119,6 +132,9 @@ class Frame:
         self.ax.add_feature(coast, edgecolor=st["coast_color" + sfx], linewidth=st["coast_width" + sfx], zorder=3)
         self.ax.add_feature(borders, edgecolor=st["border_color" + sfx], linewidth=st["border_width" + sfx],
                             zorder=3)
+        if st.get("admin1_countries"):
+            self.ax.add_feature(_admin1(tuple(st["admin1_countries"])), edgecolor=st["admin1_color" + sfx],
+                                linewidth=st["admin1_width" + sfx], zorder=3)
         g = d["grid_step_deg"]
         xt = np.arange(np.ceil(d["lon_min"] / g) * g, d["lon_max"] + 1e-6, g)
         yt = np.arange(np.ceil(d["lat_min"] / g) * g, d["lat_max"] + 1e-6, g)
@@ -202,6 +218,56 @@ def _underground(F, level):
 
 
 # ---------------------------------------------------------------------- charts
+def _clabel(fr, cs, family="a", levels=None, **kw):
+    """Contour labels at stable places: where each line crosses fixed meridians (config style.label_meridians).
+
+    matplotlib's automatic placement moves labels from run to run and step to step; anchoring them on fixed
+    meridians keeps them in a column (like the trough-axis labels of hand-drawn charts) and moves them only as
+    far as the line itself moves. A line that crosses no anchor meridian (small closed centre) gets one label
+    at its northernmost point (heights / isobars only, lines spanning > 2 deg). Labels closer than style.label_min_km to an earlier one are dropped.
+    """
+    st = fr.cfg["style"]
+    lm = st["label_meridians"]
+    key = next((k for k, d in fr.cfg["domains"].items() if k in lm and d is fr.cfg["domains"][fr.domain]
+                and k != fr.domain), fr.domain)        # zoom maps are passed in as "default"
+    lons = lm[key if key in lm else "default"][family]
+    min_d = st.get("label_min_km", 90) * (1000.0 if fr.geom["lcc"] else 1 / 111.0)   # map units: m or deg
+    proj = fr.ax.projection
+    x0, x1, y0, y1 = fr.ax.get_extent(crs=proj)
+    pad = 0.03 * (x1 - x0)
+    want = None if levels is None else set(levels)
+    pos, lv_used = [], []
+    for lv, segs in zip(cs.levels, cs.allsegs):
+        if want is not None and lv not in want:
+            continue
+        for seg in segs:
+            if len(seg) < 8:
+                continue
+            lo, la = seg[:, 0], seg[:, 1]
+            cand = []
+            for m in lons:
+                d = lo - m
+                idx = np.nonzero((d[:-1] < 0) != (d[1:] < 0))[0]     # vertices exactly on the meridian count too
+                if len(idx):
+                    i = idx[np.argmin(la[idx])]             # southernmost crossing: trough bottom / ridge base
+                    f = d[i] / (d[i] - d[i + 1]) if d[i] != d[i + 1] else 0.0
+                    cand.append((m, la[i] + f * (la[i + 1] - la[i])))
+            if not cand and family == "a" and (np.ptp(lo) > 2.0 or np.ptp(la) > 2.0):
+                i = int(np.argmax(la))                       # closed centre / short line: one label on top
+                cand.append((lo[i], la[i]))
+            for clon, clat in cand:
+                x, y = proj.transform_point(clon, clat, PC)
+                if not (x0 + pad < x < x1 - pad and y0 + pad < y < y1 - pad):
+                    continue
+                if any((x - a) ** 2 + (y - b) ** 2 < min_d ** 2 for a, b in pos):
+                    continue
+                pos.append((x, y))
+                lv_used.append(lv)
+    if not pos:
+        return None
+    return fr.ax.clabel(cs, levels=sorted(set(lv_used)), manual=pos, **kw)
+
+
 def _contourf(fr, S, z, **kw):
     """Filled contours computed in map x/y (transform_first). Reprojecting the filled polygons onto the
     Lambert map can invert one of them, which then floods the whole map with one colour (AIFS +192 h tp)."""
@@ -230,12 +296,12 @@ def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
     if F_prev is not None:
         _tp_fill(cfg, fr, S, _sub(F_prev, fr))
     p = S[("msl", 0)] / 100.0
-    if c.get("smooth_sigma", 0) > 0:           # 0.1 deg: smooth small-scale terrain noise in the isobars
-        p = derive.nan_gaussian(p, c["smooth_sigma"])
+    if c.get("smooth_sigma", 0) > 0:           # smooth the terrain noise of the isobars over mountains only
+        p = derive.terrain_smooth(p, S[("msl", 0)], S[("sp", 0)], c["smooth_sigma"])
     lv = _levels(p, c["interval"])
     widths = [1.6 if (v % c["bold_every"] == 0) else 0.8 for v in lv]
     cs = fr.ax.contour(S.lon, S.lat, p, levels=lv, colors="k", linewidths=widths, transform=PC, zorder=4)
-    fr.ax.clabel(cs, levels=[v for v in cs.levels if v % c["label_every"] == 0], fmt="%d", fontsize=8,
+    _clabel(fr, cs, "a", levels=[v for v in cs.levels if v % c["label_every"] == 0], fmt="%d", fontsize=8,
                  inline_spacing=2)
     halo = [patheffects.withStroke(linewidth=3, foreground="white")]
     d = fr.dom
@@ -306,7 +372,7 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
         iso = _levels(t, ti)
         cs = fr.ax.contour(S.lon, S.lat, t, levels=iso, colors=fc["isotherm_color"],
                            linewidths=fc["isotherm_width"], transform=PC, zorder=2)
-        fr.ax.clabel(cs, fmt="%d", fontsize=7, colors=fc["isotherm_color"], inline_spacing=2)
+        _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=fc["isotherm_color"], inline_spacing=2)
         barb_color = fc["barb_color"]
     elif temp_style == "A":
         lo, hi = c["t_fill_range"][lvkey]
@@ -314,6 +380,11 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
         cf = _contourf(fr, S, t, levels=tl, cmap=c["t_cmap"], extend="both", transform=PC,
                             zorder=1, alpha=0.85)
         fr.colorbar(cf, label="deg C", ticks=tl[::2])
+        ia = c.get("isotherm_a")                 # thin labelled isotherms over the shading (500 hPa)
+        if ia:
+            cs = fr.ax.contour(S.lon, S.lat, t, levels=_levels(t, ti), colors=ia["color"], linewidths=ia["width"],
+                               linestyles="--", transform=PC, zorder=2)
+            _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=ia["color"], inline_spacing=2)
     else:
         iso_col = "#d00000"
         if wind_fill:
@@ -332,20 +403,29 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
         tl = _levels(t, ti)
         cs = fr.ax.contour(S.lon, S.lat, t, levels=tl, colors=iso_col, linewidths=0.8, linestyles="--",
                            transform=PC, zorder=4)
-        fr.ax.clabel(cs, fmt="%d", fontsize=7, colors=iso_col)
+        _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=iso_col)
     hi_iso = c.get("highlight_isotherm", {})
     hv = hi_iso.get("levels", {}).get(lvkey)
     if hv is not None and np.nanmin(t) < hv < np.nanmax(t):
         cs = fr.ax.contour(S.lon, S.lat, t, levels=[hv], colors=hi_iso["color"], linewidths=hi_iso["width"], linestyles="solid",
                            transform=PC, zorder=4.5)
-        fr.ax.clabel(cs, fmt="%d", fontsize=8, colors=hi_iso["color"])
+        _clabel(fr, cs, "c", fmt="%d", fontsize=8, colors=hi_iso["color"])
     hl = _levels(gh, c["gh_interval"][lvkey])
     cs = fr.ax.contour(S.lon, S.lat, gh, levels=hl, colors="k", linewidths=1.1, transform=PC, zorder=5)
-    fr.ax.clabel(cs, fmt="%d", fontsize=8)
+    _clabel(fr, cs, "a", fmt="%d", fontsize=8)
     n = fr.dom["barb_every"]
     sl = (slice(None, None, n), slice(None, None, n))
-    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=barb_color,
+    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=barb_color, alpha=0.7,
                 transform=PC, zorder=6)
+    wb = cfg["wpsh"].get("box_on_wide_map")
+    if domain == "wide" and wb:                 # WPSH search area as a thin dotted frame (does not cover the map)
+        b = cfg["wpsh"]["search_box"]
+        fr.ax.add_patch(mpatches.Rectangle((b["lon_min"], b["lat_min"]), b["lon_max"] - b["lon_min"],
+                                           b["lat_max"] - b["lat_min"], fill=False, edgecolor=wb["color"],
+                                           linewidth=wb["width"], linestyle=(0, (1.5, 2.5)), alpha=wb["alpha"],
+                                           transform=PC, zorder=3.5))
+        fr.ax.text(b["lon_min"] + 0.6, b["lat_max"] - 0.6, wb["label"], transform=PC, fontsize=6.5,
+                   color=wb["color"], alpha=wb["alpha"], ha="left", va="top", zorder=3.5)
     ttl = (f"{level}hPa Height (gpm), Temperature (C), Wind Speed (kt)" if wind_fill
            else f"{level}hPa Geopotential Height (gpm), Temperature (C), Wind (kt)")
     fr.header(ttl, run, step)
@@ -364,20 +444,20 @@ def chart_t2m(cfg, F, run, step):
     tl = np.arange(lo, hi + fc["step"] / 2, fc["step"])
     cf = _contourf(fr, S, t, levels=tl, cmap=cmap, norm=norm, extend="both", transform=PC, zorder=1)
     fr.colorbar(cf, label="deg C", ticks=[x for x in tl if x % 5 == 0])
-    ts = derive.nan_gaussian(t, c["smooth_sigma"]) if c.get("smooth_sigma", 0) > 0 else t   # lines only: terrain noise
+    ts = derive.terrain_smooth(t, S[("msl", 0)], S[("sp", 0)], c.get("smooth_sigma", 0))   # lines only, mountains only
     cs = fr.ax.contour(S.lon, S.lat, ts, levels=_levels(ts, c["interval"]), colors=fc["isotherm_color"],
                        linewidths=fc["isotherm_width"], transform=PC, zorder=2)
-    fr.ax.clabel(cs, fmt="%d", fontsize=7, colors=fc["isotherm_color"], inline_spacing=2)
+    _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=fc["isotherm_color"], inline_spacing=2)
     hv = c.get("highlight")
     if hv is not None and np.nanmin(t) < hv < np.nanmax(t):
         cs = fr.ax.contour(S.lon, S.lat, t, levels=[hv], colors=cfg["charts"]["gz"]["highlight_isotherm"]["color"],
                            linewidths=1.4, linestyles="solid", transform=PC, zorder=4.5)
-        fr.ax.clabel(cs, fmt="%d", fontsize=8)
+        _clabel(fr, cs, "a", fmt="%d", fontsize=8)
     n = fr.dom["barb_every"]
     sl = (slice(None, None, n), slice(None, None, n))
     u = S[("10u", 0)] * MS_TO_KT
     v = S[("10v", 0)] * MS_TO_KT
-    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=fc["barb_color"],
+    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=fc["barb_color"], alpha=0.7,
                 transform=PC, zorder=6)
     fr.header(c["title"], run, step)
     return fr
@@ -396,7 +476,7 @@ def chart_rh700(cfg, F, run, step):
     gh = S[("gh", 700)]
     cs = fr.ax.contour(S.lon, S.lat, gh, levels=_levels(gh, cfg["charts"]["gz"]["gh_interval"]["700"]),
                        colors="k", linewidths=1.0, transform=PC, zorder=5)
-    fr.ax.clabel(cs, fmt="%d", fontsize=8)
+    _clabel(fr, cs, "a", fmt="%d", fontsize=8)
     fr.header(c["title"], run, step)
     return fr
 
@@ -424,7 +504,7 @@ def chart_mfc(cfg, F, level, run, step):
     # thin grey divergence contours drawn below coastlines/borders (zorder 3) so they do not hide them
     cs = fr.ax.contour(S.lon, S.lat, val, levels=pl, colors=c["contour_color"], linewidths=c["contour_width"],
                        transform=PC, zorder=2.5)
-    fr.ax.clabel(cs, fmt="%d", fontsize=6.5, colors=c["contour_color"])
+    _clabel(fr, cs, "b", fmt="%d", fontsize=6.5, colors=c["contour_color"])
     n = fr.dom["vector_every"]
     s = (slice(None, None, n), slice(None, None, n))
     q = fr.ax.quiver(S.lon[::n], S.lat[::n], qu[s], qv[s], color=c["vector_color"], scale=c["vector_scale"],

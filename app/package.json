@@ -1,6 +1,6 @@
 {
   "name": "ecmwf-viewer-app",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "ECMWF 뷰어: Android WebView wrapper (Capacitor) around the static chart viewer in www/.",
   "license": "Apache-2.0",
