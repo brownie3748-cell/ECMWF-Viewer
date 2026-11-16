@@ -130,7 +130,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
   padding: 12px; font-size: .98rem; border: 1px solid var(--line); }
 .switch input { width: 22px; height: 22px; accent-color: #d00000; flex: none; }
 .switch.disabled { opacity: .55; }
-.wpsh-info { font-size: .9rem; color: var(--muted); padding: 4px 4px 0; min-height: 1em; }
+.wpsh-info { font-size: .9rem; color: var(--muted); padding: 4px 4px 0; min-height: 2.6em; }
 
 /* info sheet */
 .help details { background: var(--card); border-radius: var(--radius); margin-bottom: 6px; padding: 0 12px;
@@ -151,7 +151,8 @@ dialog.sheet::backdrop { background: rgba(10, 20, 20, .6); }
 .cmp-label.newest { color: var(--accent-strong); }
 .cmp-label .badge { display: inline-block; background: var(--accent); color: var(--accent-ink); border-radius: 999px;
   font-size: .8rem; padding: 2px 8px; margin-left: 6px; vertical-align: middle; }
-.cmp-wpsh { font-weight: 400; font-size: .9rem; }
+.cmp-wpsh { font-weight: 400; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmp-label { line-height: 1.4; height: calc(2 * 1.4em + 4px); white-space: nowrap; overflow: hidden; }
 .viewer.small.newest { outline: 3px solid var(--accent); }
 .viewer.stale .zoom { opacity: .3; }
 #cmp-slider { margin-top: 4px; }

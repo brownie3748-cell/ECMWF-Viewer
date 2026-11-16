@@ -461,12 +461,12 @@ function cmpRender(fromLoad) {
   lbl.innerHTML = "";
   lbl.append(`${runLabel(f.run.run)} · +${f.step}h`);
   if (newest) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "최신"; lbl.append(b); }
-  if (ov && state.wpsh) {
-    const d = document.createElement("div");
-    d.className = "cmp-wpsh";
-    d.textContent = w.drawn ? `H−50 = ${w.line} gpm (H ${w.H})` : w.why;
-    lbl.append(d);
-  }
+  // The WPSH line is always there (blank when not shown) so the sheet keeps its height: the dialog sits on
+  // the bottom edge, so a label that changes height would move the picture up and down between runs.
+  const d = document.createElement("div");
+  d.className = "cmp-wpsh";
+  d.textContent = ov && state.wpsh ? (w.drawn ? `H−50 = ${w.line} gpm (H ${w.H})` : w.why) : "\u00a0";
+  lbl.append(d);
   document.querySelector("#compare-dlg .viewer").classList.toggle("newest", newest);
   document.querySelectorAll("#cmp-dots .dot").forEach((d, i) => d.classList.toggle("on", i === idx));
   $("cmp-slider").value = String(idx);
