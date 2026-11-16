@@ -135,8 +135,8 @@ KIM regional fills it. Data are cropped to the rectangle's lat/lon bounding box 
 
 ## KIM regional Korea zoom (`kimz`), translucent barbs
 
-- `kimr` renders its charts a second time on `domains.korea` (same Lambert projection; 120E at the south-west
-  corner to 15 km east of Dokdo, 31N to 10 km north of Liaodong Bay; about 1.2 km per pixel) for
+- `kimr` renders its charts a second time on `domains.korea` (same Lambert projection; corners about 120.0E 31.1N
+  to 132.6E 42.85N, almost all of North Korea, as the owner's KMA RDAPS sample; about 1.25 km per pixel) for
   `site.zoom.charts` (500, MSLP + precipitation, 2 m temperature, 925 / 850 with MFC, 700 with RH).
   Images are stored with the kimr run as `z_<chart>_<step>.png`; the manifest lists a virtual model `kimz`
   (`data_model = "kimr"`, `chart_prefix = "z_"`) that the app shows as "KIM 지역 확대". No extra API Hub request.

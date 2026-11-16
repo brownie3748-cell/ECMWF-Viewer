@@ -51,13 +51,13 @@ grid_step_deg = 5               # graticule spacing
 barb_every = 8                  # grid points between wind barbs
 vector_every = 3                # grid points between MFC vectors
 
-# Korea zoom (KIM regional "확대" charts): same Lambert projection, about 120E (south-west corner) to 15 km
-# east of Dokdo (132.04E at 37.24N), north edge 10 km north of Liaodong Bay (41.04N at 122E), south edge 31N at
-# 126E. About 1.1 x 1.1 thousand km on 900 px: about 1.2 km per pixel, so the 3 km grid is visible.
+# Korea zoom (KIM regional "확대" charts): same Lambert projection, framed like the owner's KMA RDAPS sample
+# (red box, 2026-11-16): corners about 120.0E 31.1N (SW), 131.9E 31.1N (SE), 119.4E 42.85N (NW), 132.6E 42.85N
+# (NE), so almost all of North Korea is on the map. About 1.13 x 1.28 thousand km: about 1.25 km per pixel.
 [domains.korea]
 projection = "lcc"
 lcc = { lon_0 = 126.0, lat_0 = 30.0, lat_1 = 30.0, lat_2 = 60.0, radius = 6371229.0 }
-extent_m = [-569000.0, 521000.0, 111000.0, 1213000.0]
+extent_m = [-568000.0, 559000.0, 140000.0, 1421000.0]
 map_width_px = 900
 grid_step_deg = 2
 barb_every = 12
@@ -100,7 +100,7 @@ coast_width_strong = 0.8
 border_color_strong = "#1a1a1a"
 border_width_strong = 0.6
 # Province / metropolitan-city boundaries (Natural Earth 10m admin-1 lines) for these countries.
-admin1_countries = ["KOR"]
+admin1_countries = ["KOR", "PRK"]
 admin1_color = "#808080"
 admin1_width = 0.35
 admin1_color_strong = "#333333"
