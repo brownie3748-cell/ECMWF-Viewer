@@ -121,3 +121,14 @@ The default domain is `projection = "lcc"` with `extent_m` in the KIM regional g
 (`plot.domain_geometry`): every model is drawn on that rectangle, so switching models never moves the map and
 KIM regional fills it. Data are cropped to the rectangle's lat/lon bounding box (about 25.4-49.6N,
 104.2-147.8E), hence the KIM global request box 101-151E, 22-53N.
+
+## 2 m temperature chart and publication times (render_version 9)
+
+- `t2m`: 2 m temperature with the fixed rainbow shading of the 925-700 hPa charts, white 3 deg C isotherms with
+  labels (lines smoothed per model, `charts.t2m.smooth_sigma`), red 0 deg C line, 10 m wind barbs. Fields `2t`,
+  `10u`, `10v` (single-level fields are keyed with level 0 in `grib.read`). KIM regional names `T2`, `U10`, `V10`
+  are UNVERIFIED until the CI smoke render. Cost: 3 more fields per step (KIM regional 725 calls per run).
+- The white isotherms of the 925-700 hPa charts now carry labels.
+- Publication times in the app footer were measured from the Google mirror's object creation times
+  (runs 2026-11-14/15, last `.index` of each run): IFS 0.25 deg +7.6 h (00/12Z) / +6.5 h (06/18Z),
+  IFS 0.1 deg +9.7 h / +8.5 h, AIFS +5.4 h. KIM regional: not measured.

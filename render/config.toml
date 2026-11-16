@@ -21,7 +21,7 @@ read_region = { lat_min = 0.0, lat_max = 60.0, lon_min = 90.0, lon_max = 190.0 }
 # Fields fetched per published step (30 fields total).
 [[data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp"]
+param = ["msl", "sp", "tp", "2t", "10u", "10v"]
 
 [[data.groups]]
 levtype = "pl"
@@ -157,6 +157,13 @@ anchors = [
   [40, "#8c1a2a"], [45, "#d46aa8"], [48, "#b58fd6"],
 ]
 
+[charts.t2m]
+title = "2m Temperature (C), 10m Wind (kt)"
+fill_range = [-30, 40]          # shading uses charts.gz.fill_c (same colour for the same temperature)
+interval = 3                    # labelled white isotherms
+highlight = 0                   # red 0 C line
+smooth_sigma = 1.0              # grid points, isotherm lines only (shading keeps the raw field)
+
 [charts.rh700]
 title = "700hPa Relative Humidity (%) and Geopotential Height (gpm)"
 # continuous brown (dry) -> white (~50 %) -> teal/green (moist), like a BrBG scale
@@ -200,10 +207,11 @@ process_order = ["ifs", "aifs", "kimg", "kimr", "ifs01"]   # within a cycle: lig
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
-render_version = 8              # bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 9              # bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
+  { id = "t2m", title = "2 m temperature", domain = "default" },
   { id = "gz925", title = "925hPa", level = 925, domain = "default" },
   { id = "mfc925", title = "925hPa MFC", level = 925, domain = "default" },
   { id = "gz850", title = "850hPa", level = 850, domain = "default" },
@@ -230,13 +238,13 @@ override = {}
 [[models]]
 id = "ifs01"
 label = "IFS 0.1°"
-charts = ["msl", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500", "wpsh500"]
+charts = ["msl", "t2m", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500", "wpsh500"]
 [models.override.data]
 resolution = "0p1"
 grid_deg = 0.1
 [[models.override.data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp"]
+param = ["msl", "sp", "tp", "2t", "10u", "10v"]
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [925, 850]
@@ -254,6 +262,8 @@ barb_every = 20                 # same spacing in degrees as 8 points at 0.25 de
 vector_every = 8
 [models.override.charts.mfc]
 smooth_sigma = 4.0              # 0.4 deg: 0.1 deg divergence is much noisier than 0.25 deg (smoke render)
+[models.override.charts.t2m]
+smooth_sigma = 2.5
 [models.override.charts.msl]
 smooth_sigma = 2.0              # 0.2 deg gaussian on MSLP before contouring (terrain noise over land)
 [models.override.style]
@@ -268,10 +278,10 @@ model = "aifs-single"
 tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
 [models.override.site]
-render_version = 8              # 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
+render_version = 9              # 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
 [[models.override.data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp"]
+param = ["msl", "sp", "tp", "2t", "10u", "10v"]
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [925, 850]
@@ -344,7 +354,7 @@ credit = "Source: KMA API Hub, KIM global model (KOGL Type 1, Korea Meteorologic
 [[models]]
 id = "kimr"
 label = "KIM 지역"
-charts = ["msl", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500"]
+charts = ["msl", "t2m", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500"]
 [models.override.data]
 source = "kma"
 run_hours = [0, 12]
@@ -358,7 +368,7 @@ tp_long_accum_h = 3
 read_region = { lat_min = 22.0, lat_max = 53.0, lon_min = 101.0, lon_max = 151.0 }
 [[models.override.data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp"]
+param = ["msl", "sp", "tp", "2t", "10u", "10v"]
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [925, 850]
@@ -380,11 +390,13 @@ min_age_h = 4
 parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
 est_bytes_per_field = 2_700_000           # measured 2.65 MB
 grid = { lat_min = 22.0, lat_max = 53.0, lon_min = 101.0, lon_max = 151.0, step = 0.05 }
-vars = { gh = "GPH", t = "T", u = "U", v = "V", q = "QVAPOR", r = "RH", msl = "MSLP", sp = "PSFC", tp = "RAIN" }
+vars = { gh = "GPH", t = "T", u = "U", v = "V", q = "QVAPOR", r = "RH", msl = "MSLP", sp = "PSFC", tp = "RAIN", "2t" = "T2", "10u" = "U10", "10v" = "V10" }   # T2/U10/V10: names UNVERIFIED (CI smoke)
 q_is_mixing_ratio = true
 [models.override.domains.default]
 barb_every = 40
 vector_every = 15
+[models.override.charts.t2m]
+smooth_sigma = 5.0
 [models.override.charts.msl]
 smooth_sigma = 4.0
 [models.override.charts.mfc]

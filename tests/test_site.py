@@ -47,15 +47,15 @@ class Models(unittest.TestCase):
 
     def test_chart_lists(self):
         ifs = config.for_model(CFG, "ifs")
-        self.assertEqual(len(ifs["site"]["charts"]), 13)
-        self.assertEqual(65 * 13, 845)
+        self.assertEqual(len(ifs["site"]["charts"]), 14)
+        self.assertEqual(65 * 14, 910)
         ids = [c["id"] for c in ifs["site"]["charts"]]
         self.assertEqual(ids[0], "msl")
         self.assertEqual(ids[-1], "gz200")
         hi = [c["id"] for c in config.for_model(CFG, "ifs01")["site"]["charts"]]
         for gone in ("gz300", "gz200", "gz500_wide", "wpsh500_wide"):
             self.assertNotIn(gone, hi)
-        self.assertEqual(len(config.for_model(CFG, "aifs")["site"]["charts"]), 13)
+        self.assertEqual(len(config.for_model(CFG, "aifs")["site"]["charts"]), 14)
 
     def test_overrides(self):
         hi = config.for_model(CFG, "ifs01")

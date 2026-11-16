@@ -15,7 +15,7 @@ const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 // Charts not listed are appended in manifest order.
 const CHIPS = [
   ["gz500", "500"], ["gz500_wide", "500 광역"],
-  ["msl", "지상·강수"],
+  ["msl", "지상·강수"], ["t2m", "지상 기온"],
   ["gz925", "925"], ["mfc925", "925 수분속"],
   ["gz850", "850"], ["mfc850", "850 수분속"],
   ["gz700", "700"], ["rh700", "700 습도"],
@@ -71,9 +71,10 @@ function fmtKst(d) { const p = kstParts(d); return `${p.mo}/${p.d}(${p.wd}) ${p.
 function fmtUtc(d) {
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, "0")}UTC`;
 }
+// Run name in the top bar: UTC date and cycle, e.g. "11/15 18Z" (the newest run is shown in lemon colour).
 function runShort(s) {
-  const d = parseRun(s), p = kstParts(d);
-  return `${p.mo}/${p.d} ${String(p.h).padStart(2, "0")}시 발표 (${String(d.getUTCHours()).padStart(2, "0")}Z)`;
+  const d = parseRun(s);
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, "0")}Z`;
 }
 function runLabel(s) {
   const d = parseRun(s);
@@ -119,7 +120,9 @@ async function loadManifest() {
   return m;
 }
 
-async function init(keepView) {
+// keepView: stay on the same run and valid time (app resume). toLatest: jump to the newest run but keep the
+// valid time as close as possible (the ⟳ button).
+async function init(keepView, toLatest) {
   try {
     const prev = state.m && run() ? run().run : null;
     const prevValid = state.m && prev ? addH(parseRun(prev), state.step) : null;
@@ -127,7 +130,7 @@ async function init(keepView) {
     $("notice-link").href = state.base + "NOTICE.txt";
     buildModels();
     buildChartPicker();
-    selectModel(state.model, keepView ? prev : null, prevValid);
+    selectModel(state.model, keepView && !toLatest ? prev : null, keepView ? prevValid : null);
   } catch (e) {
     console.error(e);
     setStatus("자료를 불러오지 못했어요. 인터넷 연결을 확인하고 ⟳ 를 눌러 주세요. (" + e.message + ")");
@@ -200,7 +203,7 @@ function buildRuns() {
   M().runs.forEach((r, i) => {
     const o = document.createElement("option");
     o.value = String(i);
-    o.textContent = runShort(r.run) + (i === M().runs.length - 1 ? " 최신" : "");
+    o.textContent = runShort(r.run);
     sel.appendChild(o);
   });
 }
@@ -326,6 +329,7 @@ function pump(gen) {
 let gridKey = "";
 function render() {
   const r = run();
+  $("run").classList.toggle("latest", state.runIdx === M().runs.length - 1);
   const steps = stepsFor(r, state.chart);
   const i = Math.max(0, steps.indexOf(state.step));
   state.step = steps[i];
@@ -547,7 +551,7 @@ function wire() {
   $("info").onclick = () => $("info-dlg").showModal();
   $("info-close").onclick = () => $("info-dlg").close();
   $("run").onchange = (e) => { stop(); const v = currentValid(); state.runIdx = +e.target.value; setStepNear(v); render(); };
-  $("reload").onclick = () => { stop(); init(true); };
+  $("reload").onclick = () => { stop(); init(true, true); };
   $("prev").onclick = () => { stop(); move(-1); };
   $("next").onclick = () => { stop(); move(1); };
   $("play").onclick = togglePlay;

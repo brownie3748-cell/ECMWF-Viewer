@@ -59,6 +59,9 @@ button, select, input { font: inherit; color: inherit; }
 .run-select { flex: 1; min-width: 0; }
 .run-select select { width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
   background: var(--card); color: var(--ink); font-size: 0.92rem; }
+.run-select select.latest { color: #b8a600; font-weight: 700; }      /* newest run: lemon */
+:root[data-theme="dark"] .run-select select.latest { color: #fff44f; }
+.run-select select option { color: var(--ink); font-weight: 400; }
 .icon-btn { border: 0; background: transparent; color: inherit; font-size: 1.3rem; padding: 4px 7px;
   border-radius: 10px; cursor: pointer; line-height: 1; }
 
@@ -156,3 +159,9 @@ dialog.sheet::backdrop { background: rgba(10, 20, 20, .6); }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); border: 0; padding: 0; cursor: pointer; }
 .dot.on { background: var(--accent); }
 .dot.last { box-shadow: 0 0 0 2px var(--accent-strong); }
+
+/* publication times (bottom of the page) */
+.pubtimes { margin-top: var(--gap); color: var(--muted); font-size: .85rem; line-height: 1.55; padding: 4px 4px 0; }
+.pubtimes b { color: var(--ink); }
+.pubtimes table { width: 100%; border-collapse: collapse; margin: 4px 0; font-variant-numeric: tabular-nums; }
+.pubtimes th, .pubtimes td { text-align: left; padding: 2px 4px; border-bottom: 1px solid var(--line); }

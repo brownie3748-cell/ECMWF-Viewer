@@ -95,7 +95,7 @@ class Config(unittest.TestCase):
         r = config.for_model(CFG, "kimr")
         ids = [c["id"] for c in r["site"]["charts"]]
         self.assertNotIn("wpsh500", ids)                         # regional domain does not reach 180E
-        self.assertEqual(kim.run_cost(r, 29)[0], 638)
+        self.assertEqual(kim.run_cost(r, 29)[0], 725)
         g = config.for_model(CFG, "kimg")
         self.assertEqual(kim.run_cost(g, 41)[0], 1230)
         # one day of 00/12Z KIM regional (3-hourly, 29 steps) stays inside the guard
