@@ -71,6 +71,11 @@ class Quota(unittest.TestCase):
         src = kim.KimSource(mc, usage={"calls": 17990, "bytes": 0})
         with self.assertRaises(kim.QuotaError):
             src.check_budget(*kim.run_cost(mc, 41))
+        for mid in ("kimg", "kimr"):           # every KMA model must be probe-able (kimr had no probe_box)
+            with self.subTest(mid):
+                self._probe(config.for_model(CFG, mid))
+
+    def _probe(self, mc):
         calls = []
         src = kim.KimSource(mc, usage=kim.new_usage())
         src._get = lambda url: calls.append(url) or b"GRIB"
@@ -90,7 +95,7 @@ class Config(unittest.TestCase):
         r = config.for_model(CFG, "kimr")
         ids = [c["id"] for c in r["site"]["charts"]]
         self.assertNotIn("wpsh500", ids)                         # regional domain does not reach 180E
-        self.assertEqual(kim.run_cost(r, 29)[0], 638)
+        self.assertEqual(kim.run_cost(r, 29)[0], 725)
         g = config.for_model(CFG, "kimg")
         self.assertEqual(kim.run_cost(g, 41)[0], 1230)
         # one day of 00/12Z KIM regional (3-hourly, 29 steps) stays inside the guard

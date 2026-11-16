@@ -33,6 +33,7 @@ def chart_jobs(cfg, F, P, run, step):
     jobs = {
         "msl": lambda: plot.chart_msl(cfg, F, run, step, P, window if P is not None else None),
         "rh700": lambda: plot.chart_rh700(cfg, F, run, step),
+        "t2m": lambda: plot.chart_t2m(cfg, F, run, step),
         "mfc925": lambda: plot.chart_mfc(cfg, F, 925, run, step)[0],
         "mfc850": lambda: plot.chart_mfc(cfg, F, 850, run, step)[0],
         "gz500_wide": lambda: plot.chart_gz(cfg, F, 500, run, step, domain="wide"),

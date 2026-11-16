@@ -80,7 +80,9 @@ def read(path: str, region: dict | None = None) -> Fields:
             if meta["shortName"] == "tp" and meta["units"] == "kg m**-2":
                 vals = vals / 1000.0         # AIFS: kg m-2 (= mm) -> m, the IFS unit used downstream
                 meta["units"] = "m"
-            key = (meta["shortName"], int(meta["level"]))
+            # single-level fields (msl, 2t at 2 m, 10u at 10 m ...) are keyed with level 0, like KIM fields
+            lev = int(meta["level"]) if meta["typeOfLevel"] == "isobaricInhPa" else 0
+            key = (meta["shortName"], lev)
             out.data[key] = vals
             out.meta[key] = meta
     if out is None:

@@ -304,8 +304,9 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
                             zorder=1)
         fr.colorbar(cf, label="deg C", ticks=[x for x in tl if x % 5 == 0])
         iso = _levels(t, ti)
-        fr.ax.contour(S.lon, S.lat, t, levels=iso, colors=fc["isotherm_color"], linewidths=fc["isotherm_width"],
-                      transform=PC, zorder=2)
+        cs = fr.ax.contour(S.lon, S.lat, t, levels=iso, colors=fc["isotherm_color"],
+                           linewidths=fc["isotherm_width"], transform=PC, zorder=2)
+        fr.ax.clabel(cs, fmt="%d", fontsize=7, colors=fc["isotherm_color"], inline_spacing=2)
         barb_color = fc["barb_color"]
     elif temp_style == "A":
         lo, hi = c["t_fill_range"][lvkey]
@@ -348,6 +349,37 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
     ttl = (f"{level}hPa Height (gpm), Temperature (C), Wind Speed (kt)" if wind_fill
            else f"{level}hPa Geopotential Height (gpm), Temperature (C), Wind (kt)")
     fr.header(ttl, run, step)
+    return fr
+
+
+def chart_t2m(cfg, F, run, step):
+    """2 m temperature: the fixed rainbow shading of the 925/850/700 hPa charts, labelled isotherms, 10 m wind."""
+    c = cfg["charts"]["t2m"]
+    fc = cfg["charts"]["gz"]["fill_c"]
+    fr = Frame(cfg, "default", strong_coast=True)
+    S = _sub(F, fr)
+    t = S[("2t", 0)] - 273.15
+    cmap, norm = temp_colormap(cfg)
+    lo, hi = c["fill_range"]
+    tl = np.arange(lo, hi + fc["step"] / 2, fc["step"])
+    cf = _contourf(fr, S, t, levels=tl, cmap=cmap, norm=norm, extend="both", transform=PC, zorder=1)
+    fr.colorbar(cf, label="deg C", ticks=[x for x in tl if x % 5 == 0])
+    ts = derive.nan_gaussian(t, c["smooth_sigma"]) if c.get("smooth_sigma", 0) > 0 else t   # lines only: terrain noise
+    cs = fr.ax.contour(S.lon, S.lat, ts, levels=_levels(ts, c["interval"]), colors=fc["isotherm_color"],
+                       linewidths=fc["isotherm_width"], transform=PC, zorder=2)
+    fr.ax.clabel(cs, fmt="%d", fontsize=7, colors=fc["isotherm_color"], inline_spacing=2)
+    hv = c.get("highlight")
+    if hv is not None and np.nanmin(t) < hv < np.nanmax(t):
+        cs = fr.ax.contour(S.lon, S.lat, t, levels=[hv], colors=cfg["charts"]["gz"]["highlight_isotherm"]["color"],
+                           linewidths=1.4, linestyles="solid", transform=PC, zorder=4.5)
+        fr.ax.clabel(cs, fmt="%d", fontsize=8)
+    n = fr.dom["barb_every"]
+    sl = (slice(None, None, n), slice(None, None, n))
+    u = S[("10u", 0)] * MS_TO_KT
+    v = S[("10v", 0)] * MS_TO_KT
+    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=fc["barb_color"],
+                transform=PC, zorder=6)
+    fr.header(c["title"], run, step)
     return fr
 
 
