@@ -132,3 +132,13 @@ KIM regional fills it. Data are cropped to the rectangle's lat/lon bounding box 
 - Publication times in the app footer were measured from the Google mirror's object creation times
   (runs 2026-11-14/15, last `.index` of each run): IFS 0.25 deg +7.6 h (00/12Z) / +6.5 h (06/18Z),
   IFS 0.1 deg +9.7 h / +8.5 h, AIFS +5.4 h. KIM regional: not measured.
+
+## KIM regional Korea zoom (`kimz`), translucent barbs
+
+- `kimr` renders its charts a second time on `domains.korea` (same Lambert projection; 120E at the south-west
+  corner to 15 km east of Dokdo, 31N to 10 km north of Liaodong Bay; about 1.2 km per pixel) for
+  `site.zoom.charts` (500, MSLP + precipitation, 2 m temperature, 925 / 850 with MFC, 700 with RH).
+  Images are stored with the kimr run as `z_<chart>_<step>.png`; the manifest lists a virtual model `kimz`
+  (`data_model = "kimr"`, `chart_prefix = "z_"`) that the app shows as "KIM 지역 확대". No extra API Hub request.
+  Estimated cost: 9 x 29 images per run, about +0.4 GB for 12 runs.
+- Wind barbs are drawn with alpha 0.7.

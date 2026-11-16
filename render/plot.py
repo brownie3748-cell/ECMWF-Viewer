@@ -226,7 +226,10 @@ def _clabel(fr, cs, family="a", levels=None, **kw):
     at its northernmost point (heights / isobars only, lines spanning > 2 deg). Labels closer than style.label_min_km to an earlier one are dropped.
     """
     st = fr.cfg["style"]
-    lons = st["label_meridians"][fr.domain if fr.domain in st["label_meridians"] else "default"][family]
+    lm = st["label_meridians"]
+    key = next((k for k, d in fr.cfg["domains"].items() if k in lm and d is fr.cfg["domains"][fr.domain]
+                and k != fr.domain), fr.domain)        # zoom maps are passed in as "default"
+    lons = lm[key if key in lm else "default"][family]
     min_d = st.get("label_min_km", 90) * 1000.0
     proj = fr.ax.projection
     x0, x1, y0, y1 = fr.ax.get_extent(crs=proj)
@@ -406,7 +409,7 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
     _clabel(fr, cs, "a", fmt="%d", fontsize=8)
     n = fr.dom["barb_every"]
     sl = (slice(None, None, n), slice(None, None, n))
-    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=barb_color,
+    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=barb_color, alpha=0.7,
                 transform=PC, zorder=6)
     ttl = (f"{level}hPa Height (gpm), Temperature (C), Wind Speed (kt)" if wind_fill
            else f"{level}hPa Geopotential Height (gpm), Temperature (C), Wind (kt)")
@@ -439,7 +442,7 @@ def chart_t2m(cfg, F, run, step):
     sl = (slice(None, None, n), slice(None, None, n))
     u = S[("10u", 0)] * MS_TO_KT
     v = S[("10v", 0)] * MS_TO_KT
-    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=fc["barb_color"],
+    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=fc["barb_color"], alpha=0.7,
                 transform=PC, zorder=6)
     fr.header(c["title"], run, step)
     return fr

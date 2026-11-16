@@ -54,6 +54,11 @@ def manifest(cfg: dict, runs: dict[str, dict[str, dict]]) -> dict:
             "runs": rs,
             "latest": rs[-1]["run"] if rs else None,
         })
+        z = mc["site"].get("zoom")
+        if z:                                           # virtual model: the same runs drawn on the zoom map
+            by_id = {c["id"]: c for c in mc["site"]["charts"]}
+            models.append(dict(models[-1], id=z["model_id"], label=z["label"], data_model=mid,
+                               chart_prefix=z["prefix"], charts=[dict(by_id[c]) for c in z["charts"]]))
     return {
         "schema_version": cfg["site"]["schema_version"],
         "generated_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),

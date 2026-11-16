@@ -97,7 +97,10 @@ function stepsFor(r, chartId) {
   return r.steps.filter((s) => s >= min);
 }
 function url(runId, chartId, step) {
-  const p = state.m.path.replace("{model}", M().id).replace("{run}", runId).replace("{chart}", chartId)
+  // A zoom model (KIM 지역 확대) reads the images of its data model with a chart prefix (z_msl_...).
+  const mod = M();
+  const p = state.m.path.replace("{model}", mod.data_model || mod.id).replace("{run}", runId)
+    .replace("{chart}", (mod.chart_prefix || "") + chartId)
     .replace("{step:03d}", String(step).padStart(3, "0"));
   return state.base + p;
 }
@@ -370,6 +373,8 @@ function showImages(base, overlay, baseUrl, ovUrl, withSpinner) {
   if (withSpinner) $("loading").hidden = loaded.has(baseUrl);
   base.onload = () => {
     loaded.add(baseUrl);
+    // zoom charts are nearly square: the viewer follows the image's own shape
+    if (base.naturalWidth) base.closest(".viewer").style.aspectRatio = `${base.naturalWidth} / ${base.naturalHeight}`;
     if (withSpinner) { $("loading").hidden = true; updateStepGrid(); }
   };
   base.onerror = () => { if (withSpinner) $("loading").hidden = true; setStatus("이미지를 불러오지 못했어요."); };
