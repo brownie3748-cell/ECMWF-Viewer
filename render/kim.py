@@ -181,6 +181,9 @@ class KimSource:
                 self._log(time.monotonic() - t0, r.status_code)
                 if r.status_code == 200 and r.content[:4] == b"GRIB":
                     return r.content
+                if r.status_code == 403 and "제한".encode() in r.content:
+                    # the hub's own daily limit ("일일 최대 호출 용량 제한"): stop at once, no retries
+                    raise QuotaError("KMA API Hub daily limit reached (HTTP 403)")
                 last = RuntimeError(f"HTTP {r.status_code}: {r.content[:200]!r}")
             except QuotaError:
                 raise

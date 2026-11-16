@@ -92,6 +92,18 @@ class Quota(unittest.TestCase):
         self.assertIsNone(src.run_complete(run.replace(hour=6) if run.hour == 0 else run))  # 06Z / too new
 
 
+class HubLimit(unittest.TestCase):
+    def test_403_daily_limit_stops_without_retry(self):
+        from unittest import mock
+        src = kim.KimSource(config.for_model(CFG, "kimr"), usage=kim.new_usage())
+        src.key = "x"
+        resp = mock.Mock(status_code=403, content="{\"message\": \"일일 최대 호출 용량 제한으로 사용할 수 없습니다.\"}".encode())
+        with mock.patch.object(kim.requests, "get", return_value=resp) as g, mock.patch.object(kim.time, "sleep"):
+            with self.assertRaises(kim.QuotaError):
+                src._get("https://example.invalid/?a=1")
+            self.assertEqual(g.call_count, 1)
+
+
 class Config(unittest.TestCase):
     def test_kim_models(self):
         self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "kimr"])
