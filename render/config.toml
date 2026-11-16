@@ -64,8 +64,8 @@ barb_every = 12
 vector_every = 10
 
 [domains.wide]
-lat_min = 10.0
-lat_max = 50.0
+lat_min = 0.0                   # owner 2026-11-16: equator to 60N (was 10-50N)
+lat_max = 60.0
 lon_min = 100.0
 lon_max = 180.0
 map_width_px = 1200
@@ -213,7 +213,8 @@ vector_scale = 6.0              # m/s of flux per map width (larger = shorter ar
 
 [wpsh]
 level_offset_gpm = 50           # red line at H - offset
-search_box = { lat_min = 10.0, lat_max = 40.0, lon_min = 120.0, lon_max = 180.0 }
+search_box = { lat_min = 5.0, lat_max = 40.0, lon_min = 115.0, lon_max = 160.0 }   # owner 2026-11-16 (was 10-40N, 120-180E)
+box_on_wide_map = { color = "#2a2a2a", width = 0.8, alpha = 0.8, label = "WPSH search area" }   # thin dotted frame on the 500 hPa wide chart
 local_window_deg = 5.0          # candidate = max within +/- window
 edge_exclude_deg = 2.0          # drop candidates this close to the box edge
 line_color = "#e00000"

@@ -15,6 +15,7 @@ matplotlib.use("Agg")
 import cartopy.crs as ccrs  # noqa: E402
 import cartopy.feature as cfeature  # noqa: E402
 import matplotlib.colors as mcolors  # noqa: E402
+import matplotlib.patches as mpatches  # noqa: E402
 import matplotlib.patheffects as patheffects  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
@@ -230,7 +231,7 @@ def _clabel(fr, cs, family="a", levels=None, **kw):
     key = next((k for k, d in fr.cfg["domains"].items() if k in lm and d is fr.cfg["domains"][fr.domain]
                 and k != fr.domain), fr.domain)        # zoom maps are passed in as "default"
     lons = lm[key if key in lm else "default"][family]
-    min_d = st.get("label_min_km", 90) * 1000.0
+    min_d = st.get("label_min_km", 90) * (1000.0 if fr.geom["lcc"] else 1 / 111.0)   # map units: m or deg
     proj = fr.ax.projection
     x0, x1, y0, y1 = fr.ax.get_extent(crs=proj)
     pad = 0.03 * (x1 - x0)
@@ -411,6 +412,15 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
     sl = (slice(None, None, n), slice(None, None, n))
     fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color=barb_color, alpha=0.7,
                 transform=PC, zorder=6)
+    wb = cfg["wpsh"].get("box_on_wide_map")
+    if domain == "wide" and wb:                 # WPSH search area as a thin dotted frame (does not cover the map)
+        b = cfg["wpsh"]["search_box"]
+        fr.ax.add_patch(mpatches.Rectangle((b["lon_min"], b["lat_min"]), b["lon_max"] - b["lon_min"],
+                                           b["lat_max"] - b["lat_min"], fill=False, edgecolor=wb["color"],
+                                           linewidth=wb["width"], linestyle=(0, (1.5, 2.5)), alpha=wb["alpha"],
+                                           transform=PC, zorder=3.5))
+        fr.ax.text(b["lon_min"] + 0.6, b["lat_max"] - 0.6, wb["label"], transform=PC, fontsize=6.5,
+                   color=wb["color"], alpha=wb["alpha"], ha="left", va="top", zorder=3.5)
     ttl = (f"{level}hPa Height (gpm), Temperature (C), Wind Speed (kt)" if wind_fill
            else f"{level}hPa Geopotential Height (gpm), Temperature (C), Wind (kt)")
     fr.header(ttl, run, step)

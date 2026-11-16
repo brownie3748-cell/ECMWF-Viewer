@@ -142,3 +142,5 @@ KIM regional fills it. Data are cropped to the rectangle's lat/lon bounding box 
   (`data_model = "kimr"`, `chart_prefix = "z_"`) that the app shows as "KIM 지역 확대". No extra API Hub request.
   Estimated cost: 9 x 29 images per run, about +0.4 GB for 12 runs.
 - Wind barbs are drawn with alpha 0.7.
+- 500 hPa wide map: 0-60N, 100-180E (was 10-50N). WPSH search box: 5-40N, 115-160E (was 10-40N, 120-180E),
+  shown on the wide chart as a thin dotted frame (`wpsh.box_on_wide_map`). Owner decision 2026-11-16.
