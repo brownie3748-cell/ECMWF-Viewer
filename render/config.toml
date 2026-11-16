@@ -360,6 +360,7 @@ wide_box_gh500 = [100, 5, 180, 50]        # gh500 also covers the WPSH search bo
 probe_box = [126, 37, 127, 38]            # completeness probe: a tiny MSLP cut of the last step
 probe_every_min = 30
 min_age_h = 4
+assume_complete_after_h = 12              # older runs are complete: no probe request
 parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
 est_bytes_per_field = 800_000             # measured 1.56 MB for 100-180E x 10-55N; the map box is about 0.43 of it
 grid = { lat_min = 5.0416667, lat_max = 53.0416667, lon_min = 100.0, lon_max = 180.0, step = 0.0833333 }
@@ -419,6 +420,7 @@ group = "KIMR"
 # 0.05 deg lat/lon grid so the charts use exactly the same map frame as the other models.
 probe_every_min = 30
 min_age_h = 4
+assume_complete_after_h = 12              # older runs are complete: no probe request
 parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
 est_bytes_per_field = 2_700_000           # measured 2.65 MB
 grid = { lat_min = 22.0, lat_max = 53.0, lon_min = 101.0, lon_max = 151.0, step = 0.05 }
@@ -439,8 +441,8 @@ credit = "Source: KMA API Hub, KIM regional model (KOGL Type 1, Korea Meteorolog
 
 # KMA API Hub daily limits are 20,000 calls and 5 GB per key (owner, API Hub my page); stop below them.
 [kma_quota]
-max_calls_per_day = 18000
-max_bytes_per_day = 4_500_000_000
+max_calls_per_day = 16000
+max_bytes_per_day = 4_000_000_000   # 2026-11-16: 5 GB was passed (CI smokes were not counted)
 
 # ---------------------------------------------------------------------------------------------
 # Cloudflare R2 storage (S3 API). Credentials come from the environment: R2_ACCOUNT_ID,

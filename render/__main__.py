@@ -175,6 +175,9 @@ def cmd_poll(args, cfg):
             failed.append(f"{mid}/{rs}: {str(e)[:200]}")
             store_mod.clear_dir(stage)
             continue
+        finally:
+            if kim.is_kma(mcfg):
+                kim.save_usage(st, kma_usage)   # after every KIM run: a cancelled job keeps its count
         try:
             meta["uploaded_bytes"] = st.upload_dir(stage / mid / rs, f"{mid}/{rs}/", sizes, last="meta.json")
         except store_mod.StorageCapError as e:

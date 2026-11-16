@@ -79,6 +79,9 @@ class Quota(unittest.TestCase):
         calls = []
         src = kim.KimSource(mc, usage=kim.new_usage())
         src._get = lambda url: calls.append(url) or b"GRIB"
+        self.assertEqual(src.run_complete(dt.datetime(2026, 1, 1, 0)), "kma")   # old run: no probe request
+        self.assertEqual(calls, [])
+        src.k["assume_complete_after_h"] = 10_000                             # probe path below
         old = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None, minute=0, second=0, microsecond=0) \
             - dt.timedelta(hours=12)
         run = old.replace(hour=0) if old.hour >= 12 else old.replace(hour=12) - dt.timedelta(days=1)

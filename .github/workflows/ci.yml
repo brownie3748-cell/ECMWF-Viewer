@@ -44,13 +44,15 @@ jobs:
         run: python -m unittest -v
       - name: Smoke render (IFS steps 0, 6, 144, 150, 240; IFS 0.1 and AIFS steps 0, 150; KIM regional steps 0, 3, 24)
         env:
-          KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
+          # KIM smoke costs about 120 API Hub requests / 0.3 GB of the 5 GB daily KMA quota, so it runs only on
+          # a manual run or a push whose commit message contains [kim] (never on the pull_request duplicate).
+          KMA_APIHUB_KEY: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[kim]'))) && secrets.KMA_APIHUB_KEY || '' }}
         run: |
           RUN=$(python -m render latest --main-only --model ifs01)   # 0.1 deg is published last (about +9.7 h)
           python -m render render-run --model ifs --run "$RUN" --steps 0,6,144,150,240 --site smoke-site --work work
           python -m render render-run --model ifs01 --run "$RUN" --steps 0,150 --site smoke-site --work work
           python -m render render-run --model aifs --run "$RUN" --steps 0,150 --site smoke-site --work work
-          if [ -n "$KMA_APIHUB_KEY" ]; then          # KIM regional: about 70 API Hub calls
+          if [ -n "$KMA_APIHUB_KEY" ]; then          # KIM regional: about 120 API Hub calls (opt-in, see env)
             KRUN=$(date -u -d "yesterday" +%Y%m%d00)
             python -m render render-run --model kimr --run "$KRUN" --steps 0,3,24 --site smoke-site --work work
           fi

@@ -187,6 +187,8 @@ class KimSource:
             except Exception as e:  # noqa: BLE001
                 last = e
                 self._log(time.monotonic() - t0, type(e).__name__)
+                # a timed-out request may still have been served (and counted) by the hub: charge it in full
+                self._charge(1, int(self.k.get("est_bytes_per_field", 0)))
             time.sleep(min(30, 2 * 2 ** attempt))        # 2, 4, 8, 16, 30 s
         raise RuntimeError(f"KMA request failed: {url} ({last!r})")   # url carries no key
 
@@ -244,6 +246,8 @@ class KimSource:
         age_h = (dt.datetime.now(dt.timezone.utc).replace(tzinfo=None) - run).total_seconds() / 3600
         if age_h < self.k["min_age_h"]:
             return None
+        if age_h >= self.k.get("assume_complete_after_h", 12):
+            return "kma"                              # old enough: no probe (a whole-field probe is 2.7 MB)
         last = self.cfg["data"]["max_step_main"]
         probes = self.usage.setdefault("probes", {})
         pk = f"{self.k['group']}{run:%Y%m%d%H}"
