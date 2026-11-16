@@ -87,6 +87,16 @@ coast_color_strong = "#000000"   # over full colour fills (style C)
 coast_width_strong = 0.8
 border_color_strong = "#1a1a1a"
 border_width_strong = 0.6
+# Province / metropolitan-city boundaries (Natural Earth 10m admin-1 lines) for these countries.
+admin1_countries = ["KOR"]
+admin1_color = "#808080"
+admin1_width = 0.35
+admin1_color_strong = "#333333"
+admin1_width_strong = 0.4
+# Contour labels sit where a line crosses these meridians (render.plot._clabel): a = heights / isobars,
+# b = isotherms, c = highlighted isotherm; fixed places so labels do not jump between runs and steps.
+label_meridians = { default = { a = [112.0, 126.0, 140.0], b = [119.0, 133.0, 146.0], c = [129.5] }, wide = { a = [110.0, 130.0, 150.0, 170.0], b = [120.0, 140.0, 160.0], c = [135.0] } }
+label_min_km = 90
 grid_color = "#999999"
 grid_width = 0.4
 utc_color = "#d00000"
@@ -207,7 +217,7 @@ process_order = ["ifs", "aifs", "kimg", "kimr", "ifs01"]   # within a cycle: lig
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
-render_version = 9              # bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 10             # bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
@@ -278,7 +288,7 @@ model = "aifs-single"
 tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
 [models.override.site]
-render_version = 9              # 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
+render_version = 10             # 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
 [[models.override.data.groups]]
 levtype = "sfc"
 param = ["msl", "sp", "tp", "2t", "10u", "10v"]

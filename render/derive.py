@@ -57,6 +57,23 @@ def nan_gaussian(a: np.ndarray, sigma: float) -> np.ndarray:
     return out
 
 
+def terrain_smooth(a: np.ndarray, msl_pa: np.ndarray, sp_pa: np.ndarray, sigma: float,
+                   low_m: float = 150.0, high_m: float = 500.0) -> np.ndarray:
+    """Smooth a field over mountains only: blend raw and smoothed by a terrain weight.
+
+    Terrain height is estimated from msl - sp (about 12 Pa per metre near the ground): weight 0 below low_m,
+    1 above high_m, linear between (itself smoothed so the blend has no edges). Plains and sea keep the raw
+    field, so fronts and troughs there stay sharp; isobars over mountains lose their reduction-to-sea-level noise.
+    """
+    if sigma <= 0:
+        return a
+    h = (np.asarray(msl_pa, dtype=np.float64) - np.asarray(sp_pa, dtype=np.float64)) / 12.0
+    w = np.clip((h - low_m) / (high_m - low_m), 0.0, 1.0)
+    w = nan_gaussian(np.where(np.isfinite(w), w, 0.0), sigma)
+    sm = nan_gaussian(a, sigma)
+    return np.where(np.isfinite(sm), w * sm + (1.0 - w) * a, a)
+
+
 def local_extrema(field, lat, lon, window_deg, grid_deg, kind="max", edge_exclude_deg=0.0,
                   box=None):
     """Local maxima/minima: value equals the max/min within +/- window_deg.
