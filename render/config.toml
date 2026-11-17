@@ -423,6 +423,7 @@ group = "KIMR"
 probe_every_min = 30
 min_age_h = 4
 assume_complete_after_h = 12              # older runs are complete: no probe request
+max_fetch_age_h = 12                      # no backfill: only runs younger than 12 h are fetched (runs already stored stay)
 parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
 est_bytes_per_field = 2_700_000           # measured 2.65 MB
 timeout_s = 30                            # 15 s cut 339 of 1088 whole-field requests (31 %, run 2026111312): each a full re-download
@@ -445,7 +446,7 @@ credit = "Source: KMA API Hub, KIM regional model (KOGL Type 1, Korea Meteorolog
 # KMA API Hub daily limits are 20,000 calls and 5 GB per key (owner, API Hub my page); stop below them.
 [kma_quota]
 max_calls_per_day = 16000
-max_bytes_per_day = 4_000_000_000   # 2026-11-16: 5 GB was passed (CI smokes were not counted)
+max_bytes_per_day = 4_900_000_000   # our count is an upper bound (timeouts charged in full): 2026-11-17 counted 2.89 GB, hub 1.9 GB
 
 # ---------------------------------------------------------------------------------------------
 # Cloudflare R2 storage (S3 API). Credentials come from the environment: R2_ACCOUNT_ID,

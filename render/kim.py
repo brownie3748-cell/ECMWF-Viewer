@@ -249,6 +249,8 @@ class KimSource:
         age_h = (dt.datetime.now(dt.timezone.utc).replace(tzinfo=None) - run).total_seconds() / 3600
         if age_h < self.k["min_age_h"]:
             return None
+        if age_h > self.k.get("max_fetch_age_h", 1e9):
+            return None                               # too old to start now: spend the daily quota on new runs
         if age_h >= self.k.get("assume_complete_after_h", 12):
             return "kma"                              # old enough: no probe (a whole-field probe is 2.7 MB)
         last = self.cfg["data"]["max_step_main"]
