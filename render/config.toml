@@ -406,6 +406,8 @@ param = ["gh", "t", "u", "v", "r"]
 levtype = "pl"
 levelist = [500]
 param = ["gh", "t", "u", "v"]
+[models.override.site]
+retention_runs = 4                        # 2 days: the daily KMA quota fits about 2 KIM regional runs, so no long backfill
 [models.override.site.zoom]
 # Extra charts on the Korea zoom map, published as a separate button "KIM 지역 확대" (manifest model `kimz`,
 # images stored with the kimr run as z_<chart>_<step>.png; no extra API Hub request).
@@ -423,6 +425,7 @@ min_age_h = 4
 assume_complete_after_h = 12              # older runs are complete: no probe request
 parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
 est_bytes_per_field = 2_700_000           # measured 2.65 MB
+timeout_s = 30                            # 15 s cut 339 of 1088 whole-field requests (31 %, run 2026111312): each a full re-download
 grid = { lat_min = 22.0, lat_max = 53.0, lon_min = 101.0, lon_max = 151.0, step = 0.05 }
 vars = { gh = "GPH", t = "T", u = "U", v = "V", q = "QVAPOR", r = "RH", msl = "MSLP", sp = "PSFC", tp = "RAIN", "2t" = "T2", "10u" = "U10", "10v" = "V10" }   # T2/U10/V10: names UNVERIFIED (CI smoke)
 q_is_mixing_ratio = true

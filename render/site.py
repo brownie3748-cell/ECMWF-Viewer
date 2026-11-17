@@ -33,6 +33,8 @@ def runs_from_manifest(m: dict | None) -> dict[str, dict[str, dict]]:
     if not m or m.get("schema_version") != 2:
         return out
     for mod in m.get("models", []):
+        if mod.get("data_model"):              # virtual model (KIM zoom): its runs belong to the data model
+            continue
         out[mod["id"]] = {r["run"]: r for r in mod.get("runs", [])}
     return out
 

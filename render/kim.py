@@ -176,7 +176,7 @@ class KimSource:
             t0 = time.monotonic()
             try:
                 self.check_budget(1, 0)
-                r = requests.get(url + "&authKey=" + self.key, timeout=TIMEOUT)
+                r = requests.get(url + "&authKey=" + self.key, timeout=self.k.get("timeout_s", TIMEOUT))
                 self._charge(1, len(r.content))
                 self._log(time.monotonic() - t0, r.status_code)
                 if r.status_code == 200 and r.content[:4] == b"GRIB":

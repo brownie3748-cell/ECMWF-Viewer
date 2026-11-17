@@ -119,7 +119,7 @@ def cmd_poll(args, cfg):
                 except kim.QuotaError as e:
                     probe_notes.append(f"{mid}: {e}")
                     break
-            if len(complete[mid]) >= keep:
+            if len(complete[mid]) >= mcfg["site"].get("retention_runs", keep):
                 break
     todo, remove = _poll_plan(cfg, runs, complete, rv)
     manifest_stale = old is None or site.manifest(cfg, runs)["models"] != old.get("models") \
@@ -173,6 +173,8 @@ def cmd_poll(args, cfg):
             meta = pipeline.render_run(mcfg, src, c, stage, work, cfg_path=args.config)
         except (kim.QuotaError, RuntimeError) as e:
             failed.append(f"{mid}/{rs}: {str(e)[:200]}")
+            if isinstance(e, kim.QuotaError):  # hub or own daily limit: no other KIM run can start this poll
+                queue = [(qc, qm) for qc, qm in queue if not kim.is_kma(sources[qm][0])]
             store_mod.clear_dir(stage)
             continue
         finally:
