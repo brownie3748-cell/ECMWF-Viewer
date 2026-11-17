@@ -144,3 +144,10 @@ KIM regional fills it. Data are cropped to the rectangle's lat/lon bounding box 
 - Wind barbs are drawn with alpha 0.7.
 - 500 hPa wide map: 0-60N, 100-180E (was 10-50N). WPSH search box: 5-40N, 115-160E (was 10-40N, 120-180E),
   shown on the wide chart as a thin dotted frame (`wpsh.box_on_wide_map`). Owner decision 2026-11-16.
+
+### M8 follow-up: KIM regional cut (measure run 43996972187, 2026-11-17)
+
+`lon1=119&lat1=31&lon2=133&lat2=43` on a KIMR request returns the Lambert 3 km grid cut to 442 x 443 points
+(first point 30.76N 119.04E; whole domain 1050 x 840), about 0.6 MB per field instead of 2.65 MB (estimated from
+24-bit simple packing). Owner decision: keep downloading the whole domain, because the "KIM 지역" charts use the
+wide map; the cut stays available if the daily quota becomes the limit again.
