@@ -175,7 +175,8 @@ class KimSource:
         for attempt in range(ATTEMPTS):
             t0 = time.monotonic()
             try:
-                self.check_budget(1, 0)
+                # no own-budget check per request: a run passed check_budget before it started, and stopping
+                # it near the end throws away everything downloaded (2026-11-17 00Z). The hub's 403 still stops it.
                 r = requests.get(url + "&authKey=" + self.key, timeout=self.k.get("timeout_s", TIMEOUT))
                 self._charge(1, len(r.content))
                 self._log(time.monotonic() - t0, r.status_code)
@@ -190,8 +191,9 @@ class KimSource:
             except Exception as e:  # noqa: BLE001
                 last = e
                 self._log(time.monotonic() - t0, type(e).__name__)
-                # a timed-out request may still have been served (and counted) by the hub: charge it in full
-                self._charge(1, int(self.k.get("est_bytes_per_field", 0)))
+                # count the call; its bytes are unknown (the hub showed 1.9 GB when we had counted 2.89 GB with
+                # every timeout charged in full, 2026-11-17), so none are charged
+                self._charge(1, 0)
             time.sleep(min(30, 2 * 2 ** attempt))        # 2, 4, 8, 16, 30 s
         raise RuntimeError(f"KMA request failed: {url} ({last!r})")   # url carries no key
 
