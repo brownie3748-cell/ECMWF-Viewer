@@ -79,6 +79,7 @@ class Quota(unittest.TestCase):
         calls = []
         src = kim.KimSource(mc, usage=kim.new_usage())
         src._get = lambda url: calls.append(url) or b"GRIB"
+        src.k["max_fetch_age_h"] = 12
         self.assertIsNone(src.run_complete(dt.datetime(2026, 1, 1, 0)))      # too old to fetch (max_fetch_age_h)
         src.k["max_fetch_age_h"] = 1e9
         self.assertEqual(src.run_complete(dt.datetime(2026, 1, 1, 0)), "kma")   # old run: no probe request
