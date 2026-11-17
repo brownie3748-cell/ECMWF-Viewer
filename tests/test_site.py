@@ -182,6 +182,7 @@ class Manifest(unittest.TestCase):
             self.assertNotIn("bytes", ifs["runs"][0])
             back = site.runs_from_manifest(st.get_json("index.json"))
             self.assertEqual(set(back["ifs"]), {"2026111500", "2026111506"})
+            self.assertNotIn("kimz", back)             # virtual zoom model: not pruned / re-planned on its own
             self.assertIn("{model}", m["path"])
 
 
