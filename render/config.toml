@@ -407,6 +407,7 @@ levtype = "pl"
 levelist = [500]
 param = ["gh", "t", "u", "v"]
 [models.override.site]
+max_missing_steps = 4                     # a few steps the hub keeps refusing do not throw away a 90-minute run
 retention_runs = 4                        # 2 days: the daily KMA quota fits about 2 KIM regional runs, so no long backfill
 [models.override.site.zoom]
 # Extra charts on the Korea zoom map, published as a separate button "KIM 지역 확대" (manifest model `kimz`,

@@ -103,19 +103,45 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
     with cf.ProcessPoolExecutor(cfg["site"]["workers"], initializer=_init_worker,
                                 initargs=(cfg_path, model)) as pool:
         futures = []
-        for step in steps:
-            r = sources.fetch_step(run, step, gdir)
-            dl_seconds += r["seconds"]
-            srcs.add(r["source"])
-            tp_prev = None
-            if step > 0:
-                rp = sources.fetch_step(run, step - fetch.tp_window(step, cfg), gdir, tp_only=True)
-                dl_seconds += rp["seconds"]
-                tp_prev = rp["path"]
-            futures.append(pool.submit(render_step, run_s, step, r["path"], tp_prev, str(rdir)))
-            # keep at most 2 x workers steps of GRIB on disk
-            while sum(not f.done() for f in futures) > 2 * cfg["site"]["workers"]:
-                time.sleep(0.2)
+        # A step whose download keeps failing (KMA: 'HTTP 200 # ERROR: CGI ...' for one field, 2026-11-18) is put
+        # aside and tried once more at the end; if it still fails, the run is published without it as long as
+        # no more than site.max_missing_steps are missing (0 = any failure fails the run, as before).
+        allow = cfg["site"].get("max_missing_steps", 0)
+        pending, missing = list(steps), []
+        for attempt in (1, 2):
+            later = []
+            for step in pending:
+                try:
+                    r = sources.fetch_step(run, step, gdir)
+                except RuntimeError as e:
+                    if allow == 0 or type(e).__name__ == "QuotaError":    # daily limit: stop, do not skip
+                        raise
+                    log.warning("%s %s +%d: download failed (%s), %s", model, run_s, step, str(e)[:160],
+                                "retried at the end" if attempt == 1 else "left out")
+                    later.append(step)
+                    continue
+                dl_seconds += r["seconds"]
+                srcs.add(r["source"])
+                tp_prev = None
+                if step > 0:
+                    try:
+                        rp = sources.fetch_step(run, step - fetch.tp_window(step, cfg), gdir, tp_only=True)
+                        dl_seconds += rp["seconds"]
+                        tp_prev = rp["path"]
+                    except RuntimeError as e:
+                        if allow == 0 or type(e).__name__ == "QuotaError":
+                            raise
+                        log.warning("%s %s +%d: no precipitation window (%s)", model, run_s, step, str(e)[:160])
+                futures.append(pool.submit(render_step, run_s, step, r["path"], tp_prev, str(rdir)))
+                # keep at most 2 x workers steps of GRIB on disk
+                while sum(not f.done() for f in futures) > 2 * cfg["site"]["workers"]:
+                    time.sleep(0.2)
+            pending = later
+            if not pending:
+                break
+        missing = pending
+        if len(missing) > allow:
+            raise RuntimeError(f"{len(missing)} steps failed to download: {missing}")
         for f in futures:
             results.append(f.result())
     shutil.rmtree(gdir, ignore_errors=True)
@@ -127,6 +153,7 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
         "model": model,
         "run": run_s,
         "steps": [r["step"] for r in results],
+        "missing_steps": missing,
         "wpsh": wpsh,
         "render_version": cfg["site"]["render_version"],
         "rendered_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
