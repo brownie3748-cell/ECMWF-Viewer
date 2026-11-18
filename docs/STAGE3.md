@@ -131,7 +131,17 @@ KIM regional fills it. Data are cropped to the rectangle's lat/lon bounding box 
 - The white isotherms of the 925-700 hPa charts now carry labels.
 - Publication times in the app footer were measured from the Google mirror's object creation times
   (runs 2026-11-14/15, last `.index` of each run): IFS 0.25 deg +7.6 h (00/12Z) / +6.5 h (06/18Z),
-  IFS 0.1 deg +9.7 h / +8.5 h, AIFS +5.4 h. KIM regional: not measured.
+  IFS 0.1 deg +9.7 h / +8.5 h, AIFS +5.4 h.
+- KIM regional, 2026-11-17 00Z: estimated available by about 14:25 KST. The poll ran from 05:20:32 to
+  06:54:21 UTC. After the +84 h MSLP check passed, the download ran for about 90 minutes before hitting
+  the quota. This places the successful check near the start of the poll.
+  [Job timings](https://github.com/brownie3748-cell/ECMWF-Viewer/actions/runs/44023371479/job/133837815641)
+  · [Download and quota report](https://github.com/brownie3748-cell/ECMWF-Viewer/pull/22)
+- KIM regional, 2026-11-17 12Z: the +84 h MSLP request started at 17:10:49 UTC. Rendering started by
+  17:11:19 UTC (17:54:42 UTC completion minus 2603.5 s), confirming availability around 02:11 KST on
+  November 18. Each cycle has one observation. The API may have served the field earlier.
+  [Probe timestamps](https://pub-07aea3ace26c452cbe6112df32e49088.r2.dev/_ops/kma-2026-11-18.json)
+  · [Render metadata](https://pub-07aea3ace26c452cbe6112df32e49088.r2.dev/kimr/2026111712/meta.json)
 
 ## KIM regional Korea zoom (`kimz`), translucent barbs
 
