@@ -28,7 +28,7 @@ class Steps(unittest.TestCase):
         self.assertEqual(fetch.published_steps(0, CFG)[47:51], [141, 144, 150, 156])
         aifs = config.for_model(CFG, "aifs")
         self.assertEqual(len(fetch.published_steps(0, aifs)), 41)
-        self.assertEqual(len(fetch.published_steps(6, aifs)), 25)
+        self.assertEqual(len(fetch.published_steps(6, aifs)), 41)      # AIFS 06/18Z to +240 h as well
 
     def test_tp_window(self):
         self.assertEqual(fetch.tp_window(144, CFG), 3)

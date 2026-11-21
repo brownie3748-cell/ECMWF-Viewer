@@ -301,8 +301,9 @@ charts = "all"
 model = "aifs-single"
 tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
+max_step_short = 240            # 06/18Z too: AIFS publishes 0-360 h for every run (measured 2026-11-21 06Z: 61 steps)
 [models.override.site]
-render_version = 10             # 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
+render_version = 11             # 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
 [[models.override.data.groups]]
 levtype = "sfc"
 param = ["msl", "sp", "tp", "2t", "10u", "10v"]
