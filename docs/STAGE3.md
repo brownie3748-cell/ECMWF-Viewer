@@ -205,3 +205,10 @@ humidity would cost extra KMA API quota).
   +123 h, measured 2026112206) times the large ratio of small amounts (about 26 at 0.1 mm) drew ~0.3 cm over wide
   dry areas (382 of 401 such cells had less than 0.25 mm). render_version 12 (AIFS 13). Chip renamed '강설' and
   placed after '지상·강수'.
+
+## WPSH search to 170E and secondary centre (render_version 13, AIFS 14)
+
+Owner 2026-11-23: the line was missing at many steps (published manifest, measured: IFS 17-28 of 65 steps per run,
+AIFS 9-12 of 41). Search box east edge 160E -> 170E (also the dotted frame on the wide chart). When no centre
+dominates +/- 5 deg, the strongest centre within +/- 2.5 deg is used ("2nd centre" in the label). IFS 2026112200,
+12 steps that had no line (measured): 170E alone draws 8, 170E + secondary centre draws all 12.

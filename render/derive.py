@@ -122,10 +122,17 @@ def wpsh_centre(gh500, lat, lon, cfg, grid_deg=0.25):
     box = w["search_box"]
     cands = local_extrema(gh500, lat, lon, w["local_window_deg"], grid_deg, kind="max",
                           edge_exclude_deg=w["edge_exclude_deg"], box=box)
+    secondary = False
+    if not cands and w.get("secondary_window_deg"):
+        # no centre that dominates +/- 5 deg: take the strongest secondary centre (a smaller closed high)
+        cands = local_extrema(gh500, lat, lon, w["secondary_window_deg"], grid_deg, kind="max",
+                              edge_exclude_deg=w["edge_exclude_deg"], box=box)
+        secondary = bool(cands)
     if not cands:
-        return {"candidates": [], "H": None, "centre": None, "line_gpm": None}
+        return {"candidates": [], "H": None, "centre": None, "line_gpm": None, "secondary": False}
     la, lo, h = cands[0]
     return {
+        "secondary": secondary,
         "candidates": cands,
         "H": h,
         "centre": (la, lo),

@@ -612,7 +612,7 @@ def overlay_wpsh(cfg, F, run, step, domain="default"):
         # white halo keeps the red line readable over the warm colour fill of gz500 (style A)
         cs.set(path_effects=[patheffects.Stroke(linewidth=w["line_width"] + 2.5, foreground="white"),
                              patheffects.Normal()])
-        txt = f"WPSH  H={res['H']:.0f}  line={res['line_gpm']:.0f} gpm"
+        txt = f"WPSH  H={res['H']:.0f}  line={res['line_gpm']:.0f} gpm" + ("  (2nd centre)" if res.get("secondary") else "")
     else:
         txt = "WPSH  no centre"
     res["drawn"] = res["line_gpm"] is not None
