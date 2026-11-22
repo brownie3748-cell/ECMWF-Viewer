@@ -209,3 +209,9 @@ def kma_snow_cm(rain_mm, window_h, t_sfc_c, rh_pct, t850_c, log=np.log) -> tuple
     mask = kma_snow_condition(rain_mm, t_sfc_c, rh_pct) & (rain_mm > 0)
     ratio = kma_snow_ratio(rain_mm * 3.0 / window_h, t_sfc_c, t850_c, log)
     return mask, np.where(mask, rain_mm * ratio / 10.0, 0.0)
+
+
+def snow_area(tp_mm: np.ndarray, sf_mm: np.ndarray, min_mm: float, min_fraction: float) -> np.ndarray:
+    """True where the window's precipitation is at least min_mm and at least min_fraction of it fell as snow."""
+    frac = np.divide(sf_mm, tp_mm, out=np.zeros_like(tp_mm), where=tp_mm > 0)
+    return (tp_mm >= min_mm) & (frac >= min_fraction)

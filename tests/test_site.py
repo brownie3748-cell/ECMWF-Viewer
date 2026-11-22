@@ -228,3 +228,13 @@ class Snow(unittest.TestCase):
         self.assertAlmostEqual(float(cm[0]), 1.4914, places=4)                         # 1 mm x 14.914 / 10
         self.assertEqual(float(cm[1]), 0.0)
         self.assertAlmostEqual(float(derive.rh_from_dewpoint(np.array([5.0]), np.array([5.0]))[0]), 100.0)
+
+
+class SnowArea(unittest.TestCase):
+    def test_snow_area_from_model_snowfall(self):
+        import numpy as np
+        from render import derive
+        m = derive.snow_area(np.array([0.05, 2.0, 2.0, 0.0]), np.array([0.05, 0.8, 1.2, 0.0]), 0.1, 0.5)
+        self.assertEqual(m.tolist(), [False, False, True, False])
+        for mid in ("ifs", "ifs01", "aifs"):
+            self.assertIn("sf", config.for_model(CFG, mid)["data"]["accum_params"])

@@ -15,6 +15,7 @@ publish_every_h_long = 6        # spacing after tp_switch_h
 tp_short_accum_h = 3           # accumulation window for step <= tp_switch_h
 tp_long_accum_h = 6            # accumulation window for step > tp_switch_h
 tp_switch_h = 144
+accum_params = ["tp", "sf"]     # fetched for the start of an accumulation window (sf: snow area on msl)
 # Region read from the global grid (with margin around all domains), deg.
 read_region = { lat_min = 0.0, lat_max = 60.0, lon_min = 90.0, lon_max = 190.0 }
 
@@ -26,7 +27,7 @@ param = ["gh"]                   # 1000-850 hPa thickness (snow chart)
 
 [[data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d"]   # 2d: snow charts (2 m RH)
+param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d", "sf"]   # 2d: 2 m RH (snow chart), sf: snow area (msl)
 
 [[data.groups]]
 levtype = "pl"
@@ -130,8 +131,10 @@ hl_window_deg = 5.0             # +/- window for H/L detection
 hl_edge_exclude_deg = 1.0
 
 [charts.snow_area]
-# msl chart: magenta hatching where the KMA snow-occurrence conditions hold (charts.snow), ECMWF models
+# msl chart: magenta hatching = expected snowfall area ("강설 예상 구역" on KMA charts, owner 2026-11-22): where at least
+# min_fraction of the window's precipitation (>= min_mm) is model snowfall (ECMWF sf / tp). KIM: none (no sf).
 min_mm = 0.1                    # first precipitation shading level
+min_fraction = 0.5              # snowfall share of the precipitation
 color = "#c000c0"
 hatch = "|||"
 hatch_width = 0.6
@@ -308,7 +311,7 @@ levelist = [1000]
 param = ["gh"]
 [[models.override.data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d"]   # 2d: snow charts (2 m RH)
+param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d", "sf"]   # 2d: 2 m RH (snow chart), sf: snow area (msl)
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [925, 850]
@@ -350,7 +353,7 @@ levelist = [1000]
 param = ["gh"]
 [[models.override.data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d"]   # 2d: snow charts (2 m RH)
+param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d", "sf"]   # 2d: 2 m RH (snow chart), sf: snow area (msl)
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [925, 850]

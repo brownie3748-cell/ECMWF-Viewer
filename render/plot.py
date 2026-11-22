@@ -297,8 +297,8 @@ def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
     if F_prev is not None:
         P = _sub(F_prev, fr)
         acc = _tp_fill(cfg, fr, S, P)
-        if ("2d", 0) in S.data:                              # ECMWF: hatch where the KMA snow conditions hold
-            snow = _snow_hatch(cfg, fr, S, snow_cm(cfg, S, acc, window_h)[0], acc)
+        if ("sf", 0) in S.data and ("sf", 0) in P.data:      # ECMWF: expected snowfall area from model snowfall
+            snow = _snow_hatch(cfg, fr, S, acc, derive.tp_accum_mm(S[("sf", 0)], P[("sf", 0)]))
     p = S[("msl", 0)] / 100.0
     if c.get("smooth_sigma", 0) > 0:           # smooth the terrain noise of the isobars over mountains only
         p = derive.terrain_smooth(p, S[("msl", 0)], S[("sp", 0)], c["smooth_sigma"])
@@ -335,10 +335,10 @@ def snow_cm(cfg, S, rain_mm, window_h):
     return derive.kma_snow_cm(rain_mm, window_h, t, rh, S[("t", 850)] - 273.15, log)
 
 
-def _snow_hatch(cfg, fr, S, mask, rain_mm) -> bool:
-    """Magenta hatching over the precipitation that falls as snow (charts.snow_area)."""
+def _snow_hatch(cfg, fr, S, tp_mm, sf_mm) -> bool:
+    """Magenta hatching over the expected snowfall area (charts.snow_area: model snowfall share)."""
     c = cfg["charts"]["snow_area"]
-    m = (mask & (rain_mm >= c["min_mm"])).astype(float)
+    m = derive.snow_area(tp_mm, sf_mm, c["min_mm"], c["min_fraction"]).astype(float)
     if not m.any():
         return True
     with matplotlib.rc_context({"hatch.color": c["color"], "hatch.linewidth": c["hatch_width"]}):
