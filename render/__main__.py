@@ -59,7 +59,7 @@ def _poll_plan(cfg, store_runs, complete_by_model, rv):
         for mid in process_order(cfg):
             if c in complete_by_model.get(mid, []):
                 have = store_runs.get(mid, {}).get(rs)
-                if not have or have.get("rv") != rv_of(mid):
+                if not have or (have.get("rv") != rv_of(mid) and not _quota_model(cfg, mid)):
                     todo.append((c, mid))
     for mid in config.model_ids(cfg):
         target = {f"{c:%Y%m%d%H}" for c in complete_by_model.get(mid, [])}
@@ -69,6 +69,73 @@ def _poll_plan(cfg, store_runs, complete_by_model, rv):
     for mid in set(store_runs) - set(config.model_ids(cfg)):     # model dropped from the config
         remove[mid] = sorted(store_runs[mid])
     return todo, remove
+
+
+def _quota_model(cfg, mid) -> bool:
+    """KIM (KMA API Hub): every download costs daily quota, so a stored run is never fetched again just to
+    re-render it with a newer render_version (one KIMR run is about 1.9 GB of the 5 GB a day); new runs get it."""
+    return kim.is_kma(config.for_model(cfg, mid))
+
+
+PARTIAL = "partial.json"                  # <model>/<run>/partial.json: steps of an unfinished KIM run in the store
+
+
+def _resumable(mcfg, st, mid, c) -> bool:
+    """A KIM run an earlier job partly rendered (and that is still young enough to finish)."""
+    age_h = (dt.datetime.now(dt.timezone.utc).replace(tzinfo=None) - c).total_seconds() / 3600
+    if age_h > mcfg["kma"].get("max_fetch_age_h", 1e9) + mcfg["kma"].get("resume_extra_h", 12):
+        return False
+    return bool(st.get_json(f"{mid}/{c:%Y%m%d%H}/{PARTIAL}"))
+
+
+def _resume_hook(st, mid, rs, rv, sizes, usage, deadline):
+    """render_run's resume dict: each finished step's images go to the store at once, with partial.json."""
+    prefix, key = f"{mid}/{rs}/", f"{mid}/{rs}/{PARTIAL}"
+    part = st.get_json(key) or {}
+    if part.get("rv") != rv:
+        part = {"rv": rv, "done": {}}
+    cap = st.scfg["max_bytes"]
+    cc = st.scfg["image_cache_control"]
+
+    def on_step(result, files):
+        new = sum(p.stat().st_size for p in files)
+        if sum(sizes.values()) + new > cap:
+            raise store_mod.StorageCapError(f"{prefix}: step +{result['step']} would pass the storage cap")
+        for p in files:
+            data = p.read_bytes()
+            st.put_bytes(prefix + p.name, data, cc)
+            sizes[prefix + p.name] = len(data)
+            p.unlink()
+        part["done"][str(result["step"])] = result
+        raw = json.dumps(part).encode()
+        st.put_bytes(key, raw, "no-cache")
+        sizes[key] = len(raw)
+        kim.save_usage(st, usage)          # the quota count survives a cancelled job too
+
+    return {"done": part["done"], "on_step": on_step, "deadline": deadline}
+
+
+def _complete_runs(mcfg, st, mid, src, cycles, stored: dict, keep: int, notes: list) -> list[dt.datetime]:
+    """Complete runs of one model among cycles (newest first), at most keep of them."""
+    out, quota_stop = [], False
+    for c in cycles:
+        rs = f"{c:%Y%m%d%H}"
+        if stored.get(rs):
+            out.append(c)                  # already published: complete, no need to ask the source again
+        elif kim.is_kma(mcfg) and _resumable(mcfg, st, mid, c):
+            out.append(c)                  # partly rendered by an earlier job: complete, no probe
+        elif not quota_stop:
+            try:
+                if src.run_complete(c):
+                    out.append(c)
+            except kim.QuotaError as e:
+                # stop probing, but keep walking the stored runs: a 'break' here left the stored KIM runs out
+                # of the window and the prune step deleted all of them (2026-11-22)
+                notes.append(f"{mid}: {e}")
+                quota_stop = True
+        if len(out) >= keep:
+            break
+    return out
 
 
 def _newer_complete(cfg, sources, complete, queue):
@@ -107,20 +174,8 @@ def cmd_poll(args, cfg):
         if kim.is_kma(mcfg):
             src.usage = kma_usage
         sources[mid] = (mcfg, src)
-        complete[mid] = []
-        for c in cycles:                       # newest first
-            have = runs.get(mid, {}).get(f"{c:%Y%m%d%H}")
-            if have and have.get("rv") == rv[mid]:
-                complete[mid].append(c)        # already published: complete, no need to ask the source again
-            else:
-                try:
-                    if src.run_complete(c):
-                        complete[mid].append(c)
-                except kim.QuotaError as e:
-                    probe_notes.append(f"{mid}: {e}")
-                    break
-            if len(complete[mid]) >= mcfg["site"].get("retention_runs", keep):
-                break
+        complete[mid] = _complete_runs(mcfg, st, mid, src, cycles, runs.get(mid, {}),
+                                       mcfg["site"].get("retention_runs", keep), probe_notes)
     todo, remove = _poll_plan(cfg, runs, complete, rv)
     manifest_stale = old is None or site.manifest(cfg, runs)["models"] != old.get("models") \
         or old.get("path") != cfg["site"]["path"]
@@ -150,8 +205,14 @@ def cmd_poll(args, cfg):
     # orphans: run prefixes in the bucket that the manifest does not list (interrupted uploads)
     listed = {f"{m}/{r}/" for m, rs in runs.items() for r in rs}
     todo_prefixes = {f"{m}/{c:%Y%m%d%H}/" for c, m in todo}
+    # a KIM run with partial.json is kept for a later poll (it is no longer in todo once the hub's daily limit
+    # stops the probes); _resumable's age limit decides when it is given up
+    resumable = {k[: -len(PARTIAL)] for k in sizes if k.endswith("/" + PARTIAL)
+                 and _resumable(config.for_model(cfg, k.split("/")[0]), st, k.split("/")[0],
+                                dt.datetime.strptime(k.split("/")[1], "%Y%m%d%H"))} \
+        if any(kim.is_kma(config.for_model(cfg, m)) for m in config.model_ids(cfg)) else set()
     orphans = sorted({"/".join(k.split("/")[:2]) + "/" for k in sizes if k.count("/") >= 2
-                      and not k.startswith("_ops/")} - listed - todo_prefixes)
+                      and not k.startswith("_ops/")} - listed - todo_prefixes - resumable)
     for pfx in orphans:
         st.delete_prefix(pfx, sizes)
     if "NOTICE.txt" not in sizes:
@@ -170,7 +231,11 @@ def cmd_poll(args, cfg):
         try:
             if kim.is_kma(mcfg):               # do not start a KIM run the daily API budget cannot finish
                 src.check_budget(*kim.run_cost(mcfg, len(fetch.published_steps(c.hour, mcfg))))
-            meta = pipeline.render_run(mcfg, src, c, stage, work, cfg_path=args.config)
+            resume = None
+            if kim.is_kma(mcfg):
+                resume = _resume_hook(st, mid, rs, rv[mid], sizes, kma_usage,
+                                      t_start + args.hard_stop_min * 60)
+            meta = pipeline.render_run(mcfg, src, c, stage, work, cfg_path=args.config, resume=resume)
         except (kim.QuotaError, RuntimeError) as e:
             failed.append(f"{mid}/{rs}: {str(e)[:200]}")
             if isinstance(e, kim.QuotaError):  # hub or own daily limit: no other KIM run can start this poll
@@ -181,7 +246,10 @@ def cmd_poll(args, cfg):
             if kim.is_kma(mcfg):
                 kim.save_usage(st, kma_usage)   # after every KIM run: a cancelled job keeps its count
         try:
-            meta["uploaded_bytes"] = st.upload_dir(stage / mid / rs, f"{mid}/{rs}/", sizes, last="meta.json")
+            meta["uploaded_bytes"] = st.upload_dir(stage / mid / rs, f"{mid}/{rs}/", sizes, last="meta.json",
+                                                   keep_others=resume is not None)
+            if resume is not None:
+                st.delete_prefix(f"{mid}/{rs}/{PARTIAL}", sizes)
         except store_mod.StorageCapError as e:
             error = str(e)
             skipped.append(f"{mid}/{rs}")
@@ -264,6 +332,8 @@ def main(argv=None):
     p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
     p.add_argument("--work", default="work")
     p.add_argument("--time-budget-min", type=float, default=150)
+    p.add_argument("--hard-stop-min", type=float, default=165,
+                   help="a KIM run starts no new step after this (the job times out at 180 min)")
     p = sub.add_parser("render-run", help="render one run of one model locally (optionally selected steps)")
     p.add_argument("--run", required=True)
     p.add_argument("--model", default="ifs")

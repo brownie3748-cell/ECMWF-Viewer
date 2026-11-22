@@ -161,3 +161,23 @@ KIM regional fills it. Data are cropped to the rectangle's lat/lon bounding box 
 (first point 30.76N 119.04E; whole domain 1050 x 840), about 0.6 MB per field instead of 2.65 MB (estimated from
 24-bit simple packing). Owner decision: keep downloading the whole domain, because the "KIM 지역" charts use the
 wide map; the cut stays available if the daily quota becomes the limit again.
+
+## KMA quota protection (2026-11-22)
+
+What happened (measured from the publish logs of 2026-11-22, KST day): the KIMR 2026112200 run took about
+2 h 50 min to download (slow hub, several fields retried), and the job hit its 180 min timeout while the run was
+almost finished. Nothing was kept, so the next job downloaded the whole run again (about 1.9 GB each, estimated
+from 725 fields x 2.7 MB) and ran into the hub's daily limit (HTTP 403). On the following poll the completeness
+probe got that 403, the probe loop stopped with `break`, the stored KIM runs fell out of the window and the prune
+step deleted all of them.
+
+Changes:
+- KIM runs are resumable. Each finished step's images are uploaded at once together with
+  `<model>/<run>/partial.json` (rendered steps and their results); the usage count is saved with every step.
+  A later poll treats a run with `partial.json` as complete (no probe), renders only the missing steps and
+  publishes the run with `meta.json` (kept up to `max_fetch_age_h + resume_extra_h`). Orphan cleanup skips it.
+- A KIM run starts no new step after `--hard-stop-min` (165 min, the job times out at 180 min); it stops with
+  "deferred" and continues next poll. A hub 403 in the middle of a run also keeps the finished steps.
+- A 403 during probing only ends the probing; stored runs stay in the window and are not deleted.
+- Stored KIM runs are not re-rendered for a `render_version` bump (a re-render downloads the whole run again);
+  new runs get the new version.

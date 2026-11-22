@@ -19,6 +19,10 @@ from . import derive, encode, fetch, grib, plot
 
 log = logging.getLogger(__name__)
 
+
+class Deferred(RuntimeError):
+    """The job's time limit came before the run was finished; the rendered steps are kept for the next poll."""
+
 _CFG: dict | None = None
 
 
@@ -87,8 +91,17 @@ def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None,
 
 
 def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: pathlib.Path,
-               steps: list[int] | None = None, cfg_path: str | None = None) -> dict:
-    """Render one run of cfg's model into site/<model>/<run>/ and write its meta.json (written last)."""
+               steps: list[int] | None = None, cfg_path: str | None = None, resume: dict | None = None) -> dict:
+    """Render one run of cfg's model into site/<model>/<run>/ and write its meta.json (written last).
+
+    resume (KIM, whose downloads cost daily API quota): {"done": {step: result} already rendered and stored,
+    "on_step": callable(result, files) called as each step finishes (stores its images, then they may be
+    deleted locally), "deadline": time.monotonic() value after which no new step starts (raises Deferred)}.
+    A job cancelled or stopped mid-run then loses at most the steps in flight (2026-11-22: a whole KIMR run,
+    about 1.9 GB of quota, was lost to the 180 min job timeout and downloaded again)."""
+    resume = resume or {}
+    done = {int(k): v for k, v in (resume.get("done") or {}).items()}
+    on_step, deadline = resume.get("on_step"), resume.get("deadline")
     run_s = f"{run:%Y%m%d%H}"
     model = cfg["model_id"]
     rdir = site / model / run_s
@@ -99,51 +112,81 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
     gdir.mkdir(parents=True, exist_ok=True)
     steps = steps if steps is not None else fetch.published_steps(run.hour, cfg)
     t0 = time.monotonic()
-    results, dl_seconds, srcs = [], 0.0, set()
+    results, dl_seconds, srcs = [dict(r) for _, r in sorted(done.items())], 0.0, set()
+    if done:
+        srcs.add("resumed")
+        log.info("%s %s: resuming, %d steps already rendered", model, run_s, len(done))
+    deferred = False
     with cf.ProcessPoolExecutor(cfg["site"]["workers"], initializer=_init_worker,
                                 initargs=(cfg_path, model)) as pool:
-        futures = []
+        futures, handled = [], set()
+
+        def flush(block: bool = False) -> None:
+            for f in futures:
+                if id(f) in handled or not (block or f.done()):
+                    continue
+                r = f.result()
+                handled.add(id(f))
+                results.append(r)
+                if on_step:
+                    on_step(r, sorted(rdir.glob(f"*_{r['step']:03d}.*")))
+
         # A step whose download keeps failing (KMA: 'HTTP 200 # ERROR: CGI ...' for one field, 2026-11-18) is put
         # aside and tried once more at the end; if it still fails, the run is published without it as long as
         # no more than site.max_missing_steps are missing (0 = any failure fails the run, as before).
         allow = cfg["site"].get("max_missing_steps", 0)
-        pending, missing = list(steps), []
-        for attempt in (1, 2):
-            later = []
-            for step in pending:
-                try:
-                    r = sources.fetch_step(run, step, gdir)
-                except RuntimeError as e:
-                    if allow == 0 or type(e).__name__ == "QuotaError":    # daily limit: stop, do not skip
-                        raise
-                    log.warning("%s %s +%d: download failed (%s), %s", model, run_s, step, str(e)[:160],
-                                "retried at the end" if attempt == 1 else "left out")
-                    later.append(step)
-                    continue
-                dl_seconds += r["seconds"]
-                srcs.add(r["source"])
-                tp_prev = None
-                if step > 0:
+        try:
+            pending, missing = [s for s in steps if s not in done], []
+            for attempt in (1, 2):
+                later = []
+                for step in pending:
+                    if deadline is not None and time.monotonic() > deadline:
+                        deferred = True
+                        break
                     try:
-                        rp = sources.fetch_step(run, step - fetch.tp_window(step, cfg), gdir, tp_only=True)
-                        dl_seconds += rp["seconds"]
-                        tp_prev = rp["path"]
+                        r = sources.fetch_step(run, step, gdir)
                     except RuntimeError as e:
-                        if allow == 0 or type(e).__name__ == "QuotaError":
+                        if allow == 0 or type(e).__name__ == "QuotaError":    # daily limit: stop, do not skip
                             raise
-                        log.warning("%s %s +%d: no precipitation window (%s)", model, run_s, step, str(e)[:160])
-                futures.append(pool.submit(render_step, run_s, step, r["path"], tp_prev, str(rdir)))
-                # keep at most 2 x workers steps of GRIB on disk
-                while sum(not f.done() for f in futures) > 2 * cfg["site"]["workers"]:
-                    time.sleep(0.2)
-            pending = later
-            if not pending:
-                break
+                        log.warning("%s %s +%d: download failed (%s), %s", model, run_s, step, str(e)[:160],
+                                    "retried at the end" if attempt == 1 else "left out")
+                        later.append(step)
+                        continue
+                    dl_seconds += r["seconds"]
+                    srcs.add(r["source"])
+                    tp_prev = None
+                    if step > 0:
+                        try:
+                            rp = sources.fetch_step(run, step - fetch.tp_window(step, cfg), gdir, tp_only=True)
+                            dl_seconds += rp["seconds"]
+                            tp_prev = rp["path"]
+                        except RuntimeError as e:
+                            if allow == 0 or type(e).__name__ == "QuotaError":
+                                raise
+                            log.warning("%s %s +%d: no precipitation window (%s)", model, run_s, step, str(e)[:160])
+                    futures.append(pool.submit(render_step, run_s, step, r["path"], tp_prev, str(rdir)))
+                    # keep at most 2 x workers steps of GRIB on disk
+                    while sum(not f.done() for f in futures) > 2 * cfg["site"]["workers"]:
+                        time.sleep(0.2)
+                    flush()
+                if deferred:
+                    break
+                pending = later
+                if not pending:
+                    break
+        except Exception:
+            try:
+                flush(block=True)        # e.g. the hub's daily limit: keep the steps already rendered
+            except Exception as e:  # noqa: BLE001
+                log.warning("%s %s: could not store finished steps (%s)", model, run_s, e)
+            raise
+        flush(block=True)                # steps in flight are stored even when the run stops here
+        if deferred:
+            raise Deferred(f"job time limit: {len(results)} of {len(steps)} steps rendered and kept, "
+                           "the rest follows next poll")
         missing = pending
         if len(missing) > allow:
             raise RuntimeError(f"{len(missing)} steps failed to download: {missing}")
-        for f in futures:
-            results.append(f.result())
     shutil.rmtree(gdir, ignore_errors=True)
     results.sort(key=lambda r: r["step"])
     wpsh = None

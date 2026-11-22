@@ -86,8 +86,12 @@ class _Base:
             sizes.pop(k, None)
         return len(keys)
 
-    def upload_dir(self, local: pathlib.Path, prefix: str, sizes: dict[str, int], last: str | None = None) -> int:
+    def upload_dir(self, local: pathlib.Path, prefix: str, sizes: dict[str, int], last: str | None = None,
+                   keep_others: bool = False) -> int:
         """Upload every file under `local` to `prefix`, with `last` (e.g. meta.json) uploaded after the rest.
+
+        keep_others: do not delete objects under `prefix` that are not in `local` (a resumed KIM run whose
+        images were uploaded step by step).
 
         Enforces the storage cap and the request budget before the first byte is sent.
         Returns bytes uploaded and updates `sizes` in place.
@@ -119,7 +123,8 @@ class _Base:
             sizes[key] = n
             uploaded.add(key)
         self.ops["class_a"] += len(files)
-        stale = [k for k in sizes if k.startswith(prefix) and k not in uploaded]   # e.g. a dropped chart
+        stale = [] if keep_others else \
+            [k for k in sizes if k.startswith(prefix) and k not in uploaded]       # e.g. a dropped chart
         for i in range(0, len(stale), 1000):
             self._delete(stale[i:i + 1000])
             self.ops["class_a"] += 1
