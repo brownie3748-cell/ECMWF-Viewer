@@ -233,9 +233,11 @@ class KimSource:
             a = a / (1.0 + a)                         # water-vapour mixing ratio -> specific humidity
         return a
 
+    ACCUM = (("tp", 0), ("sf", 0))                 # accumulated from the run start; mm -> m like the IFS
+
     def field_keys(self, tp_only: bool = False) -> list[tuple[str, int]]:
-        if tp_only:
-            return [("tp", 0)]
+        if tp_only:                                 # window start: the accumulated fields this model fetches
+            return [k for k in self.ACCUM if k in self.field_keys()]
         keys = []
         for g in self.cfg["data"]["groups"]:
             for p in g["param"]:
@@ -278,22 +280,32 @@ class KimSource:
         target = outdir / f"{run:%Y%m%d%H}_{step:03d}{'_tp' if tp_only else ''}.npz"
         data = {}
         if tp_only and (run, step) in self._tp:
-            data[("tp", 0)] = self._tp[(run, step)]
+            data.update(self._tp[(run, step)])
         else:
             keys = self.field_keys(tp_only)
             box = self.k.get("box")
             with cf.ThreadPoolExecutor(self.k.get("parallel", 4)) as ex:
                 for key, a in zip(keys, ex.map(lambda k: self._field(run, step, k, box), keys)):
                     data[key] = a
-            if ("tp", 0) in data:
-                data[("tp", 0)] = data[("tp", 0)] / 1000.0      # kg m-2 (mm) -> m, the IFS unit used downstream
-                self._tp[(run, step)] = data[("tp", 0)]
+            for key in self.ACCUM:
+                if key in data:
+                    data[key] = data[key] / 1000.0          # kg m-2 (mm) -> m, the IFS unit used downstream
+            self._tp[(run, step)] = {k: data[k] for k in self.ACCUM if k in data}
+            if ("r2", 0) in data and ("2t", 0) in data:     # KIM gives 2 m RH; the snow charts use the dew point
+                data[("2d", 0)] = dewpoint_k(data[("2t", 0)], data.pop(("r2", 0)))
             for (n, lv), a in data.items():
                 if np.isfinite(a).any():
                     self.stats[f"{n}{lv or ''}"] = [round(float(np.nanmin(a)), 4), round(float(np.nanmax(a)), 4)]
         save_npz(target, self.lat, self.lon, data)
         return {"path": str(target), "bytes": target.stat().st_size, "seconds": time.monotonic() - t0,
                 "source": "kma"}
+
+
+def dewpoint_k(t_k: np.ndarray, rh_pct: np.ndarray) -> np.ndarray:
+    """Dew point (K) from temperature (K) and relative humidity (%), inverse Magnus (Bolton constants)."""
+    t = t_k - 273.15
+    g = np.log(np.clip(rh_pct, 1.0, 100.0) / 100.0) + 17.67 * t / (t + 243.5)
+    return (243.5 * g / (17.67 - g) + 273.15).astype(np.float32)
 
 
 # ------------------------------------------------------------------------------------------- daily usage

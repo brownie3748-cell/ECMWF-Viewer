@@ -214,3 +214,14 @@ dominates +/- 5 deg, the strongest centre within +/- 2.5 deg is used ("2nd centr
 12 steps that had no line (measured): 170E alone draws 8, 170E + secondary centre draws all 12.
 - 500 hPa wide map: "H" and the height (gpm) at each local maximum within +/- 5 deg (`charts.gz.high_centres`,
   owner 2026-11-23, after the KMA charts). render_version 14 (AIFS 15).
+
+## KIM regional: snow area and snow chart (owner 2026-11-23)
+
+KIM regional now also fetches `RH2` (2 m RH, %) and `SNOW` (accumulated grid-scale snow and ice, mm): 27 fields per
+step, 783 calls and about 2.1 GB per run (estimated from 2.7 MB per field), about 4.2 GB for two runs a day. No
+1000 hPa height (no thickness lines on the KIM snow chart; owner's choice to save quota). The dew point for the
+wet-bulb line is derived from T2 and RH2. Names measured with measure run 45080956733 (2026112212 +24 h, small box:
+T2, RH2 and SNOW all GRIB). Two earlier checks returned "# ERROR: CGI 호출 오류" even for T2, also in the production
+URL format; both ran while a publish job was downloading KIM with the same key, so the hub seems to refuse
+concurrent requests from a second client (inferred). Stored KIM runs are not re-rendered; the next runs get the
+charts. Not yet run on real KIM data here: the [kim] CI smoke would cost about 0.35 GB of today's quota.

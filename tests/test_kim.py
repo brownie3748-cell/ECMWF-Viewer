@@ -113,7 +113,7 @@ class Config(unittest.TestCase):
         r = config.for_model(CFG, "kimr")
         ids = [c["id"] for c in r["site"]["charts"]]
         self.assertNotIn("wpsh500", ids)                         # regional domain does not reach 180E
-        self.assertEqual(kim.run_cost(r, 29)[0], 725)
+        self.assertEqual(kim.run_cost(r, 29)[0], 783)              # 27 fields: + RH2, SNOW (owner 2026-11-23)
         g = config.for_model(CFG, "kimg")
         self.assertEqual(kim.run_cost(g, 41)[0], 1230)
         # one day of 00/12Z KIM regional (3-hourly, 29 steps) stays inside the guard
@@ -125,3 +125,12 @@ class Config(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SnowFields(unittest.TestCase):
+    def test_dewpoint_and_window_fields(self):
+        td = kim.dewpoint_k(np.array([293.15, 273.15]), np.array([50.0, 100.0]))
+        self.assertAlmostEqual(float(td[0]) - 273.15, 9.26, delta=0.1)     # 20 C, 50 % -> 9.3 C
+        self.assertAlmostEqual(float(td[1]), 273.15, delta=0.01)
+        src = kim.KimSource(config.for_model(CFG, "kimr"))
+        self.assertEqual(src.field_keys(tp_only=True), [("tp", 0), ("sf", 0)])

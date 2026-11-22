@@ -371,13 +371,15 @@ def chart_snow(cfg, F, P, run, step, window_h):
     cs = fr.ax.contour(S.lon, S.lat, t925, levels=_levels(t925, c["t_interval"]), colors=c["t_color"],
                        linewidths=0.6, transform=PC, zorder=3)
     _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=c["t_color"])
-    thick = S[("gh", 850)] - S[("gh", 1000)]
-    thick = derive.terrain_smooth(thick, S[("msl", 0)], S[("sp", 0)], c.get("smooth_sigma", 0))
-    lo, hi = c["thickness_range"]
-    lv = np.arange(lo, hi + 1, c["thickness_interval"])
-    cs = fr.ax.contour(S.lon, S.lat, thick, levels=lv, colors=c["thickness_color"],
-                       linewidths=[1.6 if v == c["thickness_bold"] else 0.7 for v in lv], transform=PC, zorder=3.5)
-    _clabel(fr, cs, "c", fmt="%d", fontsize=7, colors=c["thickness_color"])
+    if ("gh", 1000) in S.data:                 # KIM: not fetched (owner 2026-11-23: no thickness, less quota)
+        thick = S[("gh", 850)] - S[("gh", 1000)]
+        thick = derive.terrain_smooth(thick, S[("msl", 0)], S[("sp", 0)], c.get("smooth_sigma", 0))
+        lo, hi = c["thickness_range"]
+        lv = np.arange(lo, hi + 1, c["thickness_interval"])
+        cs = fr.ax.contour(S.lon, S.lat, thick, levels=lv, colors=c["thickness_color"],
+                           linewidths=[1.6 if v == c["thickness_bold"] else 0.7 for v in lv], transform=PC,
+                           zorder=3.5)
+        _clabel(fr, cs, "c", fmt="%d", fontsize=7, colors=c["thickness_color"])
     tw = derive.wet_bulb_c(S[("2t", 0)] - 273.15, S[("2d", 0)] - 273.15, S[("sp", 0)] / 100.0)
     tw = derive.terrain_smooth(tw, S[("msl", 0)], S[("sp", 0)], c.get("smooth_sigma", 0))
     if np.nanmin(tw) < c["tw_line"] < np.nanmax(tw):
@@ -389,7 +391,8 @@ def chart_snow(cfg, F, P, run, step, window_h):
     v = np.where(under, np.nan, S[("v", 925)]) * MS_TO_KT
     fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color="#333333", alpha=0.7,
                 transform=PC, zorder=5)
-    fr.header(c["title"].format(window=window_h, tw=c["tw_line"]), run, step)
+    title = c["title"] if ("gh", 1000) in S.data else c["title"].replace(", 1000-850 Thick.", "")
+    fr.header(title.format(window=window_h, tw=c["tw_line"]), run, step)
     return fr
 
 

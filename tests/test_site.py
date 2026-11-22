@@ -59,8 +59,8 @@ class Models(unittest.TestCase):
         for mid in ("ifs", "ifs01", "aifs"):           # 2d and gh 1000 are in the ECMWF open data (measured 2026-11-22)
             self.assertIn("snow", [c["id"] for c in config.for_model(CFG, mid)["site"]["charts"]])
         kimr = config.for_model(CFG, "kimr")
-        self.assertNotIn("snow", [c["id"] for c in kimr["site"]["charts"]])
-        self.assertNotIn("2d", [p for g in kimr["data"]["groups"] for p in g["param"]])   # no extra KMA quota
+        self.assertIn("snow", [c["id"] for c in kimr["site"]["charts"]])          # owner 2026-11-23: RH2 + SNOW
+        self.assertNotIn(1000, [lv for g in kimr["data"]["groups"] for lv in g.get("levelist", [])])  # no thickness
 
     def test_overrides(self):
         hi = config.for_model(CFG, "ifs01")
