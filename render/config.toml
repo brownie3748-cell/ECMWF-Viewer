@@ -15,13 +15,19 @@ publish_every_h_long = 6        # spacing after tp_switch_h
 tp_short_accum_h = 3           # accumulation window for step <= tp_switch_h
 tp_long_accum_h = 6            # accumulation window for step > tp_switch_h
 tp_switch_h = 144
+accum_params = ["tp", "sf"]     # fetched for the start of an accumulation window (sf: snow area on msl)
 # Region read from the global grid (with margin around all domains), deg.
 read_region = { lat_min = 0.0, lat_max = 60.0, lon_min = 90.0, lon_max = 190.0 }
 
-# Fields fetched per published step (30 fields total).
+# Fields fetched per published step (33 fields total).
+[[data.groups]]
+levtype = "pl"
+levelist = [1000]
+param = ["gh"]                   # 1000-850 hPa thickness (snow chart)
+
 [[data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp", "2t", "10u", "10v"]
+param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d", "sf"]   # 2d: 2 m RH (snow chart), sf: snow area (msl)
 
 [[data.groups]]
 levtype = "pl"
@@ -117,17 +123,49 @@ kst_offset_h = 9
 [charts.msl]
 title = "Mean Sea Level Pressure (hPa)"
 title_with_tp = "MSLP (hPa) and {window}h Precipitation (mm)"
+title_snow_suffix = ", Snow area (hatched)"
 interval = 2
 label_every = 4                 # label only isobars that are multiples of this (hPa)
 bold_every = 20
 hl_window_deg = 5.0             # +/- window for H/L detection
 hl_edge_exclude_deg = 1.0
 
+[charts.snow_area]
+# msl chart: magenta hatching = expected snowfall area ("강설 예상 구역" on KMA charts, owner 2026-11-22): where at least
+# min_fraction of the window's precipitation (>= min_mm) is model snowfall (ECMWF sf / tp). KIM: none (no sf).
+min_mm = 0.1                    # first precipitation shading level
+min_fraction = 0.5              # snowfall share of the precipitation
+color = "#c000c0"
+hatch = "|||"
+hatch_width = 0.6
+
+[charts.snow]
+# Snowfall (cm) = window precipitation x KMA water-equivalent ratio / 10, where the KMA snow-occurrence conditions
+# (2 m temperature and RH) hold; ratio = a log(RAIN3h) + b by T850 and Tsfc, cut at 0. Source: KMA Numerical Modeling
+# Center, 2024 numerical weather chart manual (owner, 2026-11-22). Not used: model snowfall sf (no KIM), IFS sd
+# (packed in 0.03125 m w.e. steps, measured 2026112200 +24/+27).
+title = "{window}h Snowfall (cm, KMA ratio), 925hPa GPH/T, 1000-850 Thick., Tw {tw}C"
+ratio_log = "ln"                # natural log first (owner); "log10" if the charts disagree with KMA's
+levels = [0.1, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30]
+colors = ["#dbe6ff", "#b3c8ff", "#8aa8f5", "#9b8ce8", "#fff3a0", "#ffe14d", "#ffc21a", "#ff9a00",
+          "#f26b00", "#d94300", "#a82b00"]
+gh_interval = 30                # 925 hPa height, gpm
+gh_color = "#1f3fbf"
+t_interval = 3                  # 925 hPa temperature, deg C
+t_color = "#d02020"
+thickness_range = [1270, 1310]   # only the lines near the rain/snow guide value
+thickness_interval = 10
+thickness_bold = 1290           # common rain/snow guide value for the 1000-850 hPa thickness (m)
+thickness_color = "#1a9e3c"
+tw_line = 1.2                   # surface wet-bulb temperature line (deg C), as on the KMA snow charts
+tw_color = "#f08000"
+smooth_sigma = 1.0              # grid points, over mountains only (thickness and Tw lines)
+
 [charts.tp]
 title_short = "3h Accumulated Precipitation (mm)"
 title_long = "6h Accumulated Precipitation (mm)"
-levels = [0.5, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 70]
-colors = ["#b4e0fb", "#80c4f2", "#4ea3e6", "#2a7fd4", "#1a9e3c",
+levels = [0.1, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 70]
+colors = ["#e3f3fd", "#b4e0fb", "#80c4f2", "#4ea3e6", "#2a7fd4", "#1a9e3c",
           "#52c234", "#9ade3c", "#f2e33a", "#f5b52d", "#f27a1f", "#e33a16",
           "#c4161c", "#9b1d6b", "#6c1a8c"]
 
@@ -231,11 +269,12 @@ process_order = ["ifs", "aifs", "kimg", "kimr", "ifs01"]   # within a cycle: lig
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
-render_version = 10             # bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 11             # 11: snow area on msl, snow chart; bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
   { id = "t2m", title = "2 m temperature", domain = "default" },
+  { id = "snow", title = "Snowfall", domain = "default", min_step = 3 },
   { id = "gz925", title = "925hPa", level = 925, domain = "default" },
   { id = "mfc925", title = "925hPa MFC", level = 925, domain = "default" },
   { id = "gz850", title = "850hPa", level = 850, domain = "default" },
@@ -262,13 +301,17 @@ override = {}
 [[models]]
 id = "ifs01"
 label = "IFS 0.1°"
-charts = ["msl", "t2m", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500", "wpsh500"]
+charts = ["msl", "t2m", "snow", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500", "wpsh500"]
 [models.override.data]
 resolution = "0p1"
 grid_deg = 0.1
 [[models.override.data.groups]]
+levtype = "pl"
+levelist = [1000]
+param = ["gh"]
+[[models.override.data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp", "2t", "10u", "10v"]
+param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d", "sf"]   # 2d: 2 m RH (snow chart), sf: snow area (msl)
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [925, 850]
@@ -303,10 +346,14 @@ tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
 max_step_short = 240            # 06/18Z too: AIFS publishes 0-360 h for every run (measured 2026-11-21 06Z: 61 steps)
 [models.override.site]
-render_version = 11             # 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
+render_version = 12             # 12: snow area on msl, snow chart; 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
+[[models.override.data.groups]]
+levtype = "pl"
+levelist = [1000]
+param = ["gh"]
 [[models.override.data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp", "2t", "10u", "10v"]
+param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d", "sf"]   # 2d: 2 m RH (snow chart), sf: snow area (msl)
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [925, 850]

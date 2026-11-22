@@ -47,15 +47,20 @@ class Models(unittest.TestCase):
 
     def test_chart_lists(self):
         ifs = config.for_model(CFG, "ifs")
-        self.assertEqual(len(ifs["site"]["charts"]), 14)
-        self.assertEqual(65 * 14, 910)
+        self.assertEqual(len(ifs["site"]["charts"]), 15)
+        self.assertEqual(65 * 15 - 1, 974)            # images per IFS 00Z run: no snow chart at +0h
         ids = [c["id"] for c in ifs["site"]["charts"]]
         self.assertEqual(ids[0], "msl")
         self.assertEqual(ids[-1], "gz200")
         hi = [c["id"] for c in config.for_model(CFG, "ifs01")["site"]["charts"]]
         for gone in ("gz300", "gz200", "gz500_wide", "wpsh500_wide"):
             self.assertNotIn(gone, hi)
-        self.assertEqual(len(config.for_model(CFG, "aifs")["site"]["charts"]), 14)
+        self.assertEqual(len(config.for_model(CFG, "aifs")["site"]["charts"]), 15)
+        for mid in ("ifs", "ifs01", "aifs"):           # 2d and gh 1000 are in the ECMWF open data (measured 2026-11-22)
+            self.assertIn("snow", [c["id"] for c in config.for_model(CFG, mid)["site"]["charts"]])
+        kimr = config.for_model(CFG, "kimr")
+        self.assertNotIn("snow", [c["id"] for c in kimr["site"]["charts"]])
+        self.assertNotIn("2d", [p for g in kimr["data"]["groups"] for p in g["param"]])   # no extra KMA quota
 
     def test_overrides(self):
         hi = config.for_model(CFG, "ifs01")
@@ -188,3 +193,48 @@ class Manifest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Snow(unittest.TestCase):
+    def test_wet_bulb(self):
+        import numpy as np
+        from render import derive
+        tw = derive.wet_bulb_c(np.array([20.0, 1.2, 5.0]), np.array([9.26, 1.2, -10.0]), np.array([1013.0, 1000, 1000]))
+        self.assertAlmostEqual(tw[0], 13.8, delta=0.2)      # psychrometric table: 20 C, RH 50 % -> about 13.8 C
+        self.assertAlmostEqual(tw[1], 1.2, places=4)        # saturated: Tw = T
+        self.assertTrue(-10 < tw[2] < 5)
+
+    def test_kma_snow_ratio(self):
+        import numpy as np
+        from render import derive
+        one = np.array([1.0])
+        # RAIN 1 mm: log term 0, the ratio is the constant of each of the four cases
+        for t850, tsfc, b in ((-5, 1, 9.4944), (-5, -1, 14.914), (-10, 1, 11.203), (-10, -1, 20.784)):
+            self.assertAlmostEqual(float(derive.kma_snow_ratio(one, np.array([tsfc]), np.array([t850]))[0]), b, places=4)
+        self.assertEqual(float(derive.kma_snow_ratio(np.array([100.0]), np.array([1.0]), np.array([-5.0]))[0]), 0.0)
+        r10 = derive.kma_snow_ratio(np.array([10.0]), np.array([-1.0]), np.array([-5.0]))[0]
+        self.assertAlmostEqual(float(r10), -3.688 * np.log(10) + 14.914, places=4)        # natural log
+
+    def test_kma_snow_condition_and_cm(self):
+        import numpy as np
+        from render import derive
+        rain = np.array([1.0, 1.0, 1.0, 0.0])
+        t = np.array([-1.0, 3.0, 3.0, -1.0])
+        rh = np.array([90.0, 90.0, 60.0, 90.0])     # cold+moist: (1); warm+moist: none; warm+dry 60 < 66.4: (2)
+        cond = derive.kma_snow_condition(rain, t, rh)
+        self.assertEqual(cond.tolist(), [True, False, True, False])
+        mask, cm = derive.kma_snow_cm(rain, 3, t, rh, np.full(4, -5.0))
+        self.assertEqual(mask.tolist(), [True, False, True, False])                   # no rain: no snow
+        self.assertAlmostEqual(float(cm[0]), 1.4914, places=4)                         # 1 mm x 14.914 / 10
+        self.assertEqual(float(cm[1]), 0.0)
+        self.assertAlmostEqual(float(derive.rh_from_dewpoint(np.array([5.0]), np.array([5.0]))[0]), 100.0)
+
+
+class SnowArea(unittest.TestCase):
+    def test_snow_area_from_model_snowfall(self):
+        import numpy as np
+        from render import derive
+        m = derive.snow_area(np.array([0.05, 2.0, 2.0, 0.0]), np.array([0.05, 0.8, 1.2, 0.0]), 0.1, 0.5)
+        self.assertEqual(m.tolist(), [False, False, True, False])
+        for mid in ("ifs", "ifs01", "aifs"):
+            self.assertIn("sf", config.for_model(CFG, mid)["data"]["accum_params"])
