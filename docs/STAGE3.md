@@ -184,12 +184,18 @@ Changes:
 
 ## Snow area and snow chart (render_version 11, AIFS 12)
 
-Owner request 2026-11-22, after KMA's snow charts. ECMWF models only: the open data of IFS 0.25, IFS 0.1 and
-AIFS Single carry `sf` (snowfall, m water equivalent, accumulated), `2d` and `gh` at 1000 hPa (checked in the
-2026112200 +24 h index files). The KIM fields stay unchanged (no extra KMA API quota; KIM snow variable names
-are unverified).
-- `msl`: magenta hatching where the window's precipitation is at least 0.5 mm and at least half of it is snow
-  (`charts.snow_area`). The window start is fetched with `data.accum_params = ["tp", "sf"]`.
-- `snow` (new, from the first window; no image at +0 h): snowfall of the window in cm (fixed 10:1 snow ratio; IFS sd is packed in 0.03125 m w.e. steps, too coarse for 3 h changes), 925 hPa height
-  and temperature, 1000-850 hPa thickness 1270-1310 m (1290 m bold), the surface wet-bulb 1.2 C line
-  (psychrometric, from 2t, 2d and sp: `derive.wet_bulb_c`), 925 hPa wind.
+Owner request 2026-11-22, after KMA's snow charts. ECMWF models only (IFS 0.25, IFS 0.1, AIFS Single): their open
+data carry `2d` and `gh` at 1000 hPa (checked in the 2026112200 +24 h index files). KIM is unchanged (2 m
+humidity would cost extra KMA API quota).
+- Method: the KMA water-equivalent ratio (KMA Numerical Modeling Center, 2024 numerical weather chart manual;
+  owner 2026-11-22). Snow where any of its three snow-occurrence conditions on 2 m temperature and 2 m RH (from
+  `2d`) holds; ratio = a log(RAIN) + b, with a, b chosen by T850 > -8 C and Tsfc > 0 C, RAIN = 3 h precipitation,
+  negative ratios cut to 0; snowfall cm = RAIN x ratio / 10. `log` is the natural log for now (owner: compare
+  with the KMA charts, `charts.snow.ratio_log = "log10"` otherwise). 6 h windows (+144 h on, AIFS) use the 3 h
+  mean rate for the ratio (our assumption).
+- `msl`: magenta hatching where the snow conditions hold and the precipitation is at least 0.1 mm.
+- `snow` (from the first window; no image at +0 h): snowfall (cm), 925 hPa height and temperature, 1000-850 hPa
+  thickness 1270-1310 m (1290 m bold), surface wet-bulb 1.2 C line (psychrometric, from 2t, 2d, sp), 925 hPa wind.
+- Tried and dropped: model snowfall `sf` (not in KIM; the KMA ratio is the method used on KMA charts) and the IFS
+  snow depth `sd` (packed in 0.03125 m w.e. steps: 3 h changes are 0 or about 20 cm).
+- Sample 2026112200 +27 h IFS over 37-43N 124-131E (measured): snowfall max 4.4 cm with ln, 5.9 cm with log10.

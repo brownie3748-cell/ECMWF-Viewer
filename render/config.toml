@@ -15,7 +15,6 @@ publish_every_h_long = 6        # spacing after tp_switch_h
 tp_short_accum_h = 3           # accumulation window for step <= tp_switch_h
 tp_long_accum_h = 6            # accumulation window for step > tp_switch_h
 tp_switch_h = 144
-accum_params = ["tp", "sf"]     # fetched for the start of an accumulation window (sf: snow area / snow chart)
 # Region read from the global grid (with margin around all domains), deg.
 read_region = { lat_min = 0.0, lat_max = 60.0, lon_min = 90.0, lon_max = 190.0 }
 
@@ -27,7 +26,7 @@ param = ["gh"]                   # 1000-850 hPa thickness (snow chart)
 
 [[data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp", "2t", "10u", "10v", "sf", "2d"]   # sf, 2d: snow charts
+param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d"]   # 2d: snow charts (2 m RH)
 
 [[data.groups]]
 levtype = "pl"
@@ -131,17 +130,19 @@ hl_window_deg = 5.0             # +/- window for H/L detection
 hl_edge_exclude_deg = 1.0
 
 [charts.snow_area]
-# msl chart: magenta hatching where the window's precipitation falls mainly as snow (ECMWF sf / tp)
+# msl chart: magenta hatching where the KMA snow-occurrence conditions hold (charts.snow), ECMWF models
 min_mm = 0.1                    # first precipitation shading level
-min_fraction = 0.5              # snowfall share of the precipitation
 color = "#c000c0"
 hatch = "|||"
 hatch_width = 0.6
 
 [charts.snow]
-title = "{window}h Snowfall (cm, 10:1), 925hPa GPH/T, 1000-850 Thick., Tw {tw}C"
-snow_ratio = 10                 # cm = snowfall (mm w.e.) x snow_ratio / 10. The IFS snow depth sd is not usable for
-                                # 3 h changes: open data packs it in 0.03125 m w.e. steps (measured 2026112200 +24/+27)
+# Snowfall (cm) = window precipitation x KMA water-equivalent ratio / 10, where the KMA snow-occurrence conditions
+# (2 m temperature and RH) hold; ratio = a log(RAIN3h) + b by T850 and Tsfc, cut at 0. Source: KMA Numerical Modeling
+# Center, 2024 numerical weather chart manual (owner, 2026-11-22). Not used: model snowfall sf (no KIM), IFS sd
+# (packed in 0.03125 m w.e. steps, measured 2026112200 +24/+27).
+title = "{window}h Snowfall (cm, KMA ratio), 925hPa GPH/T, 1000-850 Thick., Tw {tw}C"
+ratio_log = "ln"                # natural log first (owner); "log10" if the charts disagree with KMA's
 levels = [0.1, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30]
 colors = ["#dbe6ff", "#b3c8ff", "#8aa8f5", "#9b8ce8", "#fff3a0", "#ffe14d", "#ffc21a", "#ff9a00",
           "#f26b00", "#d94300", "#a82b00"]
@@ -307,7 +308,7 @@ levelist = [1000]
 param = ["gh"]
 [[models.override.data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp", "2t", "10u", "10v", "sf", "2d"]   # sf, 2d: snow charts
+param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d"]   # 2d: snow charts (2 m RH)
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [925, 850]
@@ -349,7 +350,7 @@ levelist = [1000]
 param = ["gh"]
 [[models.override.data.groups]]
 levtype = "sfc"
-param = ["msl", "sp", "tp", "2t", "10u", "10v", "sf", "2d"]   # sf, 2d: snow charts
+param = ["msl", "sp", "tp", "2t", "10u", "10v", "2d"]   # 2d: snow charts (2 m RH)
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [925, 850]

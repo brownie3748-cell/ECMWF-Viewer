@@ -177,8 +177,35 @@ def wet_bulb_c(t_c: np.ndarray, td_c: np.ndarray, p_hpa: np.ndarray, iterations:
     return 0.5 * (lo + hi)
 
 
-def snow_area(tp_mm: np.ndarray, sf_mm: np.ndarray, min_mm: float, min_fraction: float) -> np.ndarray:
-    """1 where the window's precipitation is at least min_mm and at least min_fraction of it fell as snow."""
-    frac = np.divide(sf_mm, tp_mm, out=np.zeros_like(tp_mm), where=tp_mm > 0)
-    return ((tp_mm >= min_mm) & (frac >= min_fraction)).astype(float)
 
+def rh_from_dewpoint(t_c, td_c) -> np.ndarray:
+    """Relative humidity (%) over water from temperature and dew point, at most 100."""
+    return np.minimum(100.0 * _es_hpa(np.minimum(td_c, t_c)) / _es_hpa(t_c), 100.0)
+
+
+def kma_snow_condition(rain_mm, t_sfc_c, rh_pct) -> np.ndarray:
+    """Snow-occurrence conditions of the KMA water-equivalent ratio (any of three; KMA Numerical Modeling
+    Center, 2024 numerical weather chart manual). t_sfc: 2 m temperature (C), rh: 2 m relative humidity (%)."""
+    wet = (rain_mm > 0) & (rh_pct <= 100)
+    c1 = wet & (rh_pct >= 75) & (t_sfc_c <= 0.9) & (rh_pct < (-100.0 / 13.0) * t_sfc_c + 102.5)
+    c2 = wet & (t_sfc_c > 0.9) & (rh_pct < (-100.0 / 13.0) * t_sfc_c + 89.5)
+    c3 = (t_sfc_c <= 0.9) & (rh_pct < 75)
+    return c1 | c2 | c3
+
+
+def kma_snow_ratio(rain3h_mm, t_sfc_c, t850_c, log=np.log) -> np.ndarray:
+    """KMA water-equivalent ratio a * log(RAIN) + b by T850 (> -8 C or not) and Tsfc (> 0 C or not), for a
+    3 h precipitation RAIN (mm); negative values are cut to 0 (owner decision 2026-11-22)."""
+    r = np.maximum(rain3h_mm, 1e-6)
+    warm850, warm_sfc = t850_c > -8.0, t_sfc_c > 0.0
+    a = np.where(warm850, np.where(warm_sfc, -2.912, -3.688), np.where(warm_sfc, -3.235, -3.738))
+    b = np.where(warm850, np.where(warm_sfc, 9.4944, 14.914), np.where(warm_sfc, 11.203, 20.784))
+    return np.maximum(a * log(r) + b, 0.0)
+
+
+def kma_snow_cm(rain_mm, window_h, t_sfc_c, rh_pct, t850_c, log=np.log) -> tuple[np.ndarray, np.ndarray]:
+    """(snow mask, snowfall cm) for a window's precipitation: snow (mm) = RAIN x ratio, cm = mm / 10.
+    The ratio is fitted for 3 h RAIN; a 6 h window uses its 3 h mean rate for the ratio (our assumption)."""
+    mask = kma_snow_condition(rain_mm, t_sfc_c, rh_pct) & (rain_mm > 0)
+    ratio = kma_snow_ratio(rain_mm * 3.0 / window_h, t_sfc_c, t850_c, log)
+    return mask, np.where(mask, rain_mm * ratio / 10.0, 0.0)

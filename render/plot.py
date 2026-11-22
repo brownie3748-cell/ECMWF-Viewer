@@ -297,8 +297,8 @@ def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
     if F_prev is not None:
         P = _sub(F_prev, fr)
         acc = _tp_fill(cfg, fr, S, P)
-        if ("sf", 0) in S.data and ("sf", 0) in P.data:      # ECMWF: hatch where the precipitation is snow
-            snow = _snow_hatch(cfg, fr, S, acc, derive.tp_accum_mm(S[("sf", 0)], P[("sf", 0)]))
+        if ("2d", 0) in S.data:                              # ECMWF: hatch where the KMA snow conditions hold
+            snow = _snow_hatch(cfg, fr, S, snow_cm(cfg, S, acc, window_h)[0], acc)
     p = S[("msl", 0)] / 100.0
     if c.get("smooth_sigma", 0) > 0:           # smooth the terrain noise of the isobars over mountains only
         p = derive.terrain_smooth(p, S[("msl", 0)], S[("sp", 0)], c["smooth_sigma"])
@@ -326,10 +326,19 @@ def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
     return fr
 
 
-def _snow_hatch(cfg, fr, S, tp_mm, sf_mm) -> bool:
-    """Magenta hatching over the precipitation that falls mainly as snow (charts.snow_area)."""
+def snow_cm(cfg, S, rain_mm, window_h):
+    """(snow mask, snowfall cm) by the KMA water-equivalent ratio (charts.snow)."""
+    c = cfg["charts"]["snow"]
+    t = S[("2t", 0)] - 273.15
+    rh = derive.rh_from_dewpoint(t, S[("2d", 0)] - 273.15)
+    log = np.log10 if c["ratio_log"] == "log10" else np.log
+    return derive.kma_snow_cm(rain_mm, window_h, t, rh, S[("t", 850)] - 273.15, log)
+
+
+def _snow_hatch(cfg, fr, S, mask, rain_mm) -> bool:
+    """Magenta hatching over the precipitation that falls as snow (charts.snow_area)."""
     c = cfg["charts"]["snow_area"]
-    m = derive.snow_area(tp_mm, sf_mm, c["min_mm"], c["min_fraction"])
+    m = (mask & (rain_mm >= c["min_mm"])).astype(float)
     if not m.any():
         return True
     with matplotlib.rc_context({"hatch.color": c["color"], "hatch.linewidth": c["hatch_width"]}):
@@ -339,13 +348,13 @@ def _snow_hatch(cfg, fr, S, tp_mm, sf_mm) -> bool:
 
 
 def chart_snow(cfg, F, P, run, step, window_h):
-    """Snowfall of the window (mm water equivalent = kg m-2) with the snow-type guidance of KMA-style charts:
+    """Snowfall of the window (cm, KMA water-equivalent ratio) with the snow-type guidance of KMA-style charts:
     925 hPa height and temperature, 1000-850 hPa thickness, surface wet-bulb temperature line, 925 hPa wind."""
     c = cfg["charts"]["snow"]
     fr = Frame(cfg, "default", strong_coast=True)
     S = _sub(F, fr)
     Q = _sub(P, fr)
-    sf = derive.tp_accum_mm(S[("sf", 0)], Q[("sf", 0)]) * c["snow_ratio"] / 10.0   # fixed snow ratio -> cm
+    sf = snow_cm(cfg, S, derive.tp_accum_mm(S[("tp", 0)], Q[("tp", 0)]), window_h)[1]
     cmap = mcolors.ListedColormap(c["colors"][:-1])
     cmap.set_over(c["colors"][-1])
     norm = mcolors.BoundaryNorm(c["levels"], cmap.N)
