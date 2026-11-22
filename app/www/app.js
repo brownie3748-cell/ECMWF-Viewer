@@ -140,8 +140,15 @@ async function init(keepView, toLatest) {
   }
 }
 
+// True if run r has an image for exactly this valid time on the current chart.
+function hasValid(r, valid) {
+  return stepsFor(r, state.chart).includes((valid - parseRun(r.run)) / 3600e3);
+}
+
 // Switch model, keeping the run (if that model has it) and the valid time as close as possible.
-function selectModel(id, keepRun, keepValid) {
+// findValid (model buttons): if that run lacks the exact valid time (missing run, or a short 06/18Z run),
+// use the newest run that has it, e.g. AIFS 00Z +168h -> IFS 12Z +180h rather than IFS 18Z +144h.
+function selectModel(id, keepRun, keepValid, findValid) {
   const has = (x) => x && x.runs.length;
   let mod = state.m.models.find((x) => x.id === id);
   if (!has(mod)) mod = state.m.models.find((x) => x.id === state.m.default_model && has(x)) || state.m.models.find(has);
@@ -155,6 +162,11 @@ function selectModel(id, keepRun, keepValid) {
     if (i >= 0) state.runIdx = i;
   }
   if (!chartIn(mod, state.chart)) state.chart = chartIn(mod, "gz500") ? "gz500" : mod.charts.find((c) => !c.overlay_of).id;
+  if (findValid && keepValid && !hasValid(mod.runs[state.runIdx], keepValid)) {
+    for (let i = mod.runs.length - 1; i >= 0; i--) {
+      if (hasValid(mod.runs[i], keepValid)) { state.runIdx = i; break; }
+    }
+  }
   $("run").value = String(state.runIdx);
   setStepNear(keepValid);
   render();
@@ -183,7 +195,7 @@ function buildModels() {
     b.onclick = () => {
       if (mod.id === state.model || b.disabled) return;
       stop();
-      selectModel(mod.id, run() ? run().run : null, currentValid());
+      selectModel(mod.id, run() ? run().run : null, currentValid(), true);
     };
     nav.appendChild(b);
   });
