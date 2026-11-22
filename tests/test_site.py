@@ -251,3 +251,33 @@ class SnowCutoff(unittest.TestCase):
         m6, _ = derive.kma_snow_cm(rain, 6, t, rh, t850, min_rain3h_mm=0.25)   # 6 h: compared as a 3 h mean
         self.assertEqual(m6.tolist(), [False, False, False])
         self.assertEqual(config.for_model(CFG, "ifs")["charts"]["snow"]["rain_cutoff_mm3h"], 0.25)
+
+
+class WpshSearch(unittest.TestCase):
+    def _grid(self, centres):
+        import numpy as np
+        lat, lon = np.arange(-1.0, 46.01, 0.25), np.arange(109.0, 176.01, 0.25)
+        LON, LAT = np.meshgrid(lon, lat)
+        gh = 5800.0 + 0 * LAT
+        for la, lo, amp, r in centres:
+            gh = gh + amp * np.exp(-((LAT - la) ** 2 + (LON - lo) ** 2) / (2 * r * r))
+        return gh, lat, lon
+
+    def test_box_reaches_170e(self):
+        from render import derive
+        gh, lat, lon = self._grid([(25, 165, 150, 6)])       # centre east of the old 160E limit
+        r = derive.wpsh_centre(gh, lat, lon, CFG)
+        self.assertEqual(r["centre"], (25.0, 165.0))
+        self.assertFalse(r["secondary"])
+
+    def test_secondary_centre_when_main_is_outside(self):
+        from render import derive
+        # heights keep rising eastwards out of the box (main high beyond 170E): a small high at 20N 135E is the
+        # highest point within +/- 2.5 deg but not within +/- 5 deg
+        import numpy as np
+        gh, lat, lon = self._grid([(20, 135, 10, 1.0)])
+        gh = gh + (np.meshgrid(lon, lat)[0] - 109) * 3.0
+        r = derive.wpsh_centre(gh, lat, lon, CFG)
+        self.assertTrue(r["secondary"])
+        self.assertAlmostEqual(r["centre"][0], 20.0)
+        self.assertAlmostEqual(r["centre"][1], 135.0, delta=0.5)      # the ramp shifts the peak slightly east

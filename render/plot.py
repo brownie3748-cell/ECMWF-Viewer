@@ -499,6 +499,15 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
                                            transform=PC, zorder=3.5))
         fr.ax.text(b["lon_min"] + 0.6, b["lat_max"] - 0.6, wb["label"], transform=PC, fontsize=6.5,
                    color=wb["color"], alpha=wb["alpha"], ha="left", va="top", zorder=3.5)
+    hc = c.get("high_centres")
+    if hc and domain in hc["domains"] and level in hc["levels"]:   # H and its height at each high centre
+        halo = [patheffects.withStroke(linewidth=3, foreground="white")]
+        for la, lo, val in derive.local_extrema(gh, S.lat, S.lon, hc["window_deg"], cfg["data"]["grid_deg"],
+                                                kind="max", edge_exclude_deg=hc["edge_exclude_deg"], box=fr.dom):
+            fr.ax.text(lo, la, "H", color="k", fontsize=17, fontweight="bold", family="serif", ha="center",
+                       va="center", transform=PC, zorder=7, path_effects=halo)
+            fr.ax.text(lo, la - hc["label_offset_deg"], f"{val:.0f}", color="k", fontsize=10, ha="center",
+                       va="top", transform=PC, zorder=7, path_effects=halo)
     ttl = (f"{level}hPa Height (gpm), Temperature (C), Wind Speed (kt)" if wind_fill
            else f"{level}hPa Geopotential Height (gpm), Temperature (C), Wind (kt)")
     fr.header(ttl, run, step)
@@ -612,7 +621,7 @@ def overlay_wpsh(cfg, F, run, step, domain="default"):
         # white halo keeps the red line readable over the warm colour fill of gz500 (style A)
         cs.set(path_effects=[patheffects.Stroke(linewidth=w["line_width"] + 2.5, foreground="white"),
                              patheffects.Normal()])
-        txt = f"WPSH  H={res['H']:.0f}  line={res['line_gpm']:.0f} gpm"
+        txt = f"WPSH  H={res['H']:.0f}  line={res['line_gpm']:.0f} gpm" + ("  (2nd centre)" if res.get("secondary") else "")
     else:
         txt = "WPSH  no centre"
     res["drawn"] = res["line_gpm"] is not None

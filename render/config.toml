@@ -184,6 +184,7 @@ gz500_variants = []             # Stage 0 A/B review done
 t_cmap = "RdYlBu_r"
 isotherm_a = { color = "#5a1010", width = 0.6 }   # style A: thin dashed labelled isotherms (t_interval)
 mask_underground = [925, 850]
+high_centres = { domains = ["wide"], levels = [500], window_deg = 5.0, edge_exclude_deg = 2.0, label_offset_deg = 1.2 }   # H + gpm at highs (owner 2026-11-23, KMA style)
 
 [charts.gz.wind_fill]
 # Wind-speed shading for upper levels; isotherms switch to dark grey dashed lines there.
@@ -255,9 +256,10 @@ vector_scale = 6.0              # m/s of flux per map width (larger = shorter ar
 
 [wpsh]
 level_offset_gpm = 50           # red line at H - offset
-search_box = { lat_min = 5.0, lat_max = 40.0, lon_min = 115.0, lon_max = 160.0 }   # owner 2026-11-16 (was 10-40N, 120-180E)
+search_box = { lat_min = 5.0, lat_max = 40.0, lon_min = 115.0, lon_max = 170.0 }   # owner 2026-11-23: to 170E (2026-11-16: 115-160E; before 120-180E)
 box_on_wide_map = { color = "#2a2a2a", width = 0.8, alpha = 0.8, label = "WPSH search area" }   # thin dotted frame on the 500 hPa wide chart
 local_window_deg = 5.0          # candidate = max within +/- window
+secondary_window_deg = 2.5      # no centre with the 5 deg window: look for a secondary (weaker, smaller) centre (owner 2026-11-23)
 edge_exclude_deg = 2.0          # drop candidates this close to the box edge
 line_color = "#e00000"
 line_width = 2.0
@@ -272,7 +274,7 @@ process_order = ["ifs", "aifs", "kimg", "kimr", "ifs01"]   # within a cycle: lig
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
-render_version = 12             # 12: KMA rain cut-off for snowfall; 11: snow area on msl, snow chart; bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 14             # 14: H + gpm at 500 hPa highs on the wide map; 13: WPSH search to 170E + secondary centre; 12: KMA rain cut-off for snowfall; 11: snow area on msl, snow chart; bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
@@ -349,7 +351,7 @@ tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
 max_step_short = 240            # 06/18Z too: AIFS publishes 0-360 h for every run (measured 2026-11-21 06Z: 61 steps)
 [models.override.site]
-render_version = 13             # 13: KMA rain cut-off for snowfall; 12: snow area on msl, snow chart; 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
+render_version = 15             # 15: H + gpm at 500 hPa highs on the wide map; 14: WPSH search to 170E + secondary centre; 13: KMA rain cut-off for snowfall; 12: snow area on msl, snow chart; 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [1000]
