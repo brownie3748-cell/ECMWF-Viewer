@@ -47,15 +47,20 @@ class Models(unittest.TestCase):
 
     def test_chart_lists(self):
         ifs = config.for_model(CFG, "ifs")
-        self.assertEqual(len(ifs["site"]["charts"]), 14)
-        self.assertEqual(65 * 14, 910)
+        self.assertEqual(len(ifs["site"]["charts"]), 15)
+        self.assertEqual(65 * 15 - 1, 974)            # images per IFS 00Z run: no snow chart at +0h
         ids = [c["id"] for c in ifs["site"]["charts"]]
         self.assertEqual(ids[0], "msl")
         self.assertEqual(ids[-1], "gz200")
         hi = [c["id"] for c in config.for_model(CFG, "ifs01")["site"]["charts"]]
         for gone in ("gz300", "gz200", "gz500_wide", "wpsh500_wide"):
             self.assertNotIn(gone, hi)
-        self.assertEqual(len(config.for_model(CFG, "aifs")["site"]["charts"]), 14)
+        self.assertEqual(len(config.for_model(CFG, "aifs")["site"]["charts"]), 15)
+        for mid in ("ifs", "ifs01", "aifs"):           # sf (snowfall) is in the ECMWF open data (measured 2026-11-22)
+            self.assertIn("snow", [c["id"] for c in config.for_model(CFG, mid)["site"]["charts"]])
+        kimr = config.for_model(CFG, "kimr")
+        self.assertNotIn("snow", [c["id"] for c in kimr["site"]["charts"]])
+        self.assertNotIn("sf", [p for g in kimr["data"]["groups"] for p in g["param"]])   # no extra KMA quota
 
     def test_overrides(self):
         hi = config.for_model(CFG, "ifs01")
@@ -188,3 +193,19 @@ class Manifest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Snow(unittest.TestCase):
+    def test_wet_bulb(self):
+        import numpy as np
+        from render import derive
+        tw = derive.wet_bulb_c(np.array([20.0, 1.2, 5.0]), np.array([9.26, 1.2, -10.0]), np.array([1013.0, 1000, 1000]))
+        self.assertAlmostEqual(tw[0], 13.8, delta=0.2)      # psychrometric table: 20 C, RH 50 % -> about 13.8 C
+        self.assertAlmostEqual(tw[1], 1.2, places=4)        # saturated: Tw = T
+        self.assertTrue(-10 < tw[2] < 5)
+
+    def test_snow_area(self):
+        import numpy as np
+        from render import derive
+        m = derive.snow_area(np.array([0.2, 2.0, 2.0, 0.0]), np.array([0.2, 0.8, 1.2, 0.0]), 0.5, 0.5)
+        self.assertEqual(m.tolist(), [0.0, 0.0, 1.0, 0.0])

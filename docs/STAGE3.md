@@ -181,3 +181,15 @@ Changes:
 - A 403 during probing only ends the probing; stored runs stay in the window and are not deleted.
 - Stored KIM runs are not re-rendered for a `render_version` bump (a re-render downloads the whole run again);
   new runs get the new version.
+
+## Snow area and snow chart (render_version 11, AIFS 12)
+
+Owner request 2026-11-22, after KMA's snow charts. ECMWF models only: the open data of IFS 0.25, IFS 0.1 and
+AIFS Single carry `sf` (snowfall, m water equivalent, accumulated), `2d` and `gh` at 1000 hPa (checked in the
+2026112200 +24 h index files). The KIM fields stay unchanged (no extra KMA API quota; KIM snow variable names
+are unverified).
+- `msl`: magenta hatching where the window's precipitation is at least 0.5 mm and at least half of it is snow
+  (`charts.snow_area`). The window start is fetched with `data.accum_params = ["tp", "sf"]`.
+- `snow` (new, from the first window; no image at +0 h): snowfall of the window (mm = kg m-2), 925 hPa height
+  and temperature, 1000-850 hPa thickness 1270-1310 m (1290 m bold), the surface wet-bulb 1.2 C line
+  (psychrometric, from 2t, 2d and sp: `derive.wet_bulb_c`), 925 hPa wind.

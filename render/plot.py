@@ -293,8 +293,12 @@ def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
     c = cfg["charts"]["msl"]
     fr = Frame(cfg, "default")
     S = _sub(F, fr)
+    snow = False
     if F_prev is not None:
-        _tp_fill(cfg, fr, S, _sub(F_prev, fr))
+        P = _sub(F_prev, fr)
+        acc = _tp_fill(cfg, fr, S, P)
+        if ("sf", 0) in S.data and ("sf", 0) in P.data:      # ECMWF: hatch where the precipitation is snow
+            snow = _snow_hatch(cfg, fr, S, acc, derive.tp_accum_mm(S[("sf", 0)], P[("sf", 0)]))
     p = S[("msl", 0)] / 100.0
     if c.get("smooth_sigma", 0) > 0:           # smooth the terrain noise of the isobars over mountains only
         p = derive.terrain_smooth(p, S[("msl", 0)], S[("sp", 0)], c["smooth_sigma"])
@@ -316,7 +320,65 @@ def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
             fr.ax.text(lo, la - 0.9, f"{val:.0f}", color=col, fontsize=9, fontweight="bold", ha="center",
                        va="center", transform=PC, zorder=6, path_effects=halo)
     title = c["title_with_tp"].format(window=window_h) if F_prev is not None else c["title"]
+    if snow:
+        title += c["title_snow_suffix"]
     fr.header(title, run, step)
+    return fr
+
+
+def _snow_hatch(cfg, fr, S, tp_mm, sf_mm) -> bool:
+    """Magenta hatching over the precipitation that falls mainly as snow (charts.snow_area)."""
+    c = cfg["charts"]["snow_area"]
+    m = derive.snow_area(tp_mm, sf_mm, c["min_mm"], c["min_fraction"])
+    if not m.any():
+        return True
+    with matplotlib.rc_context({"hatch.color": c["color"], "hatch.linewidth": c["hatch_width"]}):
+        _contourf(fr, S, m, levels=[0.5, 1.5], colors="none", hatches=[c["hatch"]], transform=PC, zorder=2)
+    fr.ax.contour(S.lon, S.lat, m, levels=[0.5], colors=c["color"], linewidths=0.8, transform=PC, zorder=2)
+    return True
+
+
+def chart_snow(cfg, F, P, run, step, window_h):
+    """Snowfall of the window (mm water equivalent = kg m-2) with the snow-type guidance of KMA-style charts:
+    925 hPa height and temperature, 1000-850 hPa thickness, surface wet-bulb temperature line, 925 hPa wind."""
+    c = cfg["charts"]["snow"]
+    fr = Frame(cfg, "default", strong_coast=True)
+    S = _sub(F, fr)
+    Q = _sub(P, fr)
+    sf = derive.tp_accum_mm(S[("sf", 0)], Q[("sf", 0)])
+    cmap = mcolors.ListedColormap(c["colors"][:-1])
+    cmap.set_over(c["colors"][-1])
+    norm = mcolors.BoundaryNorm(c["levels"], cmap.N)
+    cf = _contourf(fr, S, sf, levels=c["levels"], cmap=cmap, norm=norm, extend="max", transform=PC, zorder=1)
+    fr.colorbar(cf, label="mm (kg/m2)", ticks=c["levels"])
+    under = _underground(S, 925)
+    gh = np.where(under, np.nan, S[("gh", 925)])
+    t925 = np.where(under, np.nan, S[("t", 925)] - 273.15)
+    cs = fr.ax.contour(S.lon, S.lat, gh, levels=_levels(gh, c["gh_interval"]), colors=c["gh_color"],
+                       linewidths=1.0, transform=PC, zorder=3)
+    _clabel(fr, cs, "a", fmt="%d", fontsize=7, colors=c["gh_color"])
+    cs = fr.ax.contour(S.lon, S.lat, t925, levels=_levels(t925, c["t_interval"]), colors=c["t_color"],
+                       linewidths=0.6, transform=PC, zorder=3)
+    _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=c["t_color"])
+    thick = S[("gh", 850)] - S[("gh", 1000)]
+    thick = derive.terrain_smooth(thick, S[("msl", 0)], S[("sp", 0)], c.get("smooth_sigma", 0))
+    lo, hi = c["thickness_range"]
+    lv = np.arange(lo, hi + 1, c["thickness_interval"])
+    cs = fr.ax.contour(S.lon, S.lat, thick, levels=lv, colors=c["thickness_color"],
+                       linewidths=[1.6 if v == c["thickness_bold"] else 0.7 for v in lv], transform=PC, zorder=3.5)
+    _clabel(fr, cs, "c", fmt="%d", fontsize=7, colors=c["thickness_color"])
+    tw = derive.wet_bulb_c(S[("2t", 0)] - 273.15, S[("2d", 0)] - 273.15, S[("sp", 0)] / 100.0)
+    tw = derive.terrain_smooth(tw, S[("msl", 0)], S[("sp", 0)], c.get("smooth_sigma", 0))
+    if np.nanmin(tw) < c["tw_line"] < np.nanmax(tw):
+        fr.ax.contour(S.lon, S.lat, tw, levels=[c["tw_line"]], colors=c["tw_color"], linewidths=2.0,
+                      transform=PC, zorder=4)
+    n = fr.dom["barb_every"]
+    sl = (slice(None, None, n), slice(None, None, n))
+    u = np.where(under, np.nan, S[("u", 925)]) * MS_TO_KT
+    v = np.where(under, np.nan, S[("v", 925)]) * MS_TO_KT
+    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color="#333333", alpha=0.7,
+                transform=PC, zorder=5)
+    fr.header(c["title"].format(window=window_h, tw=c["tw_line"]), run, step)
     return fr
 
 

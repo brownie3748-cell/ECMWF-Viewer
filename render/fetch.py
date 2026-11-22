@@ -65,7 +65,8 @@ def fetch_step(
     parts = []
     t0 = time.monotonic()
     if groups is None:
-        groups = [{"levtype": "sfc", "param": ["tp"]}] if tp_only else cfg["data"]["groups"]
+        groups = [{"levtype": "sfc", "param": list(cfg["data"].get("accum_params", ["tp"]))}] if tp_only \
+            else cfg["data"]["groups"]
     for i, g in enumerate(groups):
         part = target.with_suffix(f".part{i}")
         req = dict(

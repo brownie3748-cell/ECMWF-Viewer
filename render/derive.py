@@ -154,3 +154,30 @@ def ensure_rh(F, level: int) -> None:
     """Add ("r", level) to a grib.Fields from q and t when the model does not provide it."""
     if ("r", level) not in F.data and ("q", level) in F.data and ("t", level) in F.data:
         F.data[("r", level)] = relative_humidity(F.data[("q", level)], F.data[("t", level)], level)
+
+
+def _es_hpa(t_c):
+    """Saturation vapour pressure over water (Bolton 1980), hPa."""
+    return 6.112 * np.exp(17.67 * t_c / (t_c + 243.5))
+
+
+def wet_bulb_c(t_c: np.ndarray, td_c: np.ndarray, p_hpa: np.ndarray, iterations: int = 30) -> np.ndarray:
+    """Psychrometric wet-bulb temperature (deg C) from temperature, dew point and pressure.
+
+    Solves es(Tw) - A p (T - Tw) = e(Td) with A = 6.53e-4 (1 + 0.000944 Tw) per K (WMO psychrometer
+    constant, ventilated) by bisection between Td and T; 30 halvings give < 1e-6 K."""
+    t_c, td_c = np.asarray(t_c, float), np.minimum(np.asarray(td_c, float), t_c)
+    e = _es_hpa(td_c)
+    lo, hi = td_c.copy(), t_c.copy()
+    for _ in range(iterations):
+        mid = 0.5 * (lo + hi)
+        f = _es_hpa(mid) - 6.53e-4 * (1 + 0.000944 * mid) * p_hpa * (t_c - mid) - e
+        hi = np.where(f > 0, mid, hi)
+        lo = np.where(f > 0, lo, mid)
+    return 0.5 * (lo + hi)
+
+
+def snow_area(tp_mm: np.ndarray, sf_mm: np.ndarray, min_mm: float, min_fraction: float) -> np.ndarray:
+    """1 where the window's precipitation is at least min_mm and at least min_fraction of it fell as snow."""
+    frac = np.divide(sf_mm, tp_mm, out=np.zeros_like(tp_mm), where=tp_mm > 0)
+    return ((tp_mm >= min_mm) & (frac >= min_fraction)).astype(float)

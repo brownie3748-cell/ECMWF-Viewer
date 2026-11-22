@@ -42,6 +42,8 @@ def chart_jobs(cfg, F, P, run, step):
         "mfc850": lambda: plot.chart_mfc(cfg, F, 850, run, step)[0],
         "gz500_wide": lambda: plot.chart_gz(cfg, F, 500, run, step, domain="wide"),
     }
+    if P is not None and ("sf", 0) in F.data and ("sf", 0) in P.data:
+        jobs["snow"] = lambda: plot.chart_snow(cfg, F, P, run, step, window)
     for lv in (925, 850, 700, 500, 300, 200):
         jobs[f"gz{lv}"] = (lambda lv=lv: plot.chart_gz(cfg, F, lv, run, step))
     return jobs
