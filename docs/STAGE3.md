@@ -218,7 +218,7 @@ dominates +/- 5 deg, the strongest centre within +/- 2.5 deg is used ("2nd centr
 ## KIM regional: snow area and snow chart (owner 2026-11-23)
 
 KIM regional now also fetches `RH2` (2 m RH, %) and `SNOW` (accumulated grid-scale snow and ice, mm): 27 fields per
-step, 783 calls and about 2.1 GB per run (estimated from 2.7 MB per field), about 4.2 GB for two runs a day. No
+step, 783 calls and about 2.1 GB per run (estimated from 2.7 MB per field), about 4.2 GB for two runs a day (guard lowered to 4.5 GB, owner 2026-11-23: another app shares the key). No
 1000 hPa height (no thickness lines on the KIM snow chart; owner's choice to save quota). The dew point for the
 wet-bulb line is derived from T2 and RH2. Names measured with measure run 45080956733 (2026112212 +24 h, small box:
 T2, RH2 and SNOW all GRIB). Two earlier checks returned "# ERROR: CGI 호출 오류" even for T2, also in the production

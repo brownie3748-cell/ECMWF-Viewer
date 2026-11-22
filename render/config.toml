@@ -501,7 +501,7 @@ credit = "Source: KMA API Hub, KIM regional model (KOGL Type 1, Korea Meteorolog
 # KMA API Hub daily limits are 20,000 calls and 5 GB per key (owner, API Hub my page); stop below them.
 [kma_quota]
 max_calls_per_day = 16000
-max_bytes_per_day = 4_900_000_000   # our count is an upper bound (timeouts charged in full): 2026-11-17 counted 2.89 GB, hub 1.9 GB
+max_bytes_per_day = 4_500_000_000   # owner 2026-11-23: 4.5 GB (another app uses the same key); 2 KIM runs ~4.2 GB
 
 # ---------------------------------------------------------------------------------------------
 # Cloudflare R2 storage (S3 API). Credentials come from the environment: R2_ACCOUNT_ID,
