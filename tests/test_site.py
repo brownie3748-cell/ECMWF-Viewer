@@ -238,3 +238,16 @@ class SnowArea(unittest.TestCase):
         self.assertEqual(m.tolist(), [False, False, True, False])
         for mid in ("ifs", "ifs01", "aifs"):
             self.assertIn("sf", config.for_model(CFG, mid)["data"]["accum_params"])
+
+
+class SnowCutoff(unittest.TestCase):
+    def test_rain_cutoff_removes_packing_noise(self):
+        import numpy as np
+        from render import derive
+        rain = np.array([0.12, 0.3, 0.4])                 # 0.12 mm: packing noise of the cumulative tp at +123 h
+        t, rh, t850 = np.full(3, -3.0), np.full(3, 90.0), np.full(3, -10.0)
+        m, cm = derive.kma_snow_cm(rain, 3, t, rh, t850, min_rain3h_mm=0.25)
+        self.assertEqual(m.tolist(), [False, True, True])
+        m6, _ = derive.kma_snow_cm(rain, 6, t, rh, t850, min_rain3h_mm=0.25)   # 6 h: compared as a 3 h mean
+        self.assertEqual(m6.tolist(), [False, False, False])
+        self.assertEqual(config.for_model(CFG, "ifs")["charts"]["snow"]["rain_cutoff_mm3h"], 0.25)

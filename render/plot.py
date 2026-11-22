@@ -326,13 +326,14 @@ def chart_msl(cfg, F, run, step, F_prev=None, window_h=None):
     return fr
 
 
-def snow_cm(cfg, S, rain_mm, window_h):
-    """(snow mask, snowfall cm) by the KMA water-equivalent ratio (charts.snow)."""
+def snow_cm(cfg, S, rain_mm, window_h, valid_month=1):
+    """(snow mask, snowfall cm) by the KMA water-equivalent ratio (charts.snow), above the KMA rain cut-off."""
     c = cfg["charts"]["snow"]
+    cut = c["rain_cutoff_mm3h_warm"] if valid_month in c["warm_months"] else c["rain_cutoff_mm3h"]
     t = S[("2t", 0)] - 273.15
     rh = derive.rh_from_dewpoint(t, S[("2d", 0)] - 273.15)
     log = np.log10 if c["ratio_log"] == "log10" else np.log
-    return derive.kma_snow_cm(rain_mm, window_h, t, rh, S[("t", 850)] - 273.15, log)
+    return derive.kma_snow_cm(rain_mm, window_h, t, rh, S[("t", 850)] - 273.15, log, cut)
 
 
 def _snow_hatch(cfg, fr, S, tp_mm, sf_mm) -> bool:
@@ -354,7 +355,8 @@ def chart_snow(cfg, F, P, run, step, window_h):
     fr = Frame(cfg, "default", strong_coast=True)
     S = _sub(F, fr)
     Q = _sub(P, fr)
-    sf = snow_cm(cfg, S, derive.tp_accum_mm(S[("tp", 0)], Q[("tp", 0)]), window_h)[1]
+    valid = run + dt.timedelta(hours=step)
+    sf = snow_cm(cfg, S, derive.tp_accum_mm(S[("tp", 0)], Q[("tp", 0)]), window_h, valid.month)[1]
     cmap = mcolors.ListedColormap(c["colors"][:-1])
     cmap.set_over(c["colors"][-1])
     norm = mcolors.BoundaryNorm(c["levels"], cmap.N)

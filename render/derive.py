@@ -203,10 +203,11 @@ def kma_snow_ratio(rain3h_mm, t_sfc_c, t850_c, log=np.log) -> np.ndarray:
     return np.maximum(a * log(r) + b, 0.0)
 
 
-def kma_snow_cm(rain_mm, window_h, t_sfc_c, rh_pct, t850_c, log=np.log) -> tuple[np.ndarray, np.ndarray]:
+def kma_snow_cm(rain_mm, window_h, t_sfc_c, rh_pct, t850_c, log=np.log,
+                min_rain3h_mm: float = 0.0) -> tuple[np.ndarray, np.ndarray]:
     """(snow mask, snowfall cm) for a window's precipitation: snow (mm) = RAIN x ratio, cm = mm / 10.
     The ratio is fitted for 3 h RAIN; a 6 h window uses its 3 h mean rate for the ratio (our assumption)."""
-    mask = kma_snow_condition(rain_mm, t_sfc_c, rh_pct) & (rain_mm > 0)
+    mask = kma_snow_condition(rain_mm, t_sfc_c, rh_pct) & (rain_mm > 0) & (rain_mm * 3.0 / window_h >= min_rain3h_mm)
     ratio = kma_snow_ratio(rain_mm * 3.0 / window_h, t_sfc_c, t850_c, log)
     return mask, np.where(mask, rain_mm * ratio / 10.0, 0.0)
 
