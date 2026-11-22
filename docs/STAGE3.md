@@ -212,3 +212,5 @@ Owner 2026-11-23: the line was missing at many steps (published manifest, measur
 AIFS 9-12 of 41). Search box east edge 160E -> 170E (also the dotted frame on the wide chart). When no centre
 dominates +/- 5 deg, the strongest centre within +/- 2.5 deg is used ("2nd centre" in the label). IFS 2026112200,
 12 steps that had no line (measured): 170E alone draws 8, 170E + secondary centre draws all 12.
+- 500 hPa wide map: "H" and the height (gpm) at each local maximum within +/- 5 deg (`charts.gz.high_centres`,
+  owner 2026-11-23, after the KMA charts). render_version 14 (AIFS 15).
