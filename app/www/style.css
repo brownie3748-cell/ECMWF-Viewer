@@ -71,6 +71,7 @@ button, select, input { font: inherit; color: inherit; }
   overflow: hidden; text-overflow: ellipsis; }
 .model.on { background: var(--accent); color: var(--accent-ink); }
 .model:disabled { opacity: .35; cursor: default; border-style: dashed; }
+.model.other:not(.on) { border-style: dashed; }
 
 main { padding: 2px var(--gap) 24px; }
 .status { margin: 0 0 6px; padding: 10px 12px; border-radius: var(--radius); background: var(--warn-bg); color: var(--warn-ink); }
