@@ -426,6 +426,7 @@ probe_every_min = 30
 min_age_h = 4
 assume_complete_after_h = 12              # older runs are complete: no probe request
 max_fetch_age_h = 12                      # no backfill: only runs younger than 12 h are fetched (runs already stored stay)
+resume_extra_h = 12                       # a partly rendered run (partial.json) may still be finished up to 12 h later
 parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
 est_bytes_per_field = 2_700_000           # measured 2.65 MB
 timeout_s = 30                            # 15 s cut 339 of 1088 whole-field requests (31 %, run 2026111312): each a full re-download
