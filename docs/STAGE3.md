@@ -200,3 +200,8 @@ humidity would cost extra KMA API quota).
 - Tried and dropped for the snow chart: model snowfall `sf` (the KMA ratio is the method of the KMA charts) and the
   IFS snow depth `sd` (packed in 0.03125 m w.e. steps: 3 h changes are 0 or about 20 cm).
 - Sample 2026112200 +27 h IFS over 37-43N 124-131E (measured): snowfall max 4.4 cm with ln, 5.9 cm with log10.
+- KMA rain cut-off (same manual) for the snowfall: no snow below 0.25 mm per 3 h (Nov-Apr; 0.5 mm May-Oct; a
+  6 h window compares its 3 h mean). Without it, the packing noise of the cumulative tp (about 0.12-0.24 mm at
+  +123 h, measured 2026112206) times the large ratio of small amounts (about 26 at 0.1 mm) drew ~0.3 cm over wide
+  dry areas (382 of 401 such cells had less than 0.25 mm). render_version 12 (AIFS 13). Chip renamed '강설' and
+  placed after '지상·강수'.

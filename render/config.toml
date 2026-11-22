@@ -146,6 +146,9 @@ hatch_width = 0.6
 # (packed in 0.03125 m w.e. steps, measured 2026112200 +24/+27).
 title = "{window}h Snowfall (cm, KMA ratio), 925hPa GPH/T, 1000-850 Thick., Tw {tw}C"
 ratio_log = "ln"                # natural log first (owner); "log10" if the charts disagree with KMA's
+rain_cutoff_mm3h = 0.25          # KMA rain cut-off (same manual): no snow below this 3 h precipitation, Nov-Apr;
+rain_cutoff_mm3h_warm = 0.5      #   May-Oct. Below it, packing noise of the cumulative tp (0.12-0.24 mm at +123 h,
+warm_months = [5, 6, 7, 8, 9, 10]  #   measured) times a large ratio (~26 at 0.1 mm) gave widespread ~0.3 cm
 levels = [0.1, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30]
 colors = ["#dbe6ff", "#b3c8ff", "#8aa8f5", "#9b8ce8", "#fff3a0", "#ffe14d", "#ffc21a", "#ff9a00",
           "#f26b00", "#d94300", "#a82b00"]
@@ -269,12 +272,12 @@ process_order = ["ifs", "aifs", "kimg", "kimr", "ifs01"]   # within a cycle: lig
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
-render_version = 11             # 11: snow area on msl, snow chart; bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 12             # 12: KMA rain cut-off for snowfall; 11: snow area on msl, snow chart; bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
-  { id = "t2m", title = "2 m temperature", domain = "default" },
   { id = "snow", title = "Snowfall", domain = "default", min_step = 3 },
+  { id = "t2m", title = "2 m temperature", domain = "default" },
   { id = "gz925", title = "925hPa", level = 925, domain = "default" },
   { id = "mfc925", title = "925hPa MFC", level = 925, domain = "default" },
   { id = "gz850", title = "850hPa", level = 850, domain = "default" },
@@ -301,7 +304,7 @@ override = {}
 [[models]]
 id = "ifs01"
 label = "IFS 0.1°"
-charts = ["msl", "t2m", "snow", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500", "wpsh500"]
+charts = ["msl", "snow", "t2m", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500", "wpsh500"]
 [models.override.data]
 resolution = "0p1"
 grid_deg = 0.1
@@ -346,7 +349,7 @@ tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
 max_step_short = 240            # 06/18Z too: AIFS publishes 0-360 h for every run (measured 2026-11-21 06Z: 61 steps)
 [models.override.site]
-render_version = 12             # 12: snow area on msl, snow chart; 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
+render_version = 13             # 13: KMA rain cut-off for snowfall; 12: snow area on msl, snow chart; 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [1000]
