@@ -162,7 +162,12 @@ function selectModel(id, keepRun, keepValid, findValid) {
     const i = mod.runs.findIndex((r) => r.run === keepRun);
     if (i >= 0) state.runIdx = i;
   }
-  if (!chartIn(mod, state.chart)) state.chart = chartIn(mod, "gz500") ? "gz500" : mod.charts.find((c) => !c.overlay_of).id;
+  if (!chartIn(mod, state.chart)) {
+    // nearest chart the model has: 강설 -> 지상·강수 (KIM has no snowfall), wide/upper levels -> 500
+    const near = { snow: "msl", gz500_wide: "gz500", gz300: "gz500", gz200: "gz500" }[state.chart];
+    state.chart = near && chartIn(mod, near) ? near
+      : chartIn(mod, "gz500") ? "gz500" : mod.charts.find((c) => !c.overlay_of).id;
+  }
   if (findValid && keepValid) {
     for (let i = mod.runs.length - 1; i >= 0; i--) {
       if (hasValid(mod.runs[i], keepValid)) { state.runIdx = i; break; }
@@ -202,13 +207,15 @@ function buildModels() {
   });
 }
 
-// A model button is disabled while it has no runs or does not offer the chart on screen.
+// A model button is disabled only while it has no runs. A model without the chart on screen stays
+// selectable and opens its nearest chart (KIM on 강설 -> 지상·강수); the button is marked .other.
 function updateModels() {
   document.querySelectorAll(".model").forEach((b) => {
     const mod = state.m.models.find((x) => x.id === b.dataset.id);
-    const ok = mod.runs.length && chartIn(mod, state.chart);
-    b.disabled = !ok;
-    b.title = ok ? "" : (mod.runs.length ? `${mod.label}에는 이 차트가 없어요` : "자료 준비 중");
+    const has = chartIn(mod, state.chart);
+    b.disabled = !mod.runs.length;
+    b.classList.toggle("other", !!mod.runs.length && !has);
+    b.title = !mod.runs.length ? "자료 준비 중" : (has ? "" : `${mod.label}에는 이 차트가 없어 비슷한 차트로 열어요`);
     b.classList.toggle("on", mod.id === state.model);
   });
 }
