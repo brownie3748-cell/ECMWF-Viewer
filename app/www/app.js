@@ -146,8 +146,9 @@ function hasValid(r, valid) {
 }
 
 // Switch model, keeping the run (if that model has it) and the valid time as close as possible.
-// findValid (model buttons): if that run lacks the exact valid time (missing run, or a short 06/18Z run),
-// use the newest run that has it, e.g. AIFS 00Z +168h -> IFS 12Z +180h rather than IFS 18Z +144h.
+// findValid (model buttons): use the newest run of the new model that has the exact valid time, e.g.
+// AIFS 00Z +168h -> IFS 12Z +180h (IFS 18Z stops at +144h), IFS 12Z +180h -> AIFS 00Z +168h.
+// Falls back to the kept run / nearest step when no run has that exact time.
 function selectModel(id, keepRun, keepValid, findValid) {
   const has = (x) => x && x.runs.length;
   let mod = state.m.models.find((x) => x.id === id);
@@ -162,7 +163,7 @@ function selectModel(id, keepRun, keepValid, findValid) {
     if (i >= 0) state.runIdx = i;
   }
   if (!chartIn(mod, state.chart)) state.chart = chartIn(mod, "gz500") ? "gz500" : mod.charts.find((c) => !c.overlay_of).id;
-  if (findValid && keepValid && !hasValid(mod.runs[state.runIdx], keepValid)) {
+  if (findValid && keepValid) {
     for (let i = mod.runs.length - 1; i >= 0; i--) {
       if (hasValid(mod.runs[i], keepValid)) { state.runIdx = i; break; }
     }
