@@ -190,6 +190,6 @@ AIFS Single carry `sf` (snowfall, m water equivalent, accumulated), `2d` and `gh
 are unverified).
 - `msl`: magenta hatching where the window's precipitation is at least 0.5 mm and at least half of it is snow
   (`charts.snow_area`). The window start is fetched with `data.accum_params = ["tp", "sf"]`.
-- `snow` (new, from the first window; no image at +0 h): snowfall of the window (mm = kg m-2), 925 hPa height
+- `snow` (new, from the first window; no image at +0 h): snowfall of the window in cm (fixed 10:1 snow ratio; IFS sd is packed in 0.03125 m w.e. steps, too coarse for 3 h changes), 925 hPa height
   and temperature, 1000-850 hPa thickness 1270-1310 m (1290 m bold), the surface wet-bulb 1.2 C line
   (psychrometric, from 2t, 2d and sp: `derive.wet_bulb_c`), 925 hPa wind.

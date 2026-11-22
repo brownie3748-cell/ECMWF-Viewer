@@ -181,3 +181,4 @@ def snow_area(tp_mm: np.ndarray, sf_mm: np.ndarray, min_mm: float, min_fraction:
     """1 where the window's precipitation is at least min_mm and at least min_fraction of it fell as snow."""
     frac = np.divide(sf_mm, tp_mm, out=np.zeros_like(tp_mm), where=tp_mm > 0)
     return ((tp_mm >= min_mm) & (frac >= min_fraction)).astype(float)
+

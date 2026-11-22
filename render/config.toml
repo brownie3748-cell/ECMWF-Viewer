@@ -132,14 +132,16 @@ hl_edge_exclude_deg = 1.0
 
 [charts.snow_area]
 # msl chart: magenta hatching where the window's precipitation falls mainly as snow (ECMWF sf / tp)
-min_mm = 0.5                    # first precipitation shading level
+min_mm = 0.1                    # first precipitation shading level
 min_fraction = 0.5              # snowfall share of the precipitation
 color = "#c000c0"
 hatch = "|||"
 hatch_width = 0.6
 
 [charts.snow]
-title = "{window}h Snowfall (mm), 925hPa GPH/T, 1000-850 Thick., Tw {tw}C"
+title = "{window}h Snowfall (cm, 10:1), 925hPa GPH/T, 1000-850 Thick., Tw {tw}C"
+snow_ratio = 10                 # cm = snowfall (mm w.e.) x snow_ratio / 10. The IFS snow depth sd is not usable for
+                                # 3 h changes: open data packs it in 0.03125 m w.e. steps (measured 2026112200 +24/+27)
 levels = [0.1, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30]
 colors = ["#dbe6ff", "#b3c8ff", "#8aa8f5", "#9b8ce8", "#fff3a0", "#ffe14d", "#ffc21a", "#ff9a00",
           "#f26b00", "#d94300", "#a82b00"]
@@ -158,8 +160,8 @@ smooth_sigma = 1.0              # grid points, over mountains only (thickness an
 [charts.tp]
 title_short = "3h Accumulated Precipitation (mm)"
 title_long = "6h Accumulated Precipitation (mm)"
-levels = [0.5, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 70]
-colors = ["#b4e0fb", "#80c4f2", "#4ea3e6", "#2a7fd4", "#1a9e3c",
+levels = [0.1, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 70]
+colors = ["#e3f3fd", "#b4e0fb", "#80c4f2", "#4ea3e6", "#2a7fd4", "#1a9e3c",
           "#52c234", "#9ade3c", "#f2e33a", "#f5b52d", "#f27a1f", "#e33a16",
           "#c4161c", "#9b1d6b", "#6c1a8c"]
 
