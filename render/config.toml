@@ -431,8 +431,8 @@ credit = "Source: KMA API Hub, KIM global model (KOGL Type 1, Korea Meteorologic
 
 [[models]]
 id = "kimr"
-label = "KIM 지역"
-charts = ["msl", "snow", "t2m", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500"]
+label = "KIM 한반도"
+charts = ["gz500", "msl", "snow", "t2m", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700"]   # owner 2026-11-24: Korea map only
 [models.override.data]
 source = "kma"
 run_hours = [0, 12]
@@ -443,7 +443,7 @@ publish_every_h = 3              # owner 2026-11-15: 3-hourly
 publish_every_h_long = 3
 tp_short_accum_h = 3
 tp_long_accum_h = 3
-read_region = { lat_min = 22.0, lat_max = 53.0, lon_min = 101.0, lon_max = 151.0 }
+read_region = { lat_min = 29.5, lat_max = 44.5, lon_min = 117.0, lon_max = 135.0 }
 [[models.override.data.groups]]
 levtype = "sfc"
 param = ["msl", "sp", "tp", "2t", "10u", "10v", "r2", "sf"]   # r2 (RH2), sf (SNOW): snow charts, owner 2026-11-23
@@ -462,32 +462,29 @@ param = ["gh", "t", "u", "v"]
 [models.override.site]
 max_missing_steps = 4                     # a few steps the hub keeps refusing do not throw away a 90-minute run
 retention_runs = 4                        # 2 days: the daily KMA quota fits about 2 KIM regional runs, so no long backfill
-[models.override.site.zoom]
-# Extra charts on the Korea zoom map, published as a separate button "KIM 지역 확대" (manifest model `kimz`,
-# images stored with the kimr run as z_<chart>_<step>.png; no extra API Hub request).
-model_id = "kimz"
-label = "KIM 지역 확대"
-domain = "korea"
-prefix = "z_"
-charts = ["gz500", "msl", "t2m", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700"]
 [models.override.kma]
 group = "KIMR"
-# Lambert 3 km, whole domain (a lon/lat cut of the Lambert grid was not measured); interpolated onto a
-# 0.05 deg lat/lon grid so the charts use exactly the same map frame as the other models.
+# Owner 2026-11-24: Korea map only (the wide KIM charts and the separate zoom button are gone), so only a lon/lat
+# cut of the Lambert 3 km grid is downloaded (measured 2026-11-17: 119-133E 31-43N -> 442 x 443 points, ~0.6 MB per
+# field instead of 2.65 MB). The cut covers the Korea map (118.8-133.1E, 31.1-43.1N) plus the 1 deg crop margin.
+box = [117, 29.5, 135, 44.5]              # lon1, lat1, lon2, lat2
+probe_box = [125, 36, 128, 38]            # completeness probe: a small cut (whole field was 2.7 MB per probe)
 probe_every_min = 30
 min_age_h = 4
 assume_complete_after_h = 12              # older runs are complete: no probe request
 max_fetch_age_h = 12                      # no backfill: only runs younger than 12 h are fetched (runs already stored stay)
 resume_extra_h = 12                       # a partly rendered run (partial.json) may still be finished up to 12 h later
 parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
-est_bytes_per_field = 2_700_000           # measured 2.65 MB
+est_bytes_per_field = 1_000_000           # estimated: area ratio to the measured 0.6 MB cut (whole field 2.65 MB)
 timeout_s = 30                            # 15 s cut 339 of 1088 whole-field requests (31 %, run 2026111312): each a full re-download
-grid = { lat_min = 22.0, lat_max = 53.0, lon_min = 101.0, lon_max = 151.0, step = 0.05 }
+grid = { lat_min = 29.5, lat_max = 44.5, lon_min = 117.0, lon_max = 135.0, step = 0.05 }
 vars = { gh = "GPH", t = "T", u = "U", v = "V", q = "QVAPOR", r = "RH", msl = "MSLP", sp = "PSFC", tp = "RAIN", "2t" = "T2", "10u" = "U10", "10v" = "V10", r2 = "RH2", sf = "SNOW" }   # RH2/SNOW measured 2026-11-23 (measure run 45080956733)
 q_is_mixing_ratio = true
-[models.override.domains.default]
-barb_every = 40
-vector_every = 15
+[models.override.domains.default]          # KIM is drawn on the Korea map (domains.korea)
+extent_m = [-568000.0, 559000.0, 140000.0, 1421000.0]
+grid_step_deg = 2
+barb_every = 12
+vector_every = 10
 [models.override.charts.t2m]
 smooth_sigma = 5.0
 [models.override.charts.msl]
