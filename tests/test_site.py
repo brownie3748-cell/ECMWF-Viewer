@@ -180,14 +180,13 @@ class Manifest(unittest.TestCase):
                             for r in ("2026111506", "2026111500")}}
             m = site.write_manifest(CFG, st, runs)
             self.assertEqual(m["schema_version"], 2)
-            self.assertEqual([x["id"] for x in m["models"]], ["ifs", "ifs01", "aifs", "kimr", "kimz"])
+            self.assertEqual([x["id"] for x in m["models"]], ["ifs", "ifs01", "aifs", "kimr"])   # kimz gone 2026-11-24
             ifs = m["models"][0]
             self.assertEqual([r["run"] for r in ifs["runs"]], ["2026111500", "2026111506"])   # oldest first
             self.assertEqual(ifs["latest"], "2026111506")
             self.assertNotIn("bytes", ifs["runs"][0])
             back = site.runs_from_manifest(st.get_json("index.json"))
             self.assertEqual(set(back["ifs"]), {"2026111500", "2026111506"})
-            self.assertNotIn("kimz", back)             # virtual zoom model: not pruned / re-planned on its own
             self.assertIn("{model}", m["path"])
 
 
@@ -281,3 +280,20 @@ class WpshSearch(unittest.TestCase):
         self.assertTrue(r["secondary"])
         self.assertAlmostEqual(r["centre"][0], 20.0)
         self.assertAlmostEqual(r["centre"][1], 135.0, delta=0.5)      # the ramp shifts the peak slightly east
+
+
+class KimKoreaOnly(unittest.TestCase):
+    def test_kim_cut_covers_the_korea_map(self):
+        import numpy as np
+        import pyproj
+        r = config.for_model(CFG, "kimr")
+        self.assertNotIn("zoom", r["site"])
+        d = r["domains"]["default"]
+        self.assertEqual(d["extent_m"], CFG["domains"]["korea"]["extent_m"])
+        p = pyproj.Proj(proj="lcc", lat_1=30, lat_2=60, lat_0=30, lon_0=126, R=6371229.0)
+        x0, x1, y0, y1 = d["extent_m"]
+        xs, ys = np.linspace(x0, x1, 40), np.linspace(y0, y1, 40)
+        lon, lat = p(np.r_[xs, xs, [x0] * 40, [x1] * 40], np.r_[[y0] * 40, [y1] * 40, ys, ys], inverse=True)
+        lon1, lat1, lon2, lat2 = r["kma"]["box"]
+        self.assertTrue(lon1 <= lon.min() - 1 and lon.max() + 1 <= lon2 + 0.2)   # map + 1 deg crop margin
+        self.assertTrue(lat1 <= lat.min() - 1 and lat.max() + 1 <= lat2 + 0.2)

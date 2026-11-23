@@ -225,3 +225,13 @@ T2, RH2 and SNOW all GRIB). Two earlier checks returned "# ERROR: CGI 호출 오
 URL format; both ran while a publish job was downloading KIM with the same key, so the hub seems to refuse
 concurrent requests from a second client (inferred). Stored KIM runs are not re-rendered; the next runs get the
 charts. Not yet run on real KIM data here: the [kim] CI smoke would cost about 0.35 GB of today's quota.
+
+## KIM: Korea map only, lon/lat cut download (owner 2026-11-24)
+
+2026-11-23 00Z KIMR was not fetched: the own guard refused it ("used 1838 calls / 2.55 GB, next needs about 783 calls
+/ 2.11 GB (limits 16000 / 4.5 GB)", publish run 45165805681). The 22 12Z run is fetched after KST midnight, so two
+whole-domain runs fall on one KST day: 2.51 GB were counted for the 22 12Z run alone (25 fields; retries included),
+so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep the Korea map. KIM regional
+(button "KIM 한반도") is now drawn on the Korea map (domains.korea) and downloads only `kma.box` = 117-135E,
+29.5-44.5N; the separate zoom model (`kimz`) is gone. Size per field is estimated at about 1 MB (the measured
+119-133E / 31-43N cut was 0.6 MB), so about 0.8 GB per run. Stored runs keep their wide images until they age out.
