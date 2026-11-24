@@ -256,11 +256,22 @@ anchors = [
 # Equivalent potential temperature (Bolton 1980) at 925 / 850 / 700 hPa (owner 2026-11-24). From t and q (IFS and
 # KIM 700 hPa: q from r), so no extra download.
 title = "{level}hPa Equivalent Potential Temperature (K), GPH (gpm), Wind (kt)"
-range = { 925 = [255, 363], 850 = [255, 360], 700 = [264, 354] }   # winter values reach about 260 K (measured 2026112400 +24 h)
+# Owner 2026-11-24: below white_below no shading (grey lines only); 333 K and above (warm, moist air) shaded from
+# yellow-green to red with a red boundary line at 333 K.
+white_below = 260
+top = { 925 = 363, 850 = 360, 700 = 354 }
 step = 3
 line_interval = 3
 line_color = "#333333"
-cmap = "turbo"
+line_color_cold = "#9a9a9a"
+bound = 333
+bound_color = "#e00000"
+bound_width = 1.6
+anchors = [
+  [260, "#5b3a9e"], [270, "#3d5bc4"], [280, "#3c8fd8"], [290, "#58b9d6"], [300, "#7fd0c0"], [310, "#a7dcc0"],
+  [320, "#c9e6cf"], [332.9, "#e4f1e4"],
+  [333, "#b8e05a"], [339, "#f2e632"], [345, "#ffb22e"], [351, "#f2651f"], [357, "#d0201a"], [363, "#8c0d0d"],
+]
 smooth_sigma = 0.0
 
 [charts.mfc]

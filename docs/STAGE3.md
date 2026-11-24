@@ -242,6 +242,7 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   500 hPa vorticity chart; 0.25 deg gaussian smoothing on the 0.1 deg and KIM grids), temperature as red dashed
   isotherms (`charts.gz.temp_style_by_level` 500 = "V"). The 500 hPa wide map keeps the temperature fill.
 - New charts `ept925`, `ept850`, `ept700` for every model: equivalent potential temperature (Bolton 1980, from t and q;
+  owner colours: no shading below 260 K (grey lines only), red line at 333 K, yellow-green to red above it;
   where only RH is given (IFS / KIM 700 hPa) q is derived with the IFS saturation formula), 3 K lines, height and wind.
   No extra download. render_version 15 (AIFS 16): stored ECMWF runs are re-rendered from the mirrors; stored KIM runs
   are not (new KIM runs get the charts).

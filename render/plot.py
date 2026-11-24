@@ -603,13 +603,30 @@ def chart_ept(cfg, F, level, run, step):
         m = _underground(S, level)
         for a in (te, gh, u, v):
             a[m] = np.nan
-    lo, hi = c["range"][str(level)]
-    lv = np.arange(lo, hi + c["step"] / 2, c["step"])
-    cf = _contourf(fr, S, te, levels=lv, cmap=c["cmap"], extend="both", transform=PC, zorder=1)
-    fr.colorbar(cf, label="K", ticks=[x for x in lv if x % (2 * c["line_interval"]) == 0])
-    cs = fr.ax.contour(S.lon, S.lat, te, levels=_levels(te, c["line_interval"]), colors=c["line_color"],
-                       linewidths=0.5, transform=PC, zorder=2)
-    _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=c["line_color"], inline_spacing=2)
+    lo, hi = c["white_below"], c["top"][str(level)]
+    a = c["anchors"]
+    a0, a1 = a[0][0], a[-1][0]
+    cmap = mcolors.LinearSegmentedColormap.from_list("ept", [((v - a0) / (a1 - a0), col) for v, col in a], N=512)
+    norm = mcolors.Normalize(vmin=a0, vmax=a1)
+    st = c["step"]
+    first = c["bound"] - st * np.floor((c["bound"] - lo) / st)          # levels aligned on the 333 K boundary
+    lv = np.unique(np.concatenate([[lo], np.arange(first, hi + st / 2, st)]))
+    # fixed discrete colours (one per 3 K band) so the colour bar shows every band whatever the data range
+    dcm = mcolors.ListedColormap([cmap(norm((x0 + x1) / 2)) for x0, x1 in zip(lv[:-1], lv[1:])])
+    dcm.set_over(a[-1][1])
+    # below white_below: no shading (white), grey lines only
+    cf = _contourf(fr, S, np.where(te >= lo, te, np.nan), levels=lv, cmap=dcm,
+                   norm=mcolors.BoundaryNorm(lv, dcm.N), extend="max", transform=PC, zorder=1)
+    fr.colorbar(cf, label="K", ticks=[x for x in lv if (x - c["bound"]) % 12 == 0])
+    ll = _levels(te, c["line_interval"])
+    for sel, col in ((ll < lo, c["line_color_cold"]), (ll >= lo, c["line_color"])):
+        if sel.any():
+            cs = fr.ax.contour(S.lon, S.lat, te, levels=ll[sel], colors=col, linewidths=0.5, transform=PC, zorder=2)
+            _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=col, inline_spacing=2)
+    if np.nanmin(te) < c["bound"] < np.nanmax(te):           # warm, moist air boundary
+        cs = fr.ax.contour(S.lon, S.lat, te, levels=[c["bound"]], colors=c["bound_color"],
+                           linewidths=c["bound_width"], transform=PC, zorder=4.5)
+        _clabel(fr, cs, "c", fmt="%d", fontsize=8, colors=c["bound_color"])
     cs = fr.ax.contour(S.lon, S.lat, gh, levels=_levels(gh, cfg["charts"]["gz"]["gh_interval"][str(level)]),
                        colors="k", linewidths=1.0, transform=PC, zorder=5)
     _clabel(fr, cs, "a", fmt="%d", fontsize=8)
