@@ -68,7 +68,7 @@ class Npz(unittest.TestCase):
 class Quota(unittest.TestCase):
     def test_budget_and_probe_throttle(self):
         mc = config.for_model(CFG, "kimg")
-        src = kim.KimSource(mc, usage={"calls": 17990, "bytes": 0})
+        src = kim.KimSource(mc, usage=dict(kim.new_usage(), calls=17990))
         with self.assertRaises(kim.QuotaError):
             src.check_budget(*kim.run_cost(mc, 41))
         for mid in ("kimg", "kimr"):           # every KMA model must be probe-able (kimr had no probe_box)
@@ -134,3 +134,31 @@ class SnowFields(unittest.TestCase):
         self.assertAlmostEqual(float(td[1]), 273.15, delta=0.01)
         src = kim.KimSource(config.for_model(CFG, "kimr"))
         self.assertEqual(src.field_keys(tp_only=True), [("tp", 0), ("sf", 0)])
+
+
+class UsageDay(unittest.TestCase):
+    """2026-11-25: the 24th's count (3.02 GB) was saved as the 25th's and the guard refused 2026112412."""
+
+    def test_count_restarts_at_kst_midnight(self):
+        import datetime as dt
+        before = dt.datetime(2026, 11, 24, 14, 50, tzinfo=dt.timezone.utc)      # 23:50 KST
+        after = dt.datetime(2026, 11, 24, 15, 10, tzinfo=dt.timezone.utc)       # 00:10 KST, the 25th
+        u = kim.new_usage(before)
+        u["calls"], u["bytes"], u["probes"] = 2522, 3.02e9, {"KIMR2026112412": 1.0}
+        kim.roll_usage(u, after)
+        self.assertEqual((u["day"], u["calls"], u["bytes"]), ("2026-11-25", 0, 0))
+        self.assertIn("KIMR2026112412", u["probes"])
+        kim.roll_usage(u, after)                                                   # same day: kept
+        self.assertEqual(u["day"], "2026-11-25")
+
+    def test_legacy_file_without_day_is_not_trusted(self):
+        import tempfile, json
+        from render import store as store_mod
+        with tempfile.TemporaryDirectory() as t:
+            st = store_mod.LocalStore(CFG, t)
+            st.put_bytes(kim.usage_key(), json.dumps({"calls": 2542, "bytes": 3.0e9, "probes": {"a": 1}}).encode(), "x")
+            u = kim.load_usage(st)
+            self.assertEqual((u["calls"], u["bytes"], u["probes"]), (0, 0, {"a": 1}))
+            u["calls"] = 5
+            kim.save_usage(st, u)
+            self.assertEqual(kim.load_usage(st)["calls"], 5)
