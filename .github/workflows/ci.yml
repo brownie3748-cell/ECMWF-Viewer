@@ -42,7 +42,7 @@ jobs:
       - run: pip install -r requirements.lock
       - name: Unit tests
         run: python -m unittest -v
-      - name: Smoke render (IFS steps 0, 6, 144, 150, 240; IFS 0.1 and AIFS steps 0, 150; KIM regional steps 0, 1, 2, 3, 4, 24: hourly surface steps included)
+      - name: Smoke render (IFS steps 0, 6, 144, 150, 240; IFS 0.1 and AIFS steps 0, 150; KIM regional steps 0, 1, 2, 3, 4, 24 with hourly surface steps)
         env:
           # KIM smoke costs about 120 API Hub requests / 0.3 GB of the 5 GB daily KMA quota, so it runs only on
           # a manual run or a push whose commit message contains [kim] (never on the pull_request duplicate).
