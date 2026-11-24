@@ -16,9 +16,9 @@ const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 const CHIPS = [
   ["gz500", "500"], ["gz500_wide", "500 광역"],
   ["msl", "지상·강수"], ["snow", "강설"], ["t2m", "지상 기온"],
-  ["gz925", "925"], ["mfc925", "925 수분속"],
-  ["gz850", "850"], ["mfc850", "850 수분속"],
-  ["gz700", "700"], ["rh700", "700 습도"],
+  ["gz925", "925"], ["mfc925", "925 수분속"], ["ept925", "925 상당온위"],
+  ["gz850", "850"], ["mfc850", "850 수분속"], ["ept850", "850 상당온위"],
+  ["gz700", "700"], ["rh700", "700 습도"], ["ept700", "700 상당온위"],
   ["gz300", "300"], ["gz200", "200"],
 ];
 const LABELS = Object.fromEntries(CHIPS);
@@ -92,9 +92,12 @@ function overlayOf(id) {
   return M().charts.find((o) => o.overlay_of && (chartDef(o.overlay_of) || {}).domain === c.domain) || null;
 }
 const run = () => M().runs[state.runIdx];
+// Hourly charts (KIM 한반도 surface charts) also have the run's surface-only hourly steps.
 function stepsFor(r, chartId) {
-  const min = chartDef(chartId).min_step || 0;
-  return r.steps.filter((s) => s >= min);
+  const c = chartDef(chartId);
+  const min = c.min_step || 0;
+  const all = c.hourly && r.hourly_steps ? [...r.steps, ...r.hourly_steps].sort((a, b) => a - b) : r.steps;
+  return all.filter((s) => s >= min);
 }
 function url(runId, chartId, step) {
   // A zoom model (KIM 지역 확대) reads the images of its data model with a chart prefix (z_msl_...).
@@ -276,7 +279,7 @@ const pf = { gen: 0, queue: [], active: 0 };
 // Every step any run of this model has (so a short 06/18Z run shows the later steps as unavailable).
 function gridSteps() {
   const s = new Set();
-  M().runs.forEach((r) => r.steps.forEach((x) => s.add(x)));
+  M().runs.forEach((r) => stepsFor(r, state.chart).forEach((x) => s.add(x)));
   return [...s].sort((a, b) => a - b);
 }
 

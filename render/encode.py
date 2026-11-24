@@ -19,8 +19,9 @@ def encode(png: bytes, fmt: str, colors: int = 256, webp_quality: int = 85) -> b
     src = im if has_alpha else im.convert("RGB")
     buf = io.BytesIO()
     if fmt == "png8":
-        method = Image.Quantize.FASTOCTREE if has_alpha else Image.Quantize.MEDIANCUT
-        src.quantize(colors=colors, method=method).save(buf, format="PNG", optimize=True)
+        # FASTOCTREE also for opaque charts (2026-11-24): MEDIANCUT merged colour-bar bands that cover few pixels
+        # (theta-e 333-345 K came out as one or two colours), and was 15 % larger (16 charts of IFS +72 h, measured).
+        src.quantize(colors=colors, method=Image.Quantize.FASTOCTREE).save(buf, format="PNG", optimize=True)
     elif fmt == "webp_lossless":
         src.save(buf, format="WEBP", lossless=True, method=4)
     elif fmt == "webp_q":

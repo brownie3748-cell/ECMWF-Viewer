@@ -230,7 +230,8 @@ def cmd_poll(args, cfg):
         store_mod.clear_dir(stage)
         try:
             if kim.is_kma(mcfg):               # do not start a KIM run the daily API budget cannot finish
-                src.check_budget(*kim.run_cost(mcfg, len(fetch.published_steps(c.hour, mcfg))))
+                src.check_budget(*kim.run_cost(mcfg, len(fetch.published_steps(c.hour, mcfg)),
+                                                len(fetch.hourly_steps(c.hour, mcfg))))
             resume = None
             if kim.is_kma(mcfg):
                 resume = _resume_hook(st, mid, rs, rv[mid], sizes, kma_usage,

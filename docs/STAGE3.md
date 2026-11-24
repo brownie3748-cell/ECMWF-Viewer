@@ -235,3 +235,22 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
 (button "KIM 한반도") is now drawn on the Korea map (domains.korea) and downloads only `kma.box` = 117-135E,
 29.5-44.5N; the separate zoom model (`kimz`) is gone. Size per field is estimated at about 1 MB (the measured
 119-133E / 31-43N cut was 0.6 MB), so about 0.8 GB per run. Stored runs keep their wide images until they age out.
+
+## 500 hPa vorticity, theta-e charts, KIM hourly surface charts (owner 2026-11-24)
+
+- 500 hPa (default map, every model): relative vorticity shaded in E-5/s (2-20, redder for larger values, as the KMA
+  500 hPa vorticity chart; 0.25 deg gaussian smoothing on the 0.1 deg and KIM grids), temperature as red dashed
+  isotherms (`charts.gz.temp_style_by_level` 500 = "V"). The 500 hPa wide map keeps the temperature fill.
+- New charts `ept925`, `ept850`, `ept700` for every model: equivalent potential temperature (Bolton 1980, from t and q;
+  owner colours: no shading below 260 K (grey lines only), red line at 333 K, yellow-green to red above it;
+  where only RH is given (IFS / KIM 700 hPa) q is derived with the IFS saturation formula), 3 K lines, height and wind.
+  No extra download. render_version 15 (AIFS 16): stored ECMWF runs are re-rendered from the mirrors; stored KIM runs
+  are not (new KIM runs get the charts).
+- KIM regional: `msl` and `t2m` every hour to +84 h (`data.hourly`). Between the 3-hourly steps only MSLP, sp, RAIN,
+  T2, U10, V10 and SNOW are fetched (7 calls per step, 56 steps: 392 calls). Hourly output measured on 2026112400
+  (measure run 45358318237: +1, +2, +40, +83 h, MSLP/RAIN/T2/SNOW/U10 all GRIB). The precipitation on the hourly charts
+  is the last 3 h (+1 h / +2 h: since the run start), like the 3-hourly ones.
+- Manifest: a run lists the surface-only steps in `hourly_steps`; charts drawn there carry `"hourly": true`. Apps
+  before 0.8.0 ignore both and show the 3-hourly steps only.
+- Cost (estimated from 1.22 GB measured for 2026112400 = 1.56 MB per field): about 1.18k calls and 1.83 GB per KIM run,
+  two runs about 3.7 GB per KST day (guard 4.5 GB). R2: three more charts per step, about 150 KB each (local smoke render).

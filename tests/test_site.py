@@ -8,7 +8,7 @@ import unittest
 
 import numpy as np
 
-from render import config, derive, fetch, site
+from render import config, derive, fetch, kim, site
 from render import store as store_mod
 from render.__main__ import _newer_complete, _poll_plan, recent_cycles
 
@@ -47,15 +47,18 @@ class Models(unittest.TestCase):
 
     def test_chart_lists(self):
         ifs = config.for_model(CFG, "ifs")
-        self.assertEqual(len(ifs["site"]["charts"]), 15)
-        self.assertEqual(65 * 15 - 1, 974)            # images per IFS 00Z run: no snow chart at +0h
+        self.assertEqual(len(ifs["site"]["charts"]), 18)          # + theta-e 925/850/700 (owner 2026-11-24)
+        self.assertEqual(65 * 18 - 1, 1169)           # images per IFS 00Z run: no snow chart at +0h
         ids = [c["id"] for c in ifs["site"]["charts"]]
         self.assertEqual(ids[0], "msl")
         self.assertEqual(ids[-1], "gz200")
         hi = [c["id"] for c in config.for_model(CFG, "ifs01")["site"]["charts"]]
         for gone in ("gz300", "gz200", "gz500_wide", "wpsh500_wide"):
             self.assertNotIn(gone, hi)
-        self.assertEqual(len(config.for_model(CFG, "aifs")["site"]["charts"]), 15)
+        self.assertEqual(len(config.for_model(CFG, "aifs")["site"]["charts"]), 18)
+        for mid in ("ifs", "ifs01", "aifs", "kimr"):
+            ids = [c["id"] for c in config.for_model(CFG, mid)["site"]["charts"]]
+            self.assertTrue({"ept925", "ept850", "ept700"} <= set(ids), mid)
         for mid in ("ifs", "ifs01", "aifs"):           # 2d and gh 1000 are in the ECMWF open data (measured 2026-11-22)
             self.assertIn("snow", [c["id"] for c in config.for_model(CFG, mid)["site"]["charts"]])
         kimr = config.for_model(CFG, "kimr")
@@ -297,3 +300,55 @@ class KimKoreaOnly(unittest.TestCase):
         lon1, lat1, lon2, lat2 = r["kma"]["box"]
         self.assertTrue(lon1 <= lon.min() - 1 and lon.max() + 1 <= lon2 + 0.2)   # map + 1 deg crop margin
         self.assertTrue(lat1 <= lat.min() - 1 and lat.max() + 1 <= lat2 + 0.2)
+
+
+class KimHourly(unittest.TestCase):
+    """Owner 2026-11-24: KIM regional surface charts every hour; the other models unchanged."""
+
+    def test_steps(self):
+        k = config.for_model(CFG, "kimr")
+        h = fetch.hourly_steps(0, k)
+        self.assertEqual(len(fetch.published_steps(0, k)) + len(h), 85)
+        self.assertEqual(h[:4], [1, 2, 4, 5])
+        self.assertTrue(fetch.is_hourly_only(1, k) and not fetch.is_hourly_only(3, k))
+        self.assertEqual(fetch.hourly_steps(0, CFG), [])
+        self.assertEqual([fetch.tp_window(s, k) for s in (1, 2, 4, 84)], [1, 2, 3, 3])
+
+    def test_cost_and_fields(self):
+        k = config.for_model(CFG, "kimr")
+        calls, nbytes = kim.run_cost(k, 29, 56)
+        self.assertEqual(calls, 783 + 56 * 7)
+        self.assertLess(nbytes, 1.9e9)                 # owner budget about 1.8 GB per run (estimated 1.88 GB)
+        src = kim.KimSource(k)
+        self.assertEqual(len(src.field_keys(step=1)), 7)
+        self.assertEqual(len(src.field_keys(step=3)), 27)
+        self.assertEqual(src.field_keys(True, 1), [("tp", 0), ("sf", 0)])
+
+    def test_manifest_flags(self):
+        m = site.manifest(CFG, {"kimr": {"2026112400": {"run": "2026112400", "steps": [0, 3],
+                                                       "hourly_steps": [1, 2], "wpsh": None, "rv": 15}}})
+        k = next(x for x in m["models"] if x["id"] == "kimr")
+        hourly = [c["id"] for c in k["charts"] if c.get("hourly")]
+        self.assertEqual(sorted(hourly), ["msl", "t2m"])
+        self.assertEqual(site.run_entry({"run": "x", "steps": [0], "wpsh": None, "hourly_steps": [1]})["hourly_steps"], [1])
+
+
+class DerivedNew(unittest.TestCase):
+    def test_theta_e(self):
+        import numpy as np
+        from render import derive
+        te = derive.theta_e(np.array([293.15]), np.array([0.012]), 850.0)[0]
+        self.assertTrue(340 < te < 348, te)            # about 344 K (Bolton 1980)
+        q = derive.specific_humidity(np.array([80.0]), np.array([270.0]), 700.0)
+        self.assertAlmostEqual(float(derive.relative_humidity(q, np.array([270.0]), 700.0)[0]), 80.0, places=2)
+
+    def test_vorticity_sign(self):
+        import numpy as np
+        from render import derive
+        lat = np.arange(30, 40.01, 0.25)
+        lon = np.arange(120, 130.01, 0.25)
+        u = np.repeat(-2.0 * (lat - 35)[:, None], len(lon), axis=1)   # westerly to the south: cyclonic shear
+        z = derive.relative_vorticity(u, np.zeros_like(u), lat, lon)[20, 20]
+        self.assertAlmostEqual(z * 1e5, 1.8, delta=0.1)
+        z2 = derive.relative_vorticity(u[::-1], np.zeros_like(u), lat[::-1], lon)[20, 20]   # N->S grid (ECMWF)
+        self.assertAlmostEqual(z2 * 1e5, 1.8, delta=0.1)

@@ -31,6 +31,8 @@ import time
 import numpy as np
 import requests
 
+from . import fetch
+
 
 log = logging.getLogger(__name__)
 
@@ -235,9 +237,11 @@ class KimSource:
 
     ACCUM = (("tp", 0), ("sf", 0))                 # accumulated from the run start; mm -> m like the IFS
 
-    def field_keys(self, tp_only: bool = False) -> list[tuple[str, int]]:
+    def field_keys(self, tp_only: bool = False, step: int | None = None) -> list[tuple[str, int]]:
         if tp_only:                                 # window start: the accumulated fields this model fetches
-            return [k for k in self.ACCUM if k in self.field_keys()]
+            return [k for k in self.ACCUM if k in self.field_keys(step=step)]
+        if step is not None and fetch.is_hourly_only(step, self.cfg):
+            return [(p, 0) for p in self.cfg["data"]["hourly"]["params"]]    # surface-only hourly step
         keys = []
         for g in self.cfg["data"]["groups"]:
             for p in g["param"]:
@@ -282,7 +286,7 @@ class KimSource:
         if tp_only and (run, step) in self._tp:
             data.update(self._tp[(run, step)])
         else:
-            keys = self.field_keys(tp_only)
+            keys = self.field_keys(tp_only, step)
             box = self.k.get("box")
             with cf.ThreadPoolExecutor(self.k.get("parallel", 4)) as ex:
                 for key, a in zip(keys, ex.map(lambda k: self._field(run, step, k, box), keys)):
@@ -327,12 +331,13 @@ def save_usage(store, usage: dict) -> None:
     store.put_bytes(usage_key(), json.dumps(usage).encode(), "no-cache")
 
 
-def run_cost(cfg: dict, steps: int) -> tuple[int, float]:
-    """(calls, bytes) estimated for one run, from the config's per-field size."""
+def run_cost(cfg: dict, steps: int, hourly_steps: int = 0) -> tuple[int, float]:
+    """(calls, bytes) estimated for one run, from the config's per-field size (hourly steps: surface fields only)."""
     n = 0
     for g in cfg["data"]["groups"]:
         n += len(g["param"]) * len(g.get("levelist") or [0])
-    return steps * n, steps * n * cfg["kma"]["est_bytes_per_field"]
+    calls = steps * n + hourly_steps * len((cfg["data"].get("hourly") or {}).get("params", []))
+    return calls, calls * cfg["kma"]["est_bytes_per_field"]
 
 
 def is_kma(cfg: dict) -> bool:

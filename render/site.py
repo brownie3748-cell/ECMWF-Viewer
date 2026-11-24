@@ -23,8 +23,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 def run_entry(meta: dict) -> dict:
     """The part of a run's meta.json that goes into the manifest."""
-    return {"run": meta["run"], "steps": meta["steps"], "wpsh": meta["wpsh"],
-            "rv": meta.get("render_version", 1), "bytes": meta.get("bytes", 0)}
+    e = {"run": meta["run"], "steps": meta["steps"], "wpsh": meta["wpsh"],
+         "rv": meta.get("render_version", 1), "bytes": meta.get("bytes", 0)}
+    if meta.get("hourly_steps"):
+        e["hourly_steps"] = meta["hourly_steps"]     # surface-only steps; old apps ignore them
+    return e
 
 
 def runs_from_manifest(m: dict | None) -> dict[str, dict[str, dict]]:
@@ -52,7 +55,8 @@ def manifest(cfg: dict, runs: dict[str, dict[str, dict]]) -> dict:
             "label": mc["model_label_short"],
             "title": mc["style"]["model_label"],
             "attribution": mc["style"]["credit"],
-            "charts": [dict(c) for c in mc["site"]["charts"]],
+            "charts": [dict(c, hourly=True) if c["id"] in (mc["data"].get("hourly") or {}).get("charts", [])
+                       else dict(c) for c in mc["site"]["charts"]],
             "runs": rs,
             "latest": rs[-1]["run"] if rs else None,
         })
