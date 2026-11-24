@@ -39,9 +39,28 @@ def published_steps(run_hour: int, cfg: dict) -> list[int]:
     return out + [s for s in range(switch + long_every, max_step + 1, long_every) if s % long_every == 0]
 
 
-def tp_window(step: int, cfg: dict) -> int:
+def hourly_steps(run_hour: int, cfg: dict) -> list[int]:
+    """Extra surface-only steps between the published steps (data.hourly, KIM regional); [] for other models."""
+    h = cfg["data"].get("hourly")
+    if not h:
+        return []
+    main = set(published_steps(run_hour, cfg))
     d = cfg["data"]
-    return d["tp_short_accum_h"] if step <= d["tp_switch_h"] else d["tp_long_accum_h"]
+    max_step = d["max_step_main"] if run_hour in (0, 12) else d["max_step_short"]
+    return [s for s in range(1, min(h["until_h"], max_step) + 1) if s not in main]
+
+
+def is_hourly_only(step: int, cfg: dict) -> bool:
+    """A surface-only step (data.hourly): only data.hourly.params are fetched, only its charts drawn."""
+    h = cfg["data"].get("hourly")
+    return bool(h) and 0 < step <= h["until_h"] and step % cfg["data"]["publish_every_h"] != 0
+
+
+def tp_window(step: int, cfg: dict) -> int:
+    """Precipitation window ending at step (h); shorter at the first hourly steps (+1 h, +2 h)."""
+    d = cfg["data"]
+    w = d["tp_short_accum_h"] if step <= d["tp_switch_h"] else d["tp_long_accum_h"]
+    return min(w, step) if step > 0 else w
 
 
 def fetch_step(

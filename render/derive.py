@@ -157,6 +157,47 @@ def relative_humidity(q: np.ndarray, t_k: np.ndarray, p_hpa: float) -> np.ndarra
     return (100.0 * e / es).astype(np.float32)
 
 
+def _es_ifs_pa(t_k):
+    """Saturation vapour pressure (Pa), IFS mixed phase (water > 0 C, ice < -23 C, quadratic blend)."""
+    t0, tice = 273.16, 250.16
+    es_w = 611.21 * np.exp(17.502 * (t_k - t0) / (t_k - 32.19))
+    es_i = 611.21 * np.exp(22.587 * (t_k - t0) / (t_k + 0.7))
+    alpha = np.clip((t_k - tice) / (t0 - tice), 0.0, 1.0) ** 2
+    return alpha * es_w + (1.0 - alpha) * es_i
+
+
+def specific_humidity(rh_pct: np.ndarray, t_k: np.ndarray, p_hpa: float) -> np.ndarray:
+    """Specific humidity (kg/kg) from relative humidity (%) on a pressure level; inverse of relative_humidity."""
+    e = np.clip(rh_pct, 0.0, 100.0) / 100.0 * _es_ifs_pa(t_k)
+    p = p_hpa * 100.0
+    return (0.622 * e / (p - 0.378 * e)).astype(np.float32)
+
+
+def ensure_q(F, level: int) -> None:
+    """Add ("q", level) from r and t when the model gives only relative humidity (IFS / KIM 700 hPa)."""
+    if ("q", level) not in F.data and ("r", level) in F.data and ("t", level) in F.data:
+        F.data[("q", level)] = specific_humidity(F.data[("r", level)], F.data[("t", level)], level)
+
+
+def theta_e(t_k: np.ndarray, q: np.ndarray, p_hpa: float) -> np.ndarray:
+    """Equivalent potential temperature (K), Bolton (1980) eq. 43, with T_L from eq. 21 (vapour pressure)."""
+    r = np.maximum(q, 1e-7) / (1.0 - q)                 # mixing ratio kg/kg
+    e = p_hpa * r / (0.622 + r)                          # hPa
+    tl = 2840.0 / (3.5 * np.log(t_k) - np.log(e) - 4.805) + 55.0
+    rg = r * 1000.0
+    th = t_k * (1000.0 / p_hpa) ** (0.2854 * (1.0 - 0.28e-3 * rg))
+    return (th * np.exp((3.376 / tl - 0.00254) * rg * (1.0 + 0.81e-3 * rg))).astype(np.float32)
+
+
+def relative_vorticity(u, v, lat, lon):
+    """Relative vorticity (s^-1) on a regular lat/lon grid: 1/(a cos(phi)) [dv/dlambda - d(u cos(phi))/dphi]."""
+    phi = np.deg2rad(lat)[:, None]
+    cos = np.cos(phi)
+    dv_dlam = np.gradient(v, np.deg2rad(lon), axis=1)
+    du_dphi = np.gradient(u * cos, np.deg2rad(lat), axis=0)
+    return (dv_dlam - du_dphi) / (EARTH_RADIUS_M * cos)
+
+
 def ensure_rh(F, level: int) -> None:
     """Add ("r", level) to a grib.Fields from q and t when the model does not provide it."""
     if ("r", level) not in F.data and ("q", level) in F.data and ("t", level) in F.data:

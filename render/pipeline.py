@@ -40,6 +40,9 @@ def chart_jobs(cfg, F, P, run, step):
         "t2m": lambda: plot.chart_t2m(cfg, F, run, step),
         "mfc925": lambda: plot.chart_mfc(cfg, F, 925, run, step)[0],
         "mfc850": lambda: plot.chart_mfc(cfg, F, 850, run, step)[0],
+        "ept925": lambda: plot.chart_ept(cfg, F, 925, run, step),
+        "ept850": lambda: plot.chart_ept(cfg, F, 850, run, step),
+        "ept700": lambda: plot.chart_ept(cfg, F, 700, run, step),
         "gz500_wide": lambda: plot.chart_gz(cfg, F, 500, run, step, domain="wide"),
     }
     if P is not None and ("2d", 0) in F.data:
@@ -61,6 +64,9 @@ def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None,
     derive.ensure_rh(F, 700)
     sizes = {}
     want = [c["id"] for c in cfg["site"]["charts"]]
+    hourly_only = fetch.is_hourly_only(step, cfg)
+    if hourly_only:                                    # surface-only step: surface charts, no WPSH
+        want = [c for c in want if c in cfg["data"]["hourly"]["charts"]]
 
     def save(chart_id, frame):
         data = encode.encode(frame.png_bytes(), fmt, cfg["output"]["png8_colors"], cfg["output"]["webp_quality"])
@@ -73,13 +79,15 @@ def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None,
     for cid in want:
         if cid in jobs:
             save(cid, jobs[cid]())
-    z = cfg["site"].get("zoom")
+    z = None if hourly_only else cfg["site"].get("zoom")
     if z:                                               # Korea zoom: same charts on the zoom map, prefixed ids
         zcfg = dict(cfg, domains=dict(cfg["domains"], default=cfg["domains"][z["domain"]]))
         zjobs = chart_jobs(zcfg, F, P, run, step)
         for cid in z["charts"]:
             save(z["prefix"] + cid, zjobs[cid]())
-    fr, res = plot.overlay_wpsh(cfg, F, run, step)     # also gives H / H-50 for the manifest
+    res = {}
+    if not hourly_only:
+        fr, res = plot.overlay_wpsh(cfg, F, run, step)     # also gives H / H-50 for the manifest
     if "wpsh500" in want:
         save("wpsh500", fr)
     if "wpsh500_wide" in want:
@@ -112,7 +120,8 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
     rdir.mkdir(parents=True)
     gdir = work / "grib" / model / run_s
     gdir.mkdir(parents=True, exist_ok=True)
-    steps = steps if steps is not None else fetch.published_steps(run.hour, cfg)
+    steps = steps if steps is not None else sorted(fetch.published_steps(run.hour, cfg)
+                                                   + fetch.hourly_steps(run.hour, cfg))
     t0 = time.monotonic()
     results, dl_seconds, srcs = [dict(r) for _, r in sorted(done.items())], 0.0, set()
     if done:
@@ -192,12 +201,16 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
     shutil.rmtree(gdir, ignore_errors=True)
     results.sort(key=lambda r: r["step"])
     wpsh = None
+    hourly = [r["step"] for r in results if fetch.is_hourly_only(r["step"], cfg)]
+    results = [r for r in results if r["step"] not in hourly] + [r for r in results if r["step"] in hourly]
+    main = results[:len(results) - len(hourly)]
     if run.hour in cfg["wpsh"]["run_hours"]:
-        wpsh = {str(r["step"]): r["wpsh"] for r in results}
+        wpsh = {str(r["step"]): r["wpsh"] for r in main}
     meta = {
         "model": model,
         "run": run_s,
-        "steps": [r["step"] for r in results],
+        "steps": [r["step"] for r in main],
+        "hourly_steps": hourly,             # surface-only steps (data.hourly): only the hourly charts exist
         "missing_steps": missing,
         "wpsh": wpsh,
         "render_version": cfg["site"]["render_version"],

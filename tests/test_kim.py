@@ -118,7 +118,7 @@ class Config(unittest.TestCase):
         self.assertEqual(kim.run_cost(g, 41)[0], 1230)
         # one day of 00/12Z KIM regional (3-hourly, 29 steps) stays inside the guard
         calls = 2 * kim.run_cost(r, 29)[0]
-        nbytes = 2 * kim.run_cost(r, 29)[1]
+        nbytes = 2 * kim.run_cost(r, 29, 56)[1]              # with the hourly surface steps
         self.assertLess(calls, CFG["kma_quota"]["max_calls_per_day"])
         self.assertLess(nbytes, CFG["kma_quota"]["max_bytes_per_day"])
 

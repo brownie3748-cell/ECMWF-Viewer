@@ -415,14 +415,17 @@ def temp_colormap(cfg):
     return cmap, mcolors.Normalize(vmin=lo, vmax=hi)
 
 
-def temp_style_for(cfg, level):
+def temp_style_for(cfg, level, domain="default"):
     c = cfg["charts"]["gz"]
+    by_dom = c.get("temp_style_by_domain", {}).get(domain, {})
+    if str(level) in by_dom:
+        return by_dom[str(level)]
     return c.get("temp_style_by_level", {}).get(str(level), c["temp_style"])
 
 
 def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
     c = cfg["charts"]["gz"]
-    temp_style = temp_style or temp_style_for(cfg, level)
+    temp_style = temp_style or temp_style_for(cfg, level, domain)
     lvkey = str(level)
     wind_fill = level in c.get("wind_fill", {}).get("levels", [])
     fr = Frame(cfg, domain, strong_coast=(temp_style == "C" or wind_fill))
@@ -461,6 +464,23 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
             cs = fr.ax.contour(S.lon, S.lat, t, levels=_levels(t, ti), colors=ia["color"], linewidths=ia["width"],
                                linestyles="--", transform=PC, zorder=2)
             _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=ia["color"], inline_spacing=2)
+    elif temp_style == "V":                      # 500 hPa (KMA style): relative vorticity shading, red dashed isotherms
+        vc = c["vorticity"]
+        d = fr.dom
+        B = F.crop(d["lat_min"] - 3, d["lat_max"] + 3, d["lon_min"] - 3, d["lon_max"] + 3)
+        zeta = derive.relative_vorticity(B[("u", level)], B[("v", level)], B.lat, B.lon) * vc["scale"]
+        if vc.get("smooth_sigma", 0) > 0:
+            zeta = derive.nan_gaussian(zeta, vc["smooth_sigma"])
+        vl = vc["levels"]
+        cmap = mcolors.ListedColormap(vc["colors"][:-1])
+        cmap.set_over(vc["colors"][-1])
+        norm = mcolors.BoundaryNorm(vl, cmap.N)
+        cf = _contourf(fr, B, np.where(zeta >= vl[0], zeta, np.nan), levels=vl, cmap=cmap, norm=norm,
+                       extend="max", transform=PC, zorder=1)
+        fr.colorbar(cf, label=vc["unit"], ticks=vl)
+        cs = fr.ax.contour(S.lon, S.lat, t, levels=_levels(t, ti), colors=vc["isotherm_color"], linewidths=0.9,
+                           linestyles="--", transform=PC, zorder=4)
+        _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=vc["isotherm_color"])
     else:
         iso_col = "#d00000"
         if wind_fill:
@@ -512,6 +532,7 @@ def chart_gz(cfg, F, level, run, step, temp_style=None, domain="default"):
             fr.ax.text(lo, la - hc["label_offset_deg"], f"{val:.0f}", color="k", fontsize=10, ha="center",
                        va="top", transform=PC, zorder=7, path_effects=halo)
     ttl = (f"{level}hPa Height (gpm), Temperature (C), Wind Speed (kt)" if wind_fill
+           else c["vorticity"]["title"].format(level=level) if temp_style == "V"
            else f"{level}hPa Geopotential Height (gpm), Temperature (C), Wind (kt)")
     fr.header(ttl, run, step)
     return fr
@@ -563,6 +584,40 @@ def chart_rh700(cfg, F, run, step):
                        colors="k", linewidths=1.0, transform=PC, zorder=5)
     _clabel(fr, cs, "a", fmt="%d", fontsize=8)
     fr.header(c["title"], run, step)
+    return fr
+
+
+def chart_ept(cfg, F, level, run, step):
+    """Equivalent potential temperature (K, Bolton 1980) shading with labelled lines, height and wind."""
+    c = cfg["charts"]["ept"]
+    fr = Frame(cfg, "default", strong_coast=True)
+    S = _sub(F, fr)
+    derive.ensure_q(S, level)
+    te = derive.theta_e(S[("t", level)], S[("q", level)], level)
+    if c.get("smooth_sigma", 0) > 0:
+        te = derive.nan_gaussian(te, c["smooth_sigma"])
+    gh = S[("gh", level)].copy()
+    u = S[("u", level)] * MS_TO_KT
+    v = S[("v", level)] * MS_TO_KT
+    if level in cfg["charts"]["gz"]["mask_underground"]:
+        m = _underground(S, level)
+        for a in (te, gh, u, v):
+            a[m] = np.nan
+    lo, hi = c["range"][str(level)]
+    lv = np.arange(lo, hi + c["step"] / 2, c["step"])
+    cf = _contourf(fr, S, te, levels=lv, cmap=c["cmap"], extend="both", transform=PC, zorder=1)
+    fr.colorbar(cf, label="K", ticks=[x for x in lv if x % (2 * c["line_interval"]) == 0])
+    cs = fr.ax.contour(S.lon, S.lat, te, levels=_levels(te, c["line_interval"]), colors=c["line_color"],
+                       linewidths=0.5, transform=PC, zorder=2)
+    _clabel(fr, cs, "b", fmt="%d", fontsize=7, colors=c["line_color"], inline_spacing=2)
+    cs = fr.ax.contour(S.lon, S.lat, gh, levels=_levels(gh, cfg["charts"]["gz"]["gh_interval"][str(level)]),
+                       colors="k", linewidths=1.0, transform=PC, zorder=5)
+    _clabel(fr, cs, "a", fmt="%d", fontsize=8)
+    n = fr.dom["barb_every"]
+    sl = (slice(None, None, n), slice(None, None, n))
+    fr.ax.barbs(S.lon[::n], S.lat[::n], u[sl], v[sl], length=5, linewidth=0.5, color="#1a1a1a", alpha=0.7,
+                transform=PC, zorder=6)
+    fr.header(c["title"].format(level=level), run, step)
     return fr
 
 

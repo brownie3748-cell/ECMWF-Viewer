@@ -179,12 +179,25 @@ t_interval = { 925 = 3, 850 = 3, 700 = 3, 500 = 3, 300 = 3, 200 = 3 }
 t_fill_range = { 925 = [-30, 30], 850 = [-36, 27], 700 = [-42, 18], 500 = [-51, -3], 300 = [-66, -30], 200 = [-72, -42] }
 temp_style = "B"                # default: A = colour fill + colour bar, B = dashed isotherms
 # C = fixed rainbow fill (same colour for the same temperature at every level) + white isotherms
-temp_style_by_level = { 925 = "C", 850 = "C", 700 = "C", 500 = "A" }
+temp_style_by_level = { 925 = "C", 850 = "C", 700 = "C", 500 = "V" }   # V = vorticity shading + red dashed isotherms
+temp_style_by_domain = { wide = { 500 = "A" } }   # the 500 hPa wide map keeps the temperature fill
 gz500_variants = []             # Stage 0 A/B review done
 t_cmap = "RdYlBu_r"
 isotherm_a = { color = "#5a1010", width = 0.6 }   # style A: thin dashed labelled isotherms (t_interval)
 mask_underground = [925, 850]
 high_centres = { domains = ["wide"], levels = [500], window_deg = 5.0, edge_exclude_deg = 2.0, label_offset_deg = 1.2 }   # H + gpm at highs (owner 2026-11-23, KMA style)
+
+[charts.gz.vorticity]
+# 500 hPa (style V, owner 2026-11-24 after the KMA 500 hPa vorticity chart): relative vorticity in E-5/s, positive
+# values shaded, redder for larger values, top of the scale 20; temperature as red dashed isotherms.
+title = "{level}hPa GPH (gpm), Rel. Vorticity (E-5/s), Temperature (C), Wind (kt)"
+scale = 1e5
+unit = "E-5/s"
+levels = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+colors = ["#fff5c2", "#ffe38a", "#ffc95c", "#ffa63d", "#ff7f2a", "#f55420", "#e0301c", "#c01818", "#951010",
+          "#6b0808"]
+smooth_sigma = 1.0              # grid points (0.25 deg); finer grids override
+isotherm_color = "#e00000"
 
 [charts.gz.wind_fill]
 # Wind-speed shading for upper levels; isotherms switch to dark grey dashed lines there.
@@ -239,6 +252,17 @@ anchors = [
   [100, "#00443c"],
 ]
 
+[charts.ept]
+# Equivalent potential temperature (Bolton 1980) at 925 / 850 / 700 hPa (owner 2026-11-24). From t and q (IFS and
+# KIM 700 hPa: q from r), so no extra download.
+title = "{level}hPa Equivalent Potential Temperature (K), GPH (gpm), Wind (kt)"
+range = { 925 = [255, 363], 850 = [255, 360], 700 = [264, 354] }   # winter values reach about 260 K (measured 2026112400 +24 h)
+step = 3
+line_interval = 3
+line_color = "#333333"
+cmap = "turbo"
+smooth_sigma = 0.0
+
 [charts.mfc]
 title = "{level}hPa Moisture Flux(m/s) and Convergence(E-8/s)"
 scale = 1e8                     # displayed value = div(qV) * scale (E-8/s, decided after M5)
@@ -274,7 +298,7 @@ process_order = ["ifs", "aifs", "kimg", "kimr", "ifs01"]   # within a cycle: lig
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
-render_version = 14             # 14: H + gpm at 500 hPa highs on the wide map; 13: WPSH search to 170E + secondary centre; 12: KMA rain cut-off for snowfall; 11: snow area on msl, snow chart; bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 15             # 15: 500 hPa vorticity + red dashed isotherms, theta-e charts; 14: H + gpm at 500 hPa highs on the wide map; 13: WPSH search to 170E + secondary centre; 12: KMA rain cut-off for snowfall; 11: snow area on msl, snow chart; bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
@@ -282,10 +306,13 @@ charts = [
   { id = "t2m", title = "2 m temperature", domain = "default" },
   { id = "gz925", title = "925hPa", level = 925, domain = "default" },
   { id = "mfc925", title = "925hPa MFC", level = 925, domain = "default" },
+  { id = "ept925", title = "925hPa theta-e", level = 925, domain = "default" },
   { id = "gz850", title = "850hPa", level = 850, domain = "default" },
   { id = "mfc850", title = "850hPa MFC", level = 850, domain = "default" },
+  { id = "ept850", title = "850hPa theta-e", level = 850, domain = "default" },
   { id = "gz700", title = "700hPa", level = 700, domain = "default" },
   { id = "rh700", title = "700hPa RH", level = 700, domain = "default" },
+  { id = "ept700", title = "700hPa theta-e", level = 700, domain = "default" },
   { id = "gz500", title = "500hPa", level = 500, domain = "default" },
   { id = "wpsh500", title = "WPSH line", level = 500, domain = "default", overlay_of = "gz500" },
   { id = "gz500_wide", title = "500hPa wide", level = 500, domain = "wide" },
@@ -306,7 +333,7 @@ override = {}
 [[models]]
 id = "ifs01"
 label = "IFS 0.1°"
-charts = ["msl", "snow", "t2m", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700", "gz500", "wpsh500"]
+charts = ["msl", "snow", "t2m", "gz925", "mfc925", "ept925", "gz850", "mfc850", "ept850", "gz700", "rh700", "ept700", "gz500", "wpsh500"]
 [models.override.data]
 resolution = "0p1"
 grid_deg = 0.1
@@ -336,6 +363,10 @@ vector_every = 8
 smooth_sigma = 4.0              # 0.4 deg: 0.1 deg divergence is much noisier than 0.25 deg (smoke render)
 [models.override.charts.t2m]
 smooth_sigma = 2.5
+[models.override.charts.gz.vorticity]
+smooth_sigma = 2.5              # same 0.25 deg scale as the 0.25 deg models
+[models.override.charts.ept]
+smooth_sigma = 1.5
 [models.override.charts.msl]
 smooth_sigma = 2.0              # 0.2 deg gaussian on MSLP before contouring (terrain noise over land)
 [models.override.style]
@@ -351,7 +382,7 @@ tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
 max_step_short = 240            # 06/18Z too: AIFS publishes 0-360 h for every run (measured 2026-11-21 06Z: 61 steps)
 [models.override.site]
-render_version = 15             # 15: H + gpm at 500 hPa highs on the wide map; 14: WPSH search to 170E + secondary centre; 13: KMA rain cut-off for snowfall; 12: snow area on msl, snow chart; 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
+render_version = 16             # 16: 500 hPa vorticity, theta-e charts; 15: H + gpm at 500 hPa highs on the wide map; 14: WPSH search to 170E + secondary centre; 13: KMA rain cut-off for snowfall; 12: snow area on msl, snow chart; 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [1000]
@@ -432,7 +463,7 @@ credit = "Source: KMA API Hub, KIM global model (KOGL Type 1, Korea Meteorologic
 [[models]]
 id = "kimr"
 label = "KIM 한반도"
-charts = ["gz500", "msl", "snow", "t2m", "gz925", "mfc925", "gz850", "mfc850", "gz700", "rh700"]   # owner 2026-11-24: Korea map only
+charts = ["gz500", "msl", "snow", "t2m", "gz925", "mfc925", "ept925", "gz850", "mfc850", "ept850", "gz700", "rh700", "ept700"]   # owner 2026-11-24: Korea map only
 [models.override.data]
 source = "kma"
 run_hours = [0, 12]
@@ -443,6 +474,10 @@ publish_every_h = 3              # owner 2026-11-15: 3-hourly
 publish_every_h_long = 3
 tp_short_accum_h = 3
 tp_long_accum_h = 3
+# Owner 2026-11-24: surface charts every hour. In between the 3-hourly steps only these surface fields are fetched
+# (msl and t2m charts: MSLP, precipitation of the last 3 h, snow area, 2 m temperature, 10 m wind; sp for the
+# terrain smoothing). 56 steps x 7 fields = 392 more calls per run.
+hourly = { until_h = 84, params = ["msl", "sp", "tp", "2t", "10u", "10v", "sf"], charts = ["msl", "t2m"] }
 read_region = { lat_min = 29.5, lat_max = 44.5, lon_min = 117.0, lon_max = 135.0 }
 [[models.override.data.groups]]
 levtype = "sfc"
@@ -475,7 +510,7 @@ assume_complete_after_h = 12              # older runs are complete: no probe re
 max_fetch_age_h = 12                      # no backfill: only runs younger than 12 h are fetched (runs already stored stay)
 resume_extra_h = 12                       # a partly rendered run (partial.json) may still be finished up to 12 h later
 parallel = 2                              # 4 parallel requests got 504 Gateway Time-out (CI); M8 serial requests were fine
-est_bytes_per_field = 1_000_000           # estimated: area ratio to the measured 0.6 MB cut (whole field 2.65 MB)
+est_bytes_per_field = 1_600_000           # measured 2026112400: about 1.22 GB for 783 fields (1.56 MB each)
 timeout_s = 30                            # 15 s cut 339 of 1088 whole-field requests (31 %, run 2026111312): each a full re-download
 grid = { lat_min = 29.5, lat_max = 44.5, lon_min = 117.0, lon_max = 135.0, step = 0.05 }
 vars = { gh = "GPH", t = "T", u = "U", v = "V", q = "QVAPOR", r = "RH", msl = "MSLP", sp = "PSFC", tp = "RAIN", "2t" = "T2", "10u" = "U10", "10v" = "V10", r2 = "RH2", sf = "SNOW" }   # RH2/SNOW measured 2026-11-23 (measure run 45080956733)
@@ -487,6 +522,10 @@ barb_every = 12
 vector_every = 10
 [models.override.charts.t2m]
 smooth_sigma = 5.0
+[models.override.charts.gz.vorticity]
+smooth_sigma = 5.0
+[models.override.charts.ept]
+smooth_sigma = 3.0
 [models.override.charts.msl]
 smooth_sigma = 4.0
 [models.override.charts.mfc]
