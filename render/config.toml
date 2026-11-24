@@ -256,10 +256,11 @@ anchors = [
 # Equivalent potential temperature (Bolton 1980) at 925 / 850 / 700 hPa (owner 2026-11-24). From t and q (IFS and
 # KIM 700 hPa: q from r), so no extra download.
 title = "{level}hPa Equivalent Potential Temperature (K), GPH (gpm), Wind (kt)"
-# Owner 2026-11-24: below white_below no shading (grey lines only); 333 K and above (warm, moist air) shaded from
-# yellow-green to red with a red boundary line at 333 K.
-white_below = 260
-top = { 925 = 363, 850 = 360, 700 = 354 }
+# Owner 2026-11-24 (second pass, after the KMA GDAPS 700 hPa theta-e chart): below 279 K white (grey lines only);
+# 3 K bands, the colour family changing every 18 K from low to high: pink -> purple (279-297), purple -> blue
+# (297-315), blue -> yellow-green (315-333); from 333 K (red boundary line) yellow getting redder; above 360 K black.
+white_below = 279
+top = 360
 step = 3
 line_interval = 3
 line_color = "#333333"
@@ -267,12 +268,13 @@ line_color_cold = "#9a9a9a"
 bound = 333
 bound_color = "#e00000"
 bound_width = 1.6
-anchors = [
-  [260, "#5b3a9e"], [270, "#3d5bc4"], [280, "#3c8fd8"], [290, "#58b9d6"], [300, "#7fd0c0"], [310, "#a7dcc0"],
-  [320, "#c9e6cf"], [332.9, "#e4f1e4"],
-  [333, "#8fd84a"], [336, "#bde63c"], [339, "#e6ec36"], [342, "#ffd93a"], [345, "#ffb532"], [348, "#ff8f2a"],
-  [351, "#f76522"], [354, "#e23c1c"], [357, "#c01a16"], [360, "#930f10"], [363, "#6a0808"],   # one step per 3 K band
+colors = [
+  "#f9cde8", "#f2b3df", "#e79ad6", "#d883cd", "#c66ec4", "#b05bbb",     # 279-297 pink -> purple
+  "#9157c8", "#7765d3", "#5f78dc", "#4a8de2", "#3aa2e4", "#33b5e0",     # 297-315 purple -> blue
+  "#43c4cc", "#5bceb0", "#76d794", "#93de78", "#aee460", "#c6e94e",     # 315-333 blue -> yellow-green
+  "#fff27a", "#ffe24c", "#ffc93a", "#ffab30", "#ff8c28", "#f86a22", "#e8481c", "#cf2a18", "#a81414",  # 333-360
 ]
+over_color = "#000000"          # above 360 K
 smooth_sigma = 0.0
 
 [charts.mfc]
@@ -310,7 +312,7 @@ process_order = ["ifs", "aifs", "kimg", "kimr", "ifs01"]   # within a cycle: lig
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
-render_version = 15             # 15: 500 hPa vorticity + red dashed isotherms, theta-e charts; 14: H + gpm at 500 hPa highs on the wide map; 13: WPSH search to 170E + secondary centre; 12: KMA rain cut-off for snowfall; 11: snow area on msl, snow chart; bump when chart content changes: runs rendered with an older version are re-rendered
+render_version = 16             # 16: theta-e palette (279 K white, 18 K colour families, black > 360 K); 15: 500 hPa vorticity + red dashed isotherms, theta-e charts; 14: H + gpm at 500 hPa highs on the wide map; 13: WPSH search to 170E + secondary centre; 12: KMA rain cut-off for snowfall; 11: snow area on msl, snow chart; bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
 charts = [
   { id = "msl", title = "MSLP + precipitation", domain = "default" },
@@ -394,7 +396,7 @@ tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
 max_step_short = 240            # 06/18Z too: AIFS publishes 0-360 h for every run (measured 2026-11-21 06Z: 61 steps)
 [models.override.site]
-render_version = 16             # 16: 500 hPa vorticity, theta-e charts; 15: H + gpm at 500 hPa highs on the wide map; 14: WPSH search to 170E + secondary centre; 13: KMA rain cut-off for snowfall; 12: snow area on msl, snow chart; 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
+render_version = 17             # 17: theta-e palette; 16: 500 hPa vorticity, theta-e charts; 15: H + gpm at 500 hPa highs on the wide map; 14: WPSH search to 170E + secondary centre; 13: KMA rain cut-off for snowfall; 12: snow area on msl, snow chart; 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
 [[models.override.data.groups]]
 levtype = "pl"
 levelist = [1000]
