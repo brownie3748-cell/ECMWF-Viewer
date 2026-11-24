@@ -160,11 +160,13 @@ class KimSource:
 
     def _charge(self, calls: int, nbytes: int) -> None:
         with self.lock:
+            roll_usage(self.usage)
             self.usage["calls"] += calls
             self.usage["bytes"] += nbytes
 
     def check_budget(self, calls: int, nbytes: float) -> None:
         q = self.cfg["kma_quota"]
+        roll_usage(self.usage)
         if self.usage["calls"] + calls > q["max_calls_per_day"] or self.usage["bytes"] + nbytes > q["max_bytes_per_day"]:
             raise QuotaError(f"KMA API Hub daily budget: used {self.usage['calls']} calls / "
                              f"{self.usage['bytes'] / 1e9:.2f} GB, next needs about {calls} calls / "
@@ -318,17 +320,36 @@ def usage_key(now: dt.datetime | None = None) -> str:
     return f"_ops/kma-{now.astimezone(KST):%Y-%m-%d}.json"
 
 
-def new_usage() -> dict:
-    return {"calls": 0, "bytes": 0}
+def kst_day(now: dt.datetime | None = None) -> str:
+    return f"{(now or dt.datetime.now(KST)).astimezone(KST):%Y-%m-%d}"
 
 
-def load_usage(store) -> dict:
-    u = store.get_json(usage_key())
-    return u if u else new_usage()
+def new_usage(now: dt.datetime | None = None) -> dict:
+    return {"day": kst_day(now), "calls": 0, "bytes": 0}
+
+
+def roll_usage(usage: dict, now: dt.datetime | None = None) -> None:
+    """Start a new count when the KST day has changed (the hub resets at KST midnight). 2026-11-25: a job that
+    loaded the 24th's count before midnight saved it as the 25th's, and the guard then refused the 2026112412 run."""
+    day = kst_day(now)
+    if usage.get("day") != day:
+        probes = usage.get("probes", {})
+        usage.clear()
+        usage.update(new_usage(now), probes=probes)
+
+
+def load_usage(store, now: dt.datetime | None = None) -> dict:
+    u = store.get_json(usage_key(now))
+    if not u or u.get("day") != kst_day(now):
+        # none yet, or a file written before counts carried their day (it may hold the previous day's count,
+        # as on 2026-11-25): start from zero, keeping the probe times
+        return new_usage(now) | ({"probes": u["probes"]} if u and "probes" in u else {})
+    return u
 
 
 def save_usage(store, usage: dict) -> None:
-    store.put_bytes(usage_key(), json.dumps(usage).encode(), "no-cache")
+    roll_usage(usage)
+    store.put_bytes(f"_ops/kma-{usage['day']}.json", json.dumps(usage).encode(), "no-cache")
 
 
 def run_cost(cfg: dict, steps: int, hourly_steps: int = 0) -> tuple[int, float]:

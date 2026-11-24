@@ -255,3 +255,15 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   before 0.8.0 ignore both and show the 3-hourly steps only.
 - Cost (estimated from 1.22 GB measured for 2026112400 = 1.56 MB per field): about 1.18k calls and 1.83 GB per KIM run,
   two runs about 3.7 GB per KST day (guard 4.5 GB). R2: three more charts per step, about 150 KB each (local smoke render).
+
+## KMA daily count rollover fix, vorticity on the 500 hPa wide map (2026-11-25)
+
+- 2026112412 KIM was refused by the guard ("used 2542 calls / 3.02 GB, next needs about 1175 calls / 1.88 GB",
+  publish 2026-11-24 21:01 UTC). 3.02 GB was the 24th's (KST) count: a job that loaded it before KST midnight saved
+  it under the 25th's key, so the new day started at 3.02 GB. The count now carries its KST day; it restarts at
+  KST midnight (also inside a running job), and a file without a day is not trusted (count from zero, probe times kept).
+- Correction: the `probes` values in `_ops/kma-*.json` are probe times (Unix seconds), not byte counts. The earlier
+  "1.22 GB for 2026112400" was read from them and is wrong; that run's real cost is not separately known (the 24th's
+  3.02 GB also holds the whole-domain 2026112312 run). `est_bytes_per_field` 1.6 MB stays as a conservative value.
+- 500 hPa wide map: relative vorticity and red dashed isotherms like the default map (owner). render_version 17
+  (AIFS 18).
