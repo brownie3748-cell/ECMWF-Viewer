@@ -270,8 +270,10 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
 
 ## AIFS-ENS plume (owner 2026-11-25)
 
-- Model `aifsens` ("AIFS-ENS"): one graph per run, `plume_seoul`: every member's 850 hPa and 2 m temperature at
-  Seoul (37.57N 126.97E, bilinear), control blue, mean black, 10-90 % band, 0 C and -8 C (850 hPa) guide lines.
+- Model `aifsens` ("AIFS-ENS"): one graph per point and run, `plume_<id>`: every member's 850 hPa and 2 m temperature
+  at Seoul, Cheongju, Daejeon, Gangneung, Daegu, Gwangju, Busan and Jeju (`ens.points`, bilinear), control blue, mean
+  black, 10-90 % band, 0 C line and a fainter -8 C (850 hPa) line. All points come from the same download (8 images,
+  about 1 MB per run; 198 s for run 2026112418 from the build sandbox, measured).
 - Data (measured 2026-11-24/25): `aifs-ens/0p25/enfo`, control `cf` + 50 members `pf`, steps 0-360 h every 6 h for
   00/06/12/18Z; final step on the Google mirror about run + 6.3 h; Azure answers 409. Only t850 and 2t are fetched
   with HTTP range requests from each step's index (about 0.3 MB per member and field, about 30 MB per step, about

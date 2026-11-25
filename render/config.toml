@@ -334,6 +334,13 @@ charts = [
   { id = "gz300", title = "300hPa", level = 300, domain = "default" },
   { id = "gz200", title = "200hPa", level = 200, domain = "default" },
   { id = "plume_seoul", title = "Seoul T850 / T2m plume", domain = "graph" },
+  { id = "plume_cheongju", title = "Cheongju T850 / T2m plume", domain = "graph" },
+  { id = "plume_daejeon", title = "Daejeon T850 / T2m plume", domain = "graph" },
+  { id = "plume_gangneung", title = "Gangneung T850 / T2m plume", domain = "graph" },
+  { id = "plume_daegu", title = "Daegu T850 / T2m plume", domain = "graph" },
+  { id = "plume_gwangju", title = "Gwangju T850 / T2m plume", domain = "graph" },
+  { id = "plume_busan", title = "Busan T850 / T2m plume", domain = "graph" },
+  { id = "plume_jeju", title = "Jeju T850 / T2m plume", domain = "graph" },
 ]
 
 # ---------------------------------------------------------------------------------------------
@@ -424,22 +431,31 @@ credit = "Adapted from 'ECMWF AIFS Single Forecast Data' by ECMWF, CC BY 4.0 (ht
 [[models]]
 id = "aifsens"
 label = "AIFS-ENS"
-# Owner 2026-11-25: every member's 850 hPa and 2 m temperature as a graph (plume). One image per run, Seoul.
-charts = ["plume_seoul"]
+# Owner 2026-11-25: every member's 850 hPa and 2 m temperature as a graph (plume). One image per point and run.
+charts = ["plume_seoul", "plume_cheongju", "plume_daejeon", "plume_gangneung", "plume_daegu", "plume_gwangju", "plume_busan", "plume_jeju"]
 [models.override.data]
 source = "ens"
 model = "aifs-ens"
 run_hours = [0, 6, 12, 18]        # all four runs go to +360 h (measured 2026-11-24)
 [models.override.ens]
-name = "Seoul"
-lat = 37.57
-lon = 126.97
+# Points (ASOS station coordinates, rounded): one plume chart "plume_<id>" each; the download is the same for any
+# number of points. Coastal points (Gangneung, Busan, Jeju) are bilinear on 0.25 deg and may include sea points.
+points = [
+  { id = "seoul", name = "Seoul", lat = 37.57, lon = 126.97 },
+  { id = "cheongju", name = "Cheongju", lat = 36.64, lon = 127.44 },
+  { id = "daejeon", name = "Daejeon", lat = 36.37, lon = 127.37 },
+  { id = "gangneung", name = "Gangneung", lat = 37.75, lon = 128.89 },
+  { id = "daegu", name = "Daegu", lat = 35.88, lon = 128.62 },
+  { id = "gwangju", name = "Gwangju", lat = 35.17, lon = 126.89 },
+  { id = "busan", name = "Busan", lat = 35.1, lon = 129.03 },
+  { id = "jeju", name = "Jeju", lat = 33.51, lon = 126.53 },
+]
 max_step = 360
 every_h = 6
 parallel_steps = 6
 source_order = ["google", "ecmwf"]  # azure answered 409 for aifs-ens (measured)
 title = "{name} 850hPa / 2m Temperature, all members"
-ref_lines = { t850 = [0.0, -8.0], t2m = [0.0] }   # 0 C; -8 C at 850 hPa (rain/snow guide, as on the gz850 chart)
+ref_lines = { t850 = [[0.0, 1.0], [-8.0, 0.4]], t2m = [[0.0, 1.0]] }   # [value C, opacity]: -8 C at 850 hPa fainter (owner)
 [models.override.site]
 render_version = 1
 [models.override.style]

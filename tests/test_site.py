@@ -360,7 +360,10 @@ class AifsEns(unittest.TestCase):
     def test_config(self):
         from render import ens, sources
         e = config.for_model(CFG, "aifsens")
-        self.assertEqual([c["id"] for c in e["site"]["charts"]], ["plume_seoul"])
+        ids = [c["id"] for c in e["site"]["charts"]]
+        self.assertEqual(ids, [f"plume_{p['id']}" for p in e["ens"]["points"]])     # one chart per point
+        for city in ("seoul", "cheongju", "daejeon", "gangneung", "jeju"):
+            self.assertIn(f"plume_{city}", ids)
         self.assertEqual(len(ens.steps(e)), 61)                       # 0-360 h every 6 h (measured)
         self.assertIsInstance(sources.make_sources(e), ens.EnsSource)
         for mid in ("ifs", "aifs"):                                    # map models do not get the graph chart
@@ -381,7 +384,7 @@ class AifsEns(unittest.TestCase):
         e = config.for_model(CFG, "aifsens")
         series = {s: {"t850": {m: -5 + 0.1 * m - 0.01 * s for m in range(51)},
                       "t2m": {m: 3 + 0.1 * m for m in range(51)}} for s in ens.steps(e)}
-        png = ens.plume(e, dt.datetime(2026, 11, 25, 0), series)
+        png = ens.plume(e, dt.datetime(2026, 11, 25, 0), series, "Seoul")
         self.assertEqual(png[:4], b"\x89PNG")
 
     def test_bilinear_grid_from_180w(self):

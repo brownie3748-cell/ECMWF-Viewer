@@ -20,7 +20,7 @@ const CHIPS = [
   ["gz850", "850"], ["mfc850", "850 수분속"], ["ept850", "850 상당온위"],
   ["gz700", "700"], ["rh700", "700 습도"], ["ept700", "700 상당온위"],
   ["gz300", "300"], ["gz200", "200"],
-  ["plume_seoul", "서울 앙상블"],
+  ["plume_seoul", "서울 앙상블"], ["plume_cheongju", "청주 앙상블"], ["plume_daejeon", "대전 앙상블"], ["plume_gangneung", "강릉 앙상블"], ["plume_daegu", "대구 앙상블"], ["plume_gwangju", "광주 앙상블"], ["plume_busan", "부산 앙상블"], ["plume_jeju", "제주 앙상블"],
 ];
 const LABELS = Object.fromEntries(CHIPS);
 

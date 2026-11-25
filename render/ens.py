@@ -86,11 +86,12 @@ class EnsSource:
         return None
 
     def point_step(self, run: dt.datetime, step: int) -> dict:
-        """{field: {member: value (deg C)}} for one step; member 0 = control."""
+        """{point id: {field: {member: value (deg C)}}} for one step; member 0 = control."""
         last = None
+        pts = self.e["points"]
         for src in self.order:
             try:
-                out: dict = {"t850": {}, "t2m": {}}
+                out: dict = {p["id"]: {"t850": {}, "t2m": {}} for p in pts}
                 for typ in ("cf", "pf"):
                     idx = self.session.get(self.url(src, run, step, typ, "index"), timeout=TIMEOUT)
                     idx.raise_for_status()
@@ -115,11 +116,11 @@ class EnsSource:
                         finally:
                             eccodes.codes_release(h)
                         member = int(m.get("number", 0)) if typ == "pf" else 0
-                        out[key][member] = bilinear(vals, g["Ni"], g["Nj"], self.e["lat"], self.e["lon"],
-                                                    g["latitudeOfFirstGridPointInDegrees"],
-                                                    g["longitudeOfFirstGridPointInDegrees"],
-                                                    g["jDirectionIncrementInDegrees"],
-                                                    g["iDirectionIncrementInDegrees"]) - 273.15
+                        for pt in pts:
+                            out[pt["id"]][key][member] = bilinear(
+                                vals, g["Ni"], g["Nj"], pt["lat"], pt["lon"], g["latitudeOfFirstGridPointInDegrees"],
+                                g["longitudeOfFirstGridPointInDegrees"], g["jDirectionIncrementInDegrees"],
+                                g["iDirectionIncrementInDegrees"]) - 273.15
                 return out
             except Exception as e:  # noqa: BLE001
                 last = e
@@ -127,7 +128,7 @@ class EnsSource:
         raise RuntimeError(f"AIFS-ENS step {step} failed on every source: {last!r}")
 
 
-def plume(cfg: dict, run: dt.datetime, series: dict) -> bytes:
+def plume(cfg: dict, run: dt.datetime, series: dict, name: str) -> bytes:
     """Two panels (850 hPa T, 2 m T): every member grey, control blue, mean black, 10-90 % band."""
     e = cfg["ens"]
     st = sorted(series)
@@ -145,8 +146,8 @@ def plume(cfg: dict, run: dt.datetime, series: dict) -> bytes:
         if 0 in members:
             ax.plot(x, a[members.index(0)], color="#1f5fbf", lw=1.4, label="control")
         ax.plot(x, np.nanmean(pf, axis=0), color="k", lw=2.0, label="mean")
-        for ref in e.get("ref_lines", {}).get(key, []):
-            ax.axhline(ref, color="#e00000", lw=0.9, ls="--")
+        for ref, alpha in e.get("ref_lines", {}).get(key, []):
+            ax.axhline(ref, color="#e00000", lw=0.9, ls="--", alpha=alpha)
         ax.set_ylabel(label)
         ax.grid(alpha=0.3)
         ax.legend(loc="upper right", fontsize=8, ncol=3)
@@ -154,7 +155,7 @@ def plume(cfg: dict, run: dt.datetime, series: dict) -> bytes:
     axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
     axes[-1].set_xlabel("valid time (KST, 00 KST ticks)")
     n = max(len(series[s]["t850"]) for s in st) - 1
-    fig.suptitle(f"{e['title'].format(name=e['name'])}   {n} members + control\n"
+    fig.suptitle(f"{e['title'].format(name=name)}   {n} members + control\n"
                  f"ECMWF AIFS ENS 0.25deg   run {run:%Y-%m-%d %H}UTC ({run + kst:%m-%d %H}KST)", fontsize=11)
     fig.text(0.01, 0.005, cfg["style"]["credit"], fontsize=6.5, color="#555")
     fig.tight_layout(rect=(0, 0.015, 1, 1))
@@ -178,16 +179,20 @@ def render_run(cfg: dict, src: EnsSource, run: dt.datetime, site: pathlib.Path, 
         for s, vals in zip(steps(cfg), ex.map(lambda s: src.point_step(run, s), steps(cfg))):
             series[s] = vals
     dl = time.monotonic() - t0
-    cid = cfg["site"]["charts"][0]["id"]
     out = cfg["output"]
-    data = encode.encode(plume(cfg, run, series), out["format"], out["png8_colors"], out["webp_quality"])
-    (rdir / f"{cid}_000.png").write_bytes(data)
+    nbytes = 0
+    for pt in cfg["ens"]["points"]:
+        ps = {s: v[pt["id"]] for s, v in series.items()}
+        data = encode.encode(plume(cfg, run, ps, pt["name"]), out["format"], out["png8_colors"], out["webp_quality"])
+        (rdir / f"plume_{pt['id']}_000.png").write_bytes(data)
+        nbytes += len(data)
     (rdir / "series.json").write_text(json.dumps({str(s): v for s, v in series.items()}))
     meta = {"model": model, "run": run_s, "steps": [0], "missing_steps": [], "wpsh": None,
             "render_version": cfg["site"]["render_version"],
             "rendered_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "sources": sorted(src.order), "images": 1, "bytes": len(data),
+            "sources": sorted(src.order), "images": len(cfg["ens"]["points"]), "bytes": nbytes,
             "download_seconds": round(dl, 1), "wall_seconds": round(time.monotonic() - t0, 1),
-            "render_seconds_sum": 0.0, "point": [cfg["ens"]["lat"], cfg["ens"]["lon"]]}
+            "render_seconds_sum": 0.0,
+            "points": {p["id"]: [p["lat"], p["lon"]] for p in cfg["ens"]["points"]}}
     (rdir / "meta.json").write_text(json.dumps(meta, indent=1))
     return meta
