@@ -300,3 +300,17 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   measured 2026112412 with the box cut, 1.16 GB for 1,736 requests (0.67 MB each). About 1.4 GB per run, 2.8 GB/day
   for two runs, below the 4.5 GB guard (estimated).
 - Stored KIM runs are not re-rendered; the change appears from the next run.
+
+## Ensemble meteograms: own model row, 500 hPa height panel (owner 2026-11-25)
+- App 0.8.4: AIFS-ENS and ECMWF ENS buttons move to a second row ("앙상블") below the map models. While an
+  ensemble model is open only the city chips show (서울 … 제주) and the time controls, step grid and WPSH toggle
+  are hidden (one image per run); past-run comparison stays. Switching back to a map model returns to the last
+  map chart; an ensemble model always opens its newest run.
+- Plumes get a 500 hPa height panel on top: IFS ENS `gh` (gpm), AIFS-ENS `z` / g (param names measured in the step
+  indexes 2026-11-25). Ensemble `render_version` 2, so stored ensemble runs are re-rendered once.
+- Local run ECMWF ENS 2026112412 with the third field: 179 s, 8 images 1.16 MB (measured; before 114 s, 0.87 MB).
+- 500 hPa reference lines: 5880 gpm red and 5400 gpm blue, dashed at 50 % opacity, drawn only when they fall inside
+  the panel's data range (the axis is not stretched to show them). `ens.ref_lines` entries are
+  `[value, opacity, colour]`. Ensemble `render_version` 3.
+- Past-run comparison for meteograms: compares every run's graph (step 0) instead of one valid time, which only
+  ever found the current run (measured in the app: 1 frame before, 11 AIFS-ENS runs after).

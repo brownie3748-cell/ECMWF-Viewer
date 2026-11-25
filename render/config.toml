@@ -333,14 +333,14 @@ charts = [
   { id = "wpsh500_wide", title = "WPSH line (wide)", level = 500, domain = "wide", overlay_of = "gz500_wide" },
   { id = "gz300", title = "300hPa", level = 300, domain = "default" },
   { id = "gz200", title = "200hPa", level = 200, domain = "default" },
-  { id = "plume_seoul", title = "Seoul T850 / T2m plume", domain = "graph" },
-  { id = "plume_cheongju", title = "Cheongju T850 / T2m plume", domain = "graph" },
-  { id = "plume_daejeon", title = "Daejeon T850 / T2m plume", domain = "graph" },
-  { id = "plume_gangneung", title = "Gangneung T850 / T2m plume", domain = "graph" },
-  { id = "plume_daegu", title = "Daegu T850 / T2m plume", domain = "graph" },
-  { id = "plume_gwangju", title = "Gwangju T850 / T2m plume", domain = "graph" },
-  { id = "plume_busan", title = "Busan T850 / T2m plume", domain = "graph" },
-  { id = "plume_jeju", title = "Jeju T850 / T2m plume", domain = "graph" },
+  { id = "plume_seoul", title = "Seoul Z500 / T850 / T2m plume", domain = "graph" },
+  { id = "plume_cheongju", title = "Cheongju Z500 / T850 / T2m plume", domain = "graph" },
+  { id = "plume_daejeon", title = "Daejeon Z500 / T850 / T2m plume", domain = "graph" },
+  { id = "plume_gangneung", title = "Gangneung Z500 / T850 / T2m plume", domain = "graph" },
+  { id = "plume_daegu", title = "Daegu Z500 / T850 / T2m plume", domain = "graph" },
+  { id = "plume_gwangju", title = "Gwangju Z500 / T850 / T2m plume", domain = "graph" },
+  { id = "plume_busan", title = "Busan Z500 / T850 / T2m plume", domain = "graph" },
+  { id = "plume_jeju", title = "Jeju Z500 / T850 / T2m plume", domain = "graph" },
 ]
 
 # ---------------------------------------------------------------------------------------------
@@ -455,10 +455,12 @@ max_step = 360
 every_h = 6
 parallel_steps = 6
 source_order = ["google", "ecmwf"]  # azure answered 409 for aifs-ens (measured)
-title = "{name} 850hPa / 2m Temperature, all members"
-ref_lines = { t850 = [[0.0, 1.0], [-8.0, 0.4]], t2m = [[0.0, 1.0]] }   # [value C, opacity]: -8 C at 850 hPa fainter (owner)
+title = "{name} 500hPa Height, 850hPa / 2m Temperature, all members"
+# [value, opacity, colour (default red)], drawn only inside the plotted range: -8 C at 850 hPa fainter; 500 hPa 5880 gpm
+# (red, WPSH edge) and 5400 gpm (blue, cold trough) half transparent (owner 2026-11-25)
+ref_lines = { t850 = [[0.0, 1.0], [-8.0, 0.4]], t2m = [[0.0, 1.0]], z500 = [[5880.0, 0.5, "#e00000"], [5400.0, 0.5, "#1f4fd0"]] }
 [models.override.site]
-render_version = 1
+render_version = 3              # 3: 5880 / 5400 gpm lines; 2: 500 hPa height panel (owner 2026-11-25)
 [models.override.style]
 model_label = "ECMWF AIFS ENS 0.25deg"
 credit = "Adapted from 'ECMWF AIFS Ensemble Forecast Data' by ECMWF, CC BY 4.0 (https://data.ecmwf.int/forecasts/). Modified: point values extracted and plotted."
@@ -493,10 +495,12 @@ max_step = 360
 every_h = 3
 parallel_steps = 8
 source_order = ["google", "ecmwf"]
-title = "{name} 850hPa / 2m Temperature, all members"
-ref_lines = { t850 = [[0.0, 1.0], [-8.0, 0.4]], t2m = [[0.0, 1.0]] }   # [value C, opacity]: -8 C at 850 hPa fainter (owner)
+title = "{name} 500hPa Height, 850hPa / 2m Temperature, all members"
+# [value, opacity, colour (default red)], drawn only inside the plotted range: -8 C at 850 hPa fainter; 500 hPa 5880 gpm
+# (red, WPSH edge) and 5400 gpm (blue, cold trough) half transparent (owner 2026-11-25)
+ref_lines = { t850 = [[0.0, 1.0], [-8.0, 0.4]], t2m = [[0.0, 1.0]], z500 = [[5880.0, 0.5, "#e00000"], [5400.0, 0.5, "#1f4fd0"]] }
 [models.override.site]
-render_version = 1
+render_version = 3              # 3: 5880 / 5400 gpm lines; 2: 500 hPa height panel (owner 2026-11-25)
 [models.override.style]
 model_label = "ECMWF IFS ENS 0.25deg"
 credit = "Adapted from 'ECMWF IFS 15-day Ensemble Forecast Data' by ECMWF, CC BY 4.0 (https://data.ecmwf.int/forecasts/). Modified: point values extracted and plotted."

@@ -387,9 +387,23 @@ class AifsEns(unittest.TestCase):
         from render import ens
         e = config.for_model(CFG, "aifsens")
         series = {s: {"t850": {m: -5 + 0.1 * m - 0.01 * s for m in range(51)},
-                      "t2m": {m: 3 + 0.1 * m for m in range(51)}} for s in ens.steps(e)}
+                      "t2m": {m: 3 + 0.1 * m for m in range(51)},
+                      "z500": {m: 5500 + m for m in range(51)}} for s in ens.steps(e)}
         png = ens.plume(e, dt.datetime(2026, 11, 25, 0), series, "Seoul")
         self.assertEqual(png[:4], b"\x89PNG")
+        old = {s: {k: v for k, v in x.items() if k != "z500"} for s, x in series.items()}   # stored before z500
+        self.assertEqual(ens.plume(e, dt.datetime(2026, 11, 25, 0), old, "Seoul")[:4], b"\x89PNG")
+
+    def test_z500_fields(self):
+        """500 hPa height: IFS ENS gh (gpm), AIFS-ENS z (geopotential / g), measured 2026-11-25."""
+        from render import ens
+        src = ens.EnsSource(config.for_model(CFG, "aifsens"))
+        k, conv = src._wanted({"param": "z", "levelist": "500"})
+        self.assertEqual(k, "z500")
+        self.assertAlmostEqual(conv(5500 * 9.80665), 5500)
+        k, conv = src._wanted({"param": "gh", "levelist": "500"})
+        self.assertEqual((k, conv(5500)), ("z500", 5500))
+        self.assertIsNone(src._wanted({"param": "z", "levelist": "850"}))
 
     def test_bilinear_grid_from_180w(self):
         """Open-data grids start at 180W (assuming 0E put Seoul in the Atlantic, 2026-11-25)."""

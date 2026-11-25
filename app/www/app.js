@@ -20,7 +20,8 @@ const CHIPS = [
   ["gz850", "850"], ["mfc850", "850 수분속"], ["ept850", "850 상당온위"],
   ["gz700", "700"], ["rh700", "700 습도"], ["ept700", "700 상당온위"],
   ["gz300", "300"], ["gz200", "200"],
-  ["plume_seoul", "서울 앙상블"], ["plume_cheongju", "청주 앙상블"], ["plume_daejeon", "대전 앙상블"], ["plume_gangneung", "강릉 앙상블"], ["plume_daegu", "대구 앙상블"], ["plume_gwangju", "광주 앙상블"], ["plume_busan", "부산 앙상블"], ["plume_jeju", "제주 앙상블"],
+  // Ensemble meteograms (lower model row): only these chips show while an ensemble model is open.
+  ["plume_seoul", "서울"], ["plume_cheongju", "청주"], ["plume_daejeon", "대전"], ["plume_gangneung", "강릉"], ["plume_daegu", "대구"], ["plume_gwangju", "광주"], ["plume_busan", "부산"], ["plume_jeju", "제주"],
 ];
 const LABELS = Object.fromEntries(CHIPS);
 
@@ -86,6 +87,9 @@ function runLabel(s) {
 const M = () => state.m.models.find((x) => x.id === state.model) || state.m.models[0];
 const chartIn = (mod, id) => mod.charts.find((c) => c.id === id && !c.overlay_of);
 const chartDef = (id) => M().charts.find((c) => c.id === id);
+// Ensemble meteogram models (graph charts only): lower model row, own chips, always the newest run.
+const isEns = (mod) => mod.charts.length > 0 && mod.charts.every((c) => c.domain === "graph");
+const chartIsGraph = (id) => state.m.models.some((mod) => mod.charts.some((c) => c.id === id && c.domain === "graph"));
 // WPSH line overlay for any chart on the same map domain (the overlay is drawn on the identical pixel frame).
 function overlayOf(id) {
   const c = chartDef(id);
@@ -166,6 +170,12 @@ function selectModel(id, keepRun, keepValid, findValid) {
     const i = mod.runs.findIndex((r) => r.run === keepRun);
     if (i >= 0) state.runIdx = i;
   }
+  const kind = isEns(mod) ? "ens" : "map";
+  if (chartIsGraph(state.chart) !== (kind === "ens")) {
+    // switching between map charts and meteograms: back to the last chart of that kind
+    const last = localStorage.getItem("chart_" + kind);
+    if (last && chartIn(mod, last)) state.chart = last;
+  }
   if (!chartIn(mod, state.chart)) {
     // nearest chart the model has: 강설 -> 지상·강수 (KIM has no snowfall), wide/upper levels -> 500
     const near = { snow: "msl", gz500_wide: "gz500", gz300: "gz500", gz200: "gz500" }[state.chart];
@@ -187,6 +197,7 @@ function selectChart(id) {
   const v = currentValid();
   state.chart = id;
   localStorage.setItem("chart", id);
+  localStorage.setItem("chart_" + (isEns(M()) ? "ens" : "map"), id);
   setStepNear(v);
   render();
 }
@@ -195,9 +206,10 @@ function setStatus(msg) { const s = $("status"); s.textContent = msg; s.hidden =
 
 // ------------------------------------------------------------------ UI builders
 function buildModels() {
-  const nav = $("models");
-  nav.innerHTML = "";
+  $("models").innerHTML = "";
+  $("ens-models").innerHTML = "";
   state.m.models.forEach((mod) => {
+    const nav = $(isEns(mod) ? "ens-models" : "models");
     const b = document.createElement("button");
     b.className = "model";
     b.textContent = mod.label;
@@ -205,10 +217,12 @@ function buildModels() {
     b.onclick = () => {
       if (mod.id === state.model || b.disabled) return;
       stop();
-      selectModel(mod.id, run() ? run().run : null, currentValid(), true);
+      if (isEns(mod)) selectModel(mod.id, null, null, false);     // meteograms: newest run
+      else selectModel(mod.id, run() ? run().run : null, isEns(M()) ? null : currentValid(), true);
     };
     nav.appendChild(b);
   });
+  $("ens-models").hidden = !$("ens-models").children.length;
 }
 
 // A model button is disabled only while it has no runs. A model without the chart on screen stays
@@ -216,7 +230,7 @@ function buildModels() {
 function updateModels() {
   document.querySelectorAll(".model").forEach((b) => {
     const mod = state.m.models.find((x) => x.id === b.dataset.id);
-    const has = chartIn(mod, state.chart);
+    const has = chartIn(mod, state.chart) || isEns(mod) !== isEns(M());   // other row: no "nearest chart" mark
     b.disabled = !mod.runs.length;
     b.classList.toggle("other", !!mod.runs.length && !has);
     b.title = !mod.runs.length ? "자료 준비 중" : (has ? "" : `${mod.label}에는 이 차트가 없어 비슷한 차트로 열어요`);
@@ -254,6 +268,7 @@ function buildChartPicker() {
 function updateChartPicker() {
   document.querySelectorAll(".chip").forEach((b) => {
     const ok = !!chartIn(M(), b.dataset.id);
+    b.hidden = chartIsGraph(b.dataset.id) !== isEns(M());      // map chips for map models, cities for meteograms
     b.disabled = !ok;
     b.title = ok ? "" : `${M().label}에는 없는 차트`;
     b.classList.toggle("on", b.dataset.id === state.chart);
@@ -371,8 +386,12 @@ function render() {
   $("next").disabled = i === steps.length - 1;
 
   const valid = addH(parseRun(r.run), state.step);
+  const ens = isEns(M());                     // meteogram: one image per run, no time controls / WPSH
+  ["controls", "slider", "steps-card", "toggles"].forEach((id) => { $(id).hidden = ens; });
+  $("compare").textContent = ens ? "과거 런 비교" : "과거 런 비교 (같은 시각)";
   $("valid-kst").textContent = fmtKst(valid);
-  $("valid-sub").textContent = `${fmtUtc(valid)} · +${state.step}h · ${M().label} ${chartLabel(state.chart)}`;
+  $("valid-sub").textContent = ens ? `${fmtUtc(valid)} 런 · ${M().label} ${chartLabel(state.chart)} 앙상블`
+    : `${fmtUtc(valid)} · +${state.step}h · ${M().label} ${chartLabel(state.chart)}`;
 
   // WPSH overlay (any chart on the same map domain as a WPSH overlay)
   const ov = overlayOf(state.chart);
@@ -432,14 +451,17 @@ function openCompare() {
   stop();
   const valid = currentValid();
   const frames = [];
+  const ens = isEns(M());
   for (const r of M().runs) {
-    const step = (valid - parseRun(r.run)) / 3600e3;
+    // meteograms: one graph per run (step 0), so compare every run's graph; maps: the same valid time
+    const step = ens ? 0 : (valid - parseRun(r.run)) / 3600e3;
     if (stepsFor(r, state.chart).includes(step)) frames.push({ run: r, step });
   }
   state.cmp.frames = frames;                       // oldest -> newest
   state.cmp.idx = frames.length - 1;
   $("cmp-title").textContent = `과거 런 비교 · ${M().label} ${chartLabel(state.chart)}`;
-  $("cmp-sub").textContent = `${fmtKst(valid)} (${fmtUtc(valid)}) 예상 · 런 ${frames.length}개`;
+  $("cmp-sub").textContent = ens ? `런별 앙상블 그래프 · 런 ${frames.length}개`
+    : `${fmtKst(valid)} (${fmtUtc(valid)}) 예상 · 런 ${frames.length}개`;
   const dots = $("cmp-dots");
   dots.innerHTML = "";
   frames.forEach((f, i) => {
@@ -483,7 +505,7 @@ function cmpRender(fromLoad) {
   const lbl = $("cmp-label");
   lbl.className = "cmp-label" + (newest ? " newest" : "");
   lbl.innerHTML = "";
-  lbl.append(`${runLabel(f.run.run)} · +${f.step}h`);
+  lbl.append(isEns(M()) ? runLabel(f.run.run) : `${runLabel(f.run.run)} · +${f.step}h`);
   if (newest) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "최신"; lbl.append(b); }
   // The WPSH line is always there (blank when not shown) so the sheet keeps its height: the dialog sits on
   // the bottom edge, so a label that changes height would move the picture up and down between runs.

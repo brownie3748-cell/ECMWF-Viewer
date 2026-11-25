@@ -1,4 +1,5 @@
-"""Ensemble plume charts (AIFS-ENS, ECMWF ENS): every member's 850 hPa and 2 m temperature at points, one graph per
+"""Ensemble plume charts (AIFS-ENS, ECMWF ENS): every member's 500 hPa height, 850 hPa and 2 m temperature at
+points, one graph per
 point and run.
 
 ECMWF ENS: `ifs/0p25/enfo`, one `ef` file per step with 50 perturbed members (no control at 0.25 deg), 3-hourly to
@@ -30,6 +31,9 @@ from . import encode  # noqa: E402
 
 log = logging.getLogger(__name__)
 TIMEOUT = 60
+G = 9.80665
+KEYS = ("z500", "t850", "t2m")
+PANELS = (("z500", "500 hPa height (gpm)"), ("t850", "850 hPa temperature (C)"), ("t2m", "2 m temperature (C)"))
 URLS = {"google": "https://storage.googleapis.com/ecmwf-open-data", "ecmwf": "https://data.ecmwf.int/forecasts"}
 
 
@@ -89,10 +93,15 @@ class EnsSource:
                 log.warning("HEAD %s %s: %r", src, f"{run:%Y%m%d%H}", e)
         return None
 
-    def _wanted(self, msg: dict) -> str | None:
-        for key, (param, level) in (("t850", ("t", "850")), ("t2m", ("2t", None))):
+    # (key, GRIB param, level, value -> plotted unit). 500 hPa height: IFS ENS "gh" (gpm), AIFS-ENS "z"
+    # (geopotential, m2 s-2), measured in the step indexes 2026-11-25.
+    FIELDS = (("t850", "t", "850", lambda v: v - 273.15), ("t2m", "2t", None, lambda v: v - 273.15),
+              ("z500", "gh", "500", lambda v: v), ("z500", "z", "500", lambda v: v / G))
+
+    def _wanted(self, msg: dict):
+        for key, param, level, conv in self.FIELDS:
             if msg.get("param") == param and msg.get("levelist") == level:
-                return key
+                return key, conv
         return None
 
     def point_step(self, run: dt.datetime, step: int) -> dict:
@@ -101,15 +110,16 @@ class EnsSource:
         pts = self.e["points"]
         for src in self.order:
             try:
-                out: dict = {p["id"]: {"t850": {}, "t2m": {}} for p in pts}
+                out: dict = {p["id"]: {k: {} for k in KEYS} for p in pts}
                 for typ in self.e["files"]:          # AIFS-ENS: cf + pf files; IFS ENS: one "ef" file
                     idx = self.session.get(self.url(src, run, step, typ, "index"), timeout=TIMEOUT)
                     idx.raise_for_status()
                     msgs = [json.loads(x) for x in idx.text.splitlines() if x.strip()]
                     for m in msgs:
-                        key = self._wanted(m)
-                        if key is None:
+                        w = self._wanted(m)
+                        if w is None:
                             continue
+                        key, conv = w
                         o, n = m["_offset"], m["_length"]
                         r = self.session.get(self.url(src, run, step, typ, "grib2"), timeout=TIMEOUT,
                                              headers={"Range": f"bytes={o}-{o + n - 1}"})
@@ -127,10 +137,10 @@ class EnsSource:
                             eccodes.codes_release(h)
                         member = 0 if m.get("type") == "cf" else int(m.get("number", 0))
                         for pt in pts:
-                            out[pt["id"]][key][member] = bilinear(
+                            out[pt["id"]][key][member] = conv(bilinear(
                                 vals, g["Ni"], g["Nj"], pt["lat"], pt["lon"], g["latitudeOfFirstGridPointInDegrees"],
                                 g["longitudeOfFirstGridPointInDegrees"], g["jDirectionIncrementInDegrees"],
-                                g["iDirectionIncrementInDegrees"]) - 273.15
+                                g["iDirectionIncrementInDegrees"]))
                 return out
             except Exception as e:  # noqa: BLE001
                 last = e
@@ -139,13 +149,15 @@ class EnsSource:
 
 
 def plume(cfg: dict, run: dt.datetime, series: dict, name: str) -> bytes:
-    """Two panels (850 hPa T, 2 m T): every member grey, control blue, mean black, 10-90 % band."""
+    """Three panels (500 hPa height, 850 hPa T, 2 m T): every member grey, control blue, mean black, 10-90 % band.
+    Series without z500 (stored before 2026-11-25) get the two temperature panels only."""
     e = cfg["ens"]
     st = sorted(series)
     kst = dt.timedelta(hours=cfg["style"]["kst_offset_h"])
     x = [run + dt.timedelta(hours=s) + kst for s in st]
-    fig, axes = plt.subplots(2, 1, figsize=(10.56, 8.44), dpi=100, sharex=True)
-    for ax, key, label in zip(axes, ("t850", "t2m"), ("850 hPa temperature (C)", "2 m temperature (C)")):
+    panels = [p for p in PANELS if any(series[s].get(p[0]) for s in st)]
+    fig, axes = plt.subplots(len(panels), 1, figsize=(10.56, 4.0 + 2.6 * len(panels)), dpi=100, sharex=True)
+    for ax, (key, label) in zip(axes, panels):
         members = sorted({m for s in st for m in series[s][key]})
         a = np.array([[series[s][key].get(m, np.nan) for s in st] for m in members])
         pf = a[[i for i, m in enumerate(members) if m != 0]]
@@ -156,8 +168,11 @@ def plume(cfg: dict, run: dt.datetime, series: dict, name: str) -> bytes:
         if 0 in members:
             ax.plot(x, a[members.index(0)], color="#1f5fbf", lw=1.4, label="control")
         ax.plot(x, np.nanmean(pf, axis=0), color="k", lw=2.0, label="mean")
-        for ref, alpha in e.get("ref_lines", {}).get(key, []):
-            ax.axhline(ref, color="#e00000", lw=0.9, ls="--", alpha=alpha)
+        lo, hi = ax.get_ylim()                 # reference lines only where the data already reaches
+        for ref, alpha, *col in e.get("ref_lines", {}).get(key, []):
+            if lo <= ref <= hi:
+                ax.axhline(ref, color=col[0] if col else "#e00000", lw=0.9, ls="--", alpha=alpha)
+        ax.set_ylim(lo, hi)
         ax.set_ylabel(label)
         ax.grid(alpha=0.3)
         ax.legend(loc="upper right", fontsize=8, ncol=3)
