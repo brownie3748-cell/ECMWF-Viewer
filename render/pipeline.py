@@ -109,6 +109,9 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
     deleted locally), "deadline": time.monotonic() value after which no new step starts (raises Deferred)}.
     A job cancelled or stopped mid-run then loses at most the steps in flight (2026-11-22: a whole KIMR run,
     about 1.9 GB of quota, was lost to the 180 min job timeout and downloaded again)."""
+    from . import ens
+    if ens.is_ens(cfg):                       # AIFS-ENS: one plume graph per run, no map steps
+        return ens.render_run(cfg, sources, run, site, work)
     resume = resume or {}
     done = {int(k): v for k, v in (resume.get("done") or {}).items()}
     on_step, deadline = resume.get("on_step"), resume.get("deadline")

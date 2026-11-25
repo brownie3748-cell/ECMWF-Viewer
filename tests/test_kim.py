@@ -109,7 +109,7 @@ class HubLimit(unittest.TestCase):
 
 class Config(unittest.TestCase):
     def test_kim_models(self):
-        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "kimr"])
+        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "aifsens", "ifsens", "kimr"])
         r = config.for_model(CFG, "kimr")
         ids = [c["id"] for c in r["site"]["charts"]]
         self.assertNotIn("wpsh500", ids)                         # regional domain does not reach 180E
