@@ -312,15 +312,16 @@ class KimHourly(unittest.TestCase):
         self.assertEqual(h[:4], [1, 2, 4, 5])
         self.assertTrue(fetch.is_hourly_only(1, k) and not fetch.is_hourly_only(3, k))
         self.assertEqual(fetch.hourly_steps(0, CFG), [])
-        self.assertEqual([fetch.tp_window(s, k) for s in (1, 2, 4, 84)], [1, 2, 3, 3])
+        self.assertEqual([fetch.tp_window(s, k) for s in (1, 2, 4, 84)], [1, 1, 1, 1])   # owner 2026-11-25: mm/h
 
     def test_cost_and_fields(self):
         k = config.for_model(CFG, "kimr")
         calls, nbytes = kim.run_cost(k, 29, 56)
-        self.assertEqual(calls, 783 + 56 * 7)
-        self.assertLess(nbytes, 1.9e9)                 # owner budget about 1.8 GB per run (estimated 1.88 GB)
+        self.assertEqual(calls, 783 + 56 * 13)          # 8 surface + 5 pl fields (hourly snow)
+        self.assertLess(nbytes, 1.9e9)                 # owner budget about 1.8 GB per run (estimated 1.36 GB)
         src = kim.KimSource(k)
-        self.assertEqual(len(src.field_keys(step=1)), 7)
+        self.assertEqual(len(src.field_keys(step=1)), 13)
+        self.assertIn(("t", 850), src.field_keys(step=1))
         self.assertEqual(len(src.field_keys(step=3)), 27)
         self.assertEqual(src.field_keys(True, 1), [("tp", 0), ("sf", 0)])
 
@@ -329,7 +330,10 @@ class KimHourly(unittest.TestCase):
                                                        "hourly_steps": [1, 2], "wpsh": None, "rv": 15}}})
         k = next(x for x in m["models"] if x["id"] == "kimr")
         hourly = [c["id"] for c in k["charts"] if c.get("hourly")]
-        self.assertEqual(sorted(hourly), ["msl", "t2m"])
+        self.assertEqual(sorted(hourly), ["msl", "snow", "t2m"])
+        self.assertEqual(next(c for c in k["charts"] if c["id"] == "snow")["min_step"], 1)
+        i = next(x for x in m["models"] if x["id"] == "ifs")
+        self.assertEqual(next(c for c in i["charts"] if c["id"] == "snow")["min_step"], 3)
         self.assertEqual(site.run_entry({"run": "x", "steps": [0], "wpsh": None, "hourly_steps": [1]})["hourly_steps"], [1])
 
 

@@ -44,6 +44,9 @@ def for_model(cfg: dict, model_id: str) -> dict:
         if missing:
             raise KeyError(f"model {model_id}: unknown charts {missing}")
         out["site"]["charts"] = [by_id[c] for c in want]
+    if m.get("min_step"):                      # per-model first step of a chart (KIM 1 h snowfall: +1 h)
+        out["site"]["charts"] = [dict(c, min_step=m["min_step"][c["id"]]) if c["id"] in m["min_step"] else c
+                                 for c in out["site"]["charts"]]
     out["model_id"] = model_id
     out["model_label_short"] = m["label"]
     return out

@@ -243,7 +243,8 @@ class KimSource:
         if tp_only:                                 # window start: the accumulated fields this model fetches
             return [k for k in self.ACCUM if k in self.field_keys(step=step)]
         if step is not None and fetch.is_hourly_only(step, self.cfg):
-            return [(p, 0) for p in self.cfg["data"]["hourly"]["params"]]    # surface-only hourly step
+            h = self.cfg["data"]["hourly"]                                    # reduced hourly step
+            return [(p, 0) for p in h["params"]] + [(p, int(lv)) for p, lv in h.get("pl", [])]
         keys = []
         for g in self.cfg["data"]["groups"]:
             for p in g["param"]:
@@ -357,7 +358,8 @@ def run_cost(cfg: dict, steps: int, hourly_steps: int = 0) -> tuple[int, float]:
     n = 0
     for g in cfg["data"]["groups"]:
         n += len(g["param"]) * len(g.get("levelist") or [0])
-    calls = steps * n + hourly_steps * len((cfg["data"].get("hourly") or {}).get("params", []))
+    h = cfg["data"].get("hourly") or {}
+    calls = steps * n + hourly_steps * (len(h.get("params", [])) + len(h.get("pl", [])))
     return calls, calls * cfg["kma"]["est_bytes_per_field"]
 
 
