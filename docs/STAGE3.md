@@ -309,3 +309,8 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
 - Plumes get a 500 hPa height panel on top: IFS ENS `gh` (gpm), AIFS-ENS `z` / g (param names measured in the step
   indexes 2026-11-25). Ensemble `render_version` 2, so stored ensemble runs are re-rendered once.
 - Local run ECMWF ENS 2026112412 with the third field: 179 s, 8 images 1.16 MB (measured; before 114 s, 0.87 MB).
+- 500 hPa reference lines: 5880 gpm red and 5400 gpm blue, dashed at 50 % opacity, drawn only when they fall inside
+  the panel's data range (the axis is not stretched to show them). `ens.ref_lines` entries are
+  `[value, opacity, colour]`. Ensemble `render_version` 3.
+- Past-run comparison for meteograms: compares every run's graph (step 0) instead of one valid time, which only
+  ever found the current run (measured in the app: 1 frame before, 11 AIFS-ENS runs after).

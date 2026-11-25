@@ -168,8 +168,11 @@ def plume(cfg: dict, run: dt.datetime, series: dict, name: str) -> bytes:
         if 0 in members:
             ax.plot(x, a[members.index(0)], color="#1f5fbf", lw=1.4, label="control")
         ax.plot(x, np.nanmean(pf, axis=0), color="k", lw=2.0, label="mean")
-        for ref, alpha in e.get("ref_lines", {}).get(key, []):
-            ax.axhline(ref, color="#e00000", lw=0.9, ls="--", alpha=alpha)
+        lo, hi = ax.get_ylim()                 # reference lines only where the data already reaches
+        for ref, alpha, *col in e.get("ref_lines", {}).get(key, []):
+            if lo <= ref <= hi:
+                ax.axhline(ref, color=col[0] if col else "#e00000", lw=0.9, ls="--", alpha=alpha)
+        ax.set_ylim(lo, hi)
         ax.set_ylabel(label)
         ax.grid(alpha=0.3)
         ax.legend(loc="upper right", fontsize=8, ncol=3)

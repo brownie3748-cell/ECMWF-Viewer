@@ -451,14 +451,17 @@ function openCompare() {
   stop();
   const valid = currentValid();
   const frames = [];
+  const ens = isEns(M());
   for (const r of M().runs) {
-    const step = (valid - parseRun(r.run)) / 3600e3;
+    // meteograms: one graph per run (step 0), so compare every run's graph; maps: the same valid time
+    const step = ens ? 0 : (valid - parseRun(r.run)) / 3600e3;
     if (stepsFor(r, state.chart).includes(step)) frames.push({ run: r, step });
   }
   state.cmp.frames = frames;                       // oldest -> newest
   state.cmp.idx = frames.length - 1;
   $("cmp-title").textContent = `과거 런 비교 · ${M().label} ${chartLabel(state.chart)}`;
-  $("cmp-sub").textContent = `${fmtKst(valid)} (${fmtUtc(valid)}) 예상 · 런 ${frames.length}개`;
+  $("cmp-sub").textContent = ens ? `런별 앙상블 그래프 · 런 ${frames.length}개`
+    : `${fmtKst(valid)} (${fmtUtc(valid)}) 예상 · 런 ${frames.length}개`;
   const dots = $("cmp-dots");
   dots.innerHTML = "";
   frames.forEach((f, i) => {
@@ -502,7 +505,7 @@ function cmpRender(fromLoad) {
   const lbl = $("cmp-label");
   lbl.className = "cmp-label" + (newest ? " newest" : "");
   lbl.innerHTML = "";
-  lbl.append(`${runLabel(f.run.run)} · +${f.step}h`);
+  lbl.append(isEns(M()) ? runLabel(f.run.run) : `${runLabel(f.run.run)} · +${f.step}h`);
   if (newest) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "최신"; lbl.append(b); }
   // The WPSH line is always there (blank when not shown) so the sheet keeps its height: the dialog sits on
   // the bottom edge, so a label that changes height would move the picture up and down between runs.
