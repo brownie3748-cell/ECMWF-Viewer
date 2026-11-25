@@ -308,7 +308,7 @@ jump_flag_gpm = 40.0            # M4: flag H changes larger than this between co
 [site]
 retention_runs = 12             # newest complete runs kept on the published site (3 days)
 lookback_runs = 18              # how many past 6-hourly cycles to consider when polling
-process_order = ["ifs", "aifs", "aifsens", "kimg", "kimr", "ifs01"]   # within a cycle: lightest model first (0.1 deg is slowest)
+process_order = ["ifs", "aifs", "aifsens", "ifsens", "kimg", "kimr", "ifs01"]   # within a cycle: lightest model first (0.1 deg is slowest)
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
@@ -438,6 +438,7 @@ source = "ens"
 model = "aifs-ens"
 run_hours = [0, 6, 12, 18]        # all four runs go to +360 h (measured 2026-11-24)
 [models.override.ens]
+files = ["cf", "pf"]
 # Points (ASOS station coordinates, rounded): one plume chart "plume_<id>" each; the download is the same for any
 # number of points. Coastal points (Gangneung, Busan, Jeju) are bilinear on 0.25 deg and may include sea points.
 points = [
@@ -461,6 +462,44 @@ render_version = 1
 [models.override.style]
 model_label = "ECMWF AIFS ENS 0.25deg"
 credit = "Adapted from 'ECMWF AIFS Ensemble Forecast Data' by ECMWF, CC BY 4.0 (https://data.ecmwf.int/forecasts/). Modified: point values extracted and plotted."
+
+[[models]]
+id = "ifsens"
+label = "ECMWF ENS"
+# Owner 2026-11-25: the same plume from the ECMWF (IFS) ensemble. Same chart ids as AIFS-ENS, so a switch keeps the city.
+charts = ["plume_seoul", "plume_cheongju", "plume_daejeon", "plume_gangneung", "plume_daegu", "plume_gwangju", "plume_busan", "plume_jeju"]
+[models.override.data]
+source = "ens"
+model = "ifs"
+run_hours = [0, 12]                # 06/18Z runs stop at +144 h (measured): 00/12Z only, to +360 h
+[models.override.ens]
+files = ["ef"]                     # one file per step, 50 members, no control at 0.25 deg (measured 2026-11-25)
+max_step_short = 144
+switch_h = 144
+every_h_long = 6
+# Points (ASOS station coordinates, rounded): one plume chart "plume_<id>" each; the download is the same for any
+# number of points. Coastal points (Gangneung, Busan, Jeju) are bilinear on 0.25 deg and may include sea points.
+points = [
+  { id = "seoul", name = "Seoul", lat = 37.57, lon = 126.97 },
+  { id = "cheongju", name = "Cheongju", lat = 36.64, lon = 127.44 },
+  { id = "daejeon", name = "Daejeon", lat = 36.37, lon = 127.37 },
+  { id = "gangneung", name = "Gangneung", lat = 37.75, lon = 128.89 },
+  { id = "daegu", name = "Daegu", lat = 35.88, lon = 128.62 },
+  { id = "gwangju", name = "Gwangju", lat = 35.17, lon = 126.89 },
+  { id = "busan", name = "Busan", lat = 35.1, lon = 129.03 },
+  { id = "jeju", name = "Jeju", lat = 33.51, lon = 126.53 },
+]
+max_step = 360
+every_h = 3
+parallel_steps = 8
+source_order = ["google", "ecmwf"]
+title = "{name} 850hPa / 2m Temperature, all members"
+ref_lines = { t850 = [[0.0, 1.0], [-8.0, 0.4]], t2m = [[0.0, 1.0]] }   # [value C, opacity]: -8 C at 850 hPa fainter (owner)
+[models.override.site]
+render_version = 1
+[models.override.style]
+model_label = "ECMWF IFS ENS 0.25deg"
+credit = "Adapted from 'ECMWF IFS 15-day Ensemble Forecast Data' by ECMWF, CC BY 4.0 (https://data.ecmwf.int/forecasts/). Modified: point values extracted and plotted."
 
 [[models]]
 id = "kimg"

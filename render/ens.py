@@ -1,6 +1,9 @@
-"""AIFS-ENS plume charts: every member's 850 hPa and 2 m temperature at a point, one graph per run.
+"""Ensemble plume charts (AIFS-ENS, ECMWF ENS): every member's 850 hPa and 2 m temperature at points, one graph per
+point and run.
 
-Data: ECMWF open data `aifs-ens/0p25/enfo` (control `cf` + 50 perturbed members `pf`, steps 0-360 h every 6 h,
+ECMWF ENS: `ifs/0p25/enfo`, one `ef` file per step with 50 perturbed members (no control at 0.25 deg), 3-hourly to
++144 h then 6-hourly to +360 h (00/12Z; 06/18Z to +144 h), measured 2026-11-25.
+AIFS-ENS: ECMWF open data `aifs-ens/0p25/enfo` (control `cf` + 50 perturbed members `pf`, steps 0-360 h every 6 h,
 measured 2026-11-24). Only the needed messages are downloaded with HTTP range requests from the step's index
 (t 850 hPa and 2t: about 0.3 MB per member and field, about 30 MB per step, about 1.9 GB per run, measured).
 """
@@ -34,9 +37,15 @@ def is_ens(cfg: dict) -> bool:
     return cfg["data"].get("source") == "ens"
 
 
-def steps(cfg: dict) -> list[int]:
+def steps(cfg: dict, run_hour: int = 0) -> list[int]:
+    """Steps of a run: every `every_h` to `switch_h`, then every `every_h_long` (IFS ENS: 3 h to +144 h, then 6 h);
+    06/18Z runs stop at `max_step_short`."""
     e = cfg["ens"]
-    return list(range(0, e["max_step"] + 1, e["every_h"]))
+    last = e["max_step"] if run_hour in (0, 12) else e.get("max_step_short", e["max_step"])
+    sw = min(e.get("switch_h", last), last)
+    out = list(range(0, sw + 1, e["every_h"]))
+    long_every = e.get("every_h_long", e["every_h"])
+    return out + [s for s in range(sw + long_every, last + 1, long_every)]
 
 
 def bilinear(values: np.ndarray, ni: int, nj: int, lat: float, lon: float, lat0: float = 90.0,
@@ -71,7 +80,8 @@ class EnsSource:
             return None
         for src in self.order:
             try:
-                r = self.session.head(self.url(src, run, self.e["max_step"], "pf", "index"), timeout=TIMEOUT,
+                r = self.session.head(self.url(src, run, steps(self.cfg, run.hour)[-1], self.e["files"][-1], "index"),
+                                      timeout=TIMEOUT,
                                       allow_redirects=True)
                 if r.status_code == 200:
                     return src
@@ -92,7 +102,7 @@ class EnsSource:
         for src in self.order:
             try:
                 out: dict = {p["id"]: {"t850": {}, "t2m": {}} for p in pts}
-                for typ in ("cf", "pf"):
+                for typ in self.e["files"]:          # AIFS-ENS: cf + pf files; IFS ENS: one "ef" file
                     idx = self.session.get(self.url(src, run, step, typ, "index"), timeout=TIMEOUT)
                     idx.raise_for_status()
                     msgs = [json.loads(x) for x in idx.text.splitlines() if x.strip()]
@@ -115,7 +125,7 @@ class EnsSource:
                             vals = eccodes.codes_get_values(h)
                         finally:
                             eccodes.codes_release(h)
-                        member = int(m.get("number", 0)) if typ == "pf" else 0
+                        member = 0 if m.get("type") == "cf" else int(m.get("number", 0))
                         for pt in pts:
                             out[pt["id"]][key][member] = bilinear(
                                 vals, g["Ni"], g["Nj"], pt["lat"], pt["lon"], g["latitudeOfFirstGridPointInDegrees"],
@@ -154,9 +164,11 @@ def plume(cfg: dict, run: dt.datetime, series: dict, name: str) -> bytes:
     axes[-1].xaxis.set_major_locator(mdates.DayLocator())
     axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
     axes[-1].set_xlabel("valid time (KST, 00 KST ticks)")
-    n = max(len(series[s]["t850"]) for s in st) - 1
-    fig.suptitle(f"{e['title'].format(name=name)}   {n} members + control\n"
-                 f"ECMWF AIFS ENS 0.25deg   run {run:%Y-%m-%d %H}UTC ({run + kst:%m-%d %H}KST)", fontsize=11)
+    mem = {m for s in st for m in series[s]["t850"]}
+    n = len(mem - {0})
+    ctl = " + control" if 0 in mem else ""
+    fig.suptitle(f"{e['title'].format(name=name)}   {n} members{ctl}\n"
+                 f"{cfg['style']['model_label']}   run {run:%Y-%m-%d %H}UTC ({run + kst:%m-%d %H}KST)", fontsize=11)
     fig.text(0.01, 0.005, cfg["style"]["credit"], fontsize=6.5, color="#555")
     fig.tight_layout(rect=(0, 0.015, 1, 1))
     import io
@@ -176,7 +188,8 @@ def render_run(cfg: dict, src: EnsSource, run: dt.datetime, site: pathlib.Path, 
     t0 = time.monotonic()
     series: dict = {}
     with cf.ThreadPoolExecutor(cfg["ens"].get("parallel_steps", 6)) as ex:
-        for s, vals in zip(steps(cfg), ex.map(lambda s: src.point_step(run, s), steps(cfg))):
+        st = steps(cfg, run.hour)
+        for s, vals in zip(st, ex.map(lambda s: src.point_step(run, s), st)):
             series[s] = vals
     dl = time.monotonic() - t0
     out = cfg["output"]

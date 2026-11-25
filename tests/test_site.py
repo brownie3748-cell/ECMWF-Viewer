@@ -43,7 +43,7 @@ class Steps(unittest.TestCase):
 
 class Models(unittest.TestCase):
     def test_model_ids(self):
-        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "aifsens", "kimr"])
+        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "aifsens", "ifsens", "kimr"])
 
     def test_chart_lists(self):
         ifs = config.for_model(CFG, "ifs")
@@ -183,7 +183,7 @@ class Manifest(unittest.TestCase):
                             for r in ("2026111506", "2026111500")}}
             m = site.write_manifest(CFG, st, runs)
             self.assertEqual(m["schema_version"], 2)
-            self.assertEqual([x["id"] for x in m["models"]], ["ifs", "ifs01", "aifs", "aifsens", "kimr"])   # kimz gone 2026-11-24
+            self.assertEqual([x["id"] for x in m["models"]], ["ifs", "ifs01", "aifs", "aifsens", "ifsens", "kimr"])   # kimz gone 2026-11-24
             ifs = m["models"][0]
             self.assertEqual([r["run"] for r in ifs["runs"]], ["2026111500", "2026111506"])   # oldest first
             self.assertEqual(ifs["latest"], "2026111506")
@@ -396,3 +396,14 @@ class AifsEns(unittest.TestCase):
         lon = (-180 + np.arange(ni) * 0.25)[None, :] * np.ones((nj, 1))
         v = (lat * 2 + lon).ravel()
         self.assertAlmostEqual(ens.bilinear(v, ni, nj, 37.57, 126.97, 90, -180, 0.25, 0.25), 37.57 * 2 + 126.97, places=6)
+
+    def test_ifs_ens(self):
+        """ECMWF ENS: one ef file per step, 3-hourly to +144 h then 6-hourly, 06/18Z to +144 h (measured 2026-11-25)."""
+        from render import ens
+        a, m = config.for_model(CFG, "aifsens"), config.for_model(CFG, "ifsens")
+        self.assertEqual([c["id"] for c in m["site"]["charts"]], [c["id"] for c in a["site"]["charts"]])  # same cities
+        self.assertEqual(len(ens.steps(m, 0)), 85)
+        self.assertEqual(ens.steps(m, 0)[47:50], [141, 144, 150])
+        self.assertEqual(ens.steps(m, 6)[-1], 144)
+        self.assertEqual(m["ens"]["files"], ["ef"])
+        self.assertEqual(len(ens.steps(a, 6)), 61)                    # AIFS-ENS 06/18Z still to +360 h

@@ -279,3 +279,11 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   with HTTP range requests from each step's index (about 0.3 MB per member and field, about 30 MB per step, about
   1.9 GB per run); a whole run took 150-183 s from the build sandbox. The grids start at 90N, 180E/W.
 - The run's point values are kept as `series.json` next to the image. Map models never list graph charts.
+
+## ECMWF ENS plume (owner 2026-11-25)
+
+- Model `ifsens` ("ECMWF ENS"): the same plume charts (same chart ids and cities as AIFS-ENS, so the app keeps the
+  city when switching) from `ifs/0p25/enfo`. Measured 2026-11-24/25: one `ef` file per step holds the 50 perturbed
+  members (no control at 0.25 deg); steps 0-144 h every 3 h, then 150-360 h every 6 h for 00/12Z, 06/18Z only to
+  +144 h, so only 00/12Z are used; final step about run + 8.5 h (Google); t850 / 2t about 0.3 MB per member and field.
+  About 85 steps x 100 messages, 2.5 GB per run (estimated). App 0.8.2.
