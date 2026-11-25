@@ -82,7 +82,10 @@ class Sources:
 
 
 def make_sources(cfg: dict):
-    """Sources for an ECMWF model, kim.KimSource for a KMA model (data.source = "kma")."""
-    from . import kim
+    """Sources for an ECMWF model, kim.KimSource for a KMA model (data.source = "kma"), ens.EnsSource for the
+    AIFS-ENS plume (data.source = "ens")."""
+    from . import ens, kim
 
+    if ens.is_ens(cfg):
+        return ens.EnsSource(cfg)
     return kim.KimSource(cfg) if kim.is_kma(cfg) else Sources(cfg)

@@ -43,7 +43,7 @@ class Steps(unittest.TestCase):
 
 class Models(unittest.TestCase):
     def test_model_ids(self):
-        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "kimr"])
+        self.assertEqual(config.model_ids(CFG), ["ifs", "ifs01", "aifs", "aifsens", "kimr"])
 
     def test_chart_lists(self):
         ifs = config.for_model(CFG, "ifs")
@@ -183,7 +183,7 @@ class Manifest(unittest.TestCase):
                             for r in ("2026111506", "2026111500")}}
             m = site.write_manifest(CFG, st, runs)
             self.assertEqual(m["schema_version"], 2)
-            self.assertEqual([x["id"] for x in m["models"]], ["ifs", "ifs01", "aifs", "kimr"])   # kimz gone 2026-11-24
+            self.assertEqual([x["id"] for x in m["models"]], ["ifs", "ifs01", "aifs", "aifsens", "kimr"])   # kimz gone 2026-11-24
             ifs = m["models"][0]
             self.assertEqual([r["run"] for r in ifs["runs"]], ["2026111500", "2026111506"])   # oldest first
             self.assertEqual(ifs["latest"], "2026111506")
@@ -352,3 +352,44 @@ class DerivedNew(unittest.TestCase):
         self.assertAlmostEqual(z * 1e5, 1.8, delta=0.1)
         z2 = derive.relative_vorticity(u[::-1], np.zeros_like(u), lat[::-1], lon)[20, 20]   # N->S grid (ECMWF)
         self.assertAlmostEqual(z2 * 1e5, 1.8, delta=0.1)
+
+
+class AifsEns(unittest.TestCase):
+    """Owner 2026-11-25: AIFS-ENS plume (all members' 850 hPa and 2 m temperature) as its own model."""
+
+    def test_config(self):
+        from render import ens, sources
+        e = config.for_model(CFG, "aifsens")
+        self.assertEqual([c["id"] for c in e["site"]["charts"]], ["plume_seoul"])
+        self.assertEqual(len(ens.steps(e)), 61)                       # 0-360 h every 6 h (measured)
+        self.assertIsInstance(sources.make_sources(e), ens.EnsSource)
+        for mid in ("ifs", "aifs"):                                    # map models do not get the graph chart
+            self.assertNotIn("plume_seoul", [c["id"] for c in config.for_model(CFG, mid)["site"]["charts"]])
+
+    def test_bilinear(self):
+        import numpy as np
+        from render import ens
+        ni, nj = 1440, 721
+        lat = np.linspace(90, -90, nj)[:, None] * np.ones((1, ni))
+        lon = np.arange(ni)[None, :] * 0.25 * np.ones((nj, 1))
+        v = (lat * 2 + lon).ravel()
+        self.assertAlmostEqual(ens.bilinear(v, ni, nj, 37.57, 126.97), 37.57 * 2 + 126.97, places=6)
+
+    def test_plume_draws(self):
+        import datetime as dt
+        from render import ens
+        e = config.for_model(CFG, "aifsens")
+        series = {s: {"t850": {m: -5 + 0.1 * m - 0.01 * s for m in range(51)},
+                      "t2m": {m: 3 + 0.1 * m for m in range(51)}} for s in ens.steps(e)}
+        png = ens.plume(e, dt.datetime(2026, 11, 25, 0), series)
+        self.assertEqual(png[:4], b"\x89PNG")
+
+    def test_bilinear_grid_from_180w(self):
+        """Open-data grids start at 180W (assuming 0E put Seoul in the Atlantic, 2026-11-25)."""
+        import numpy as np
+        from render import ens
+        ni, nj = 1440, 721
+        lat = np.linspace(90, -90, nj)[:, None] * np.ones((1, ni))
+        lon = (-180 + np.arange(ni) * 0.25)[None, :] * np.ones((nj, 1))
+        v = (lat * 2 + lon).ravel()
+        self.assertAlmostEqual(ens.bilinear(v, ni, nj, 37.57, 126.97, 90, -180, 0.25, 0.25), 37.57 * 2 + 126.97, places=6)

@@ -308,7 +308,7 @@ jump_flag_gpm = 40.0            # M4: flag H changes larger than this between co
 [site]
 retention_runs = 12             # newest complete runs kept on the published site (3 days)
 lookback_runs = 18              # how many past 6-hourly cycles to consider when polling
-process_order = ["ifs", "aifs", "kimg", "kimr", "ifs01"]   # within a cycle: lightest model first (0.1 deg is slowest)
+process_order = ["ifs", "aifs", "aifsens", "kimg", "kimr", "ifs01"]   # within a cycle: lightest model first (0.1 deg is slowest)
 workers = 4                     # parallel render processes
 path = "{model}/{run}/{chart}_{step:03d}.png"
 schema_version = 2
@@ -333,6 +333,7 @@ charts = [
   { id = "wpsh500_wide", title = "WPSH line (wide)", level = 500, domain = "wide", overlay_of = "gz500_wide" },
   { id = "gz300", title = "300hPa", level = 300, domain = "default" },
   { id = "gz200", title = "200hPa", level = 200, domain = "default" },
+  { id = "plume_seoul", title = "Seoul T850 / T2m plume", domain = "graph" },
 ]
 
 # ---------------------------------------------------------------------------------------------
@@ -419,6 +420,31 @@ param = ["gh", "t", "u", "v"]
 [models.override.style]
 model_label = "ECMWF AIFS Single 0.25deg"
 credit = "Adapted from 'ECMWF AIFS Single Forecast Data' by ECMWF, CC BY 4.0 (https://data.ecmwf.int/forecasts/). Modified: cropped, derived and rendered."
+
+[[models]]
+id = "aifsens"
+label = "AIFS-ENS"
+# Owner 2026-11-25: every member's 850 hPa and 2 m temperature as a graph (plume). One image per run, Seoul.
+charts = ["plume_seoul"]
+[models.override.data]
+source = "ens"
+model = "aifs-ens"
+run_hours = [0, 6, 12, 18]        # all four runs go to +360 h (measured 2026-11-24)
+[models.override.ens]
+name = "Seoul"
+lat = 37.57
+lon = 126.97
+max_step = 360
+every_h = 6
+parallel_steps = 6
+source_order = ["google", "ecmwf"]  # azure answered 409 for aifs-ens (measured)
+title = "{name} 850hPa / 2m Temperature, all members"
+ref_lines = { t850 = [0.0, -8.0], t2m = [0.0] }   # 0 C; -8 C at 850 hPa (rain/snow guide, as on the gz850 chart)
+[models.override.site]
+render_version = 1
+[models.override.style]
+model_label = "ECMWF AIFS ENS 0.25deg"
+credit = "Adapted from 'ECMWF AIFS Ensemble Forecast Data' by ECMWF, CC BY 4.0 (https://data.ecmwf.int/forecasts/). Modified: point values extracted and plotted."
 
 [[models]]
 id = "kimg"

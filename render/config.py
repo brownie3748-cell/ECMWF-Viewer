@@ -35,7 +35,9 @@ def for_model(cfg: dict, model_id: str) -> dict:
     if m is None:
         raise KeyError(f"unknown model {model_id!r}")
     out = _merge(cfg, m.get("override", {}))
-    if m["charts"] != "all":
+    if m["charts"] == "all":                   # map models: graph charts (AIFS-ENS plume) belong to their own model
+        out["site"]["charts"] = [c for c in out["site"]["charts"] if c.get("domain") != "graph"]
+    else:
         want = list(m["charts"])
         by_id = {c["id"]: c for c in out["site"]["charts"]}
         missing = [c for c in want if c not in by_id]
