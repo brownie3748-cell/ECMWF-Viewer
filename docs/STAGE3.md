@@ -287,3 +287,16 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   members (no control at 0.25 deg); steps 0-144 h every 3 h, then 150-360 h every 6 h for 00/12Z, 06/18Z only to
   +144 h, so only 00/12Z are used; final step about run + 8.5 h (Google); t850 / 2t about 0.3 MB per member and field.
   About 85 steps x 100 messages, 2.5 GB per run (estimated). App 0.8.2.
+
+## KIM hourly precipitation, radar legend, hourly snowfall (owner 2026-11-25)
+- `kimr`: precipitation window 1 h at every step (`tp_short_accum_h = tp_long_accum_h = 1`), so the msl chart shows
+  mm/h. The window start is the previous hour, which is always fetched before (steps run in order), so no extra calls.
+- `kimr` only: `charts.tp` uses a KMA radar-style legend (0.1-150 mm/h, 23 levels; colours read by eye from the
+  owner's KMA RDAPS max-reflectivity chart). Other models keep their 3/6 h legend.
+- Snow chart every hour: `data.hourly.pl` adds 925 hPa gh/t/u/v and 850 hPa t to the hourly steps, plus `r2`;
+  `snow` joins `data.hourly.charts`; per-model `min_step = { snow = 1 }`. 1 h snowfall uses the KMA ratio with the
+  1 h rain scaled to its 3 h rate (the existing assumption for 6 h windows; estimated, not validated against KMA).
+- Cost (estimated): 783 + 56 x 13 = 1,511 field calls per run. `est_bytes_per_field` lowered from 1.6 MB to 0.9 MB:
+  measured 2026112412 with the box cut, 1.16 GB for 1,736 requests (0.67 MB each). About 1.4 GB per run, 2.8 GB/day
+  for two runs, below the 4.5 GB guard (estimated).
+- Stored KIM runs are not re-rendered; the change appears from the next run.
