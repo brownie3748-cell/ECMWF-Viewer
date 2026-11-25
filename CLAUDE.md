@@ -4,7 +4,11 @@ Full project brief: [docs/SPEC.md](docs/SPEC.md). Read it first.
 
 ## Working rules
 - The owner is a weather-observation practitioner at KMA, not a professional software engineer.
-  Reply to the owner in Korean. Code, comments, commit messages and repo docs are in English.
+  Reply to the owner in English. Code, comments, commit messages and repo docs are in English.
+- Output only modified code blocks or diffs. Skip conversational fillers, greetings and basic explanations
+  unless explicitly requested.
+- Keep all explanations and responses in English, but write user-facing UI text, copy and localization strings
+  in natural Korean (the app targets Korean users).
 - Work on a branch and open a pull request. Never push to or merge into `main`; the owner reviews and merges.
   Anything that publishes (GitHub Pages deploy, releases) runs only from `main`.
 - Verify, don't assume. Items listed as UNVERIFIED in SPEC.md section 9 must be measured; label every
