@@ -1,7 +1,8 @@
 name: publish
 
-# Poll for complete ECMWF runs of every model (IFS 0.25, IFS 0.1, AIFS), render the missing ones and
+# Poll for complete ECMWF runs (IFS 0.25, IFS 0.1, AIFS, the ENS plumes), render the missing ones and
 # upload them to Cloudflare R2, with a hard storage cap (render/config.toml [storage]).
+# KIM (KMA API Hub) runs in kim.yml, its own job: a two-hour KIM run no longer holds back the ECMWF runs.
 # Idempotent: a run already in the bucket is not re-rendered. Publishing runs only from main.
 # The web app itself is deployed to GitHub Pages by pages.yml.
 on:
@@ -55,8 +56,7 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
-        run: python -m render poll --store r2 --work work --time-budget-min "${{ inputs.time_budget_min || '150' }}"
+        run: python -m render poll --models ecmwf --store r2 --work work --time-budget-min "${{ inputs.time_budget_min || '150' }}"
 
       - name: Check the public URL (index.json + CORS)
         if: always()
@@ -79,7 +79,10 @@ jobs:
     permissions:
       actions: write
     steps:
-      - name: Re-enable this workflow
+      - name: Re-enable the scheduled workflows
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/publish.yml/enable"
+        run: |
+          for wf in publish.yml kim.yml forecast.yml; do
+            gh api -X PUT "repos/${{ github.repository }}/actions/workflows/$wf/enable"
+          done
