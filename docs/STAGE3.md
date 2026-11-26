@@ -341,3 +341,16 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
 - Fix (2026-11-26, first real test from the sandbox): connection resets lost the "no data" reference image, so the
   range end could not be detected and the grey +6 h 초단기 map was taken as a frame (3 colours vs ~55, measured).
   A product whose reference cannot be fetched is now skipped for that run; 4 tries per request instead of 3.
+- First real runs of forecast.yml (2026-11-26, measured):
+  - Run 1 hit the 25-minute job limit during the 단기 issuance (~700 calls). The hub dropped many connections
+    with 4 parallel requests, and some requests waited the full 60 s. Nothing was uploaded, because images went up
+    only at the end, and the usage count was lost with the job.
+  - Run 2 published 초단기 11:00 (36 images, 38 calls, 123 s). It reported 단기 11:00 as "not available":
+    단기 starts at issuance + 1 h, and the probe stopped at the empty 11시 map.
+  - Fixes:
+    - Leading "no data" hours are skipped (up to 3).
+    - Each element is uploaded, and `dfs/index.json` and the usage count saved, as soon as it is done.
+    - Unfinished elements resume in the next run. Issuance entries carry first/last/done/complete.
+    - Parallel 2, request timeout 25 s, 30-minute time budget, job limit 45 min.
+    - App: per element, the newest issuance that has it. A mode with no images yet shows a message instead of
+      breaking.
