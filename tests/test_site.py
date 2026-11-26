@@ -337,6 +337,17 @@ class KimHourly(unittest.TestCase):
         self.assertEqual(site.run_entry({"run": "x", "steps": [0], "wpsh": None, "hourly_steps": [1]})["hourly_steps"], [1])
 
 
+    def test_manifest_ens_end_step(self):
+        e = {"steps": [0], "wpsh": None, "rv": 3}
+        m = site.manifest(CFG, {"aifsens": {"2026112518": dict(e, run="2026112518")},
+                                "ifsens": {"2026112512": dict(e, run="2026112512")},
+                                "ifs": {"2026112512": dict(e, run="2026112512")}})
+        by = {x["id"]: x["runs"][-1] for x in m["models"] if x["runs"]}
+        self.assertEqual(by["aifsens"]["end_step"], 360)   # AIFS-ENS 18Z also to +360 h (12/11 03 KST)
+        self.assertEqual(by["ifsens"]["end_step"], 360)
+        self.assertNotIn("end_step", by["ifs"])
+
+
 class DerivedNew(unittest.TestCase):
     def test_theta_e(self):
         import numpy as np

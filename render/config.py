@@ -29,6 +29,12 @@ def model_ids(cfg: dict) -> list[str]:
     return [m["id"] for m in cfg["models"] if m.get("enabled", True)]
 
 
+def ens_last_step(cfg: dict, run_hour: int) -> int:
+    """Last step of an ensemble (plume) run: `max_step` for 00/12Z, `max_step_short` (if set) for 06/18Z."""
+    e = cfg["ens"]
+    return e["max_step"] if run_hour in (0, 12) else e.get("max_step_short", e["max_step"])
+
+
 def for_model(cfg: dict, model_id: str) -> dict:
     """Config for one model: base + its override, site.charts reduced to the model's chart list."""
     m = next((m for m in cfg["models"] if m["id"] == model_id), None)

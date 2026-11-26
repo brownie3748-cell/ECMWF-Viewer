@@ -477,7 +477,9 @@ function render() {
   ["controls", "slider", "steps-card", "toggles"].forEach((id) => { $(id).hidden = ens; });
   $("compare").hidden = M().kind === "dfs";   // 예보: one forecast per mode, nothing to compare
   $("compare").textContent = ens ? "과거 런 비교" : "과거 런 비교 (같은 시각)";
-  $("valid-kst").textContent = fmtKst(valid);
+  // meteogram: the end of the forecast ("12/11(금) 3시까지"); older manifests without end_step: the run time
+  $("valid-kst").textContent = ens && r.end_step != null ? `${fmtKst(addH(parseRun(r.run), r.end_step))}까지`
+    : fmtKst(valid);
   $("valid-sub").textContent = ens ? `${fmtUtc(valid)} 런 · ${M().label} ${chartLabel(state.chart)} 앙상블`
     : r.srcs ? `${chartLabel(state.chart)} · ${(r.srcs[state.chart] || {})[state.step] || ""}`
     : `${fmtUtc(valid)} · +${state.step}h · ${M().label} ${chartLabel(state.chart)}`;

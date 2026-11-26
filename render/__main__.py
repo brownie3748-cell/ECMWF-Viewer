@@ -205,7 +205,9 @@ def cmd_poll(args, cfg):
         site.write_manifest(cfg, st, runs)
     for key in removed:
         st.delete_prefix(key + "/", sizes)
-    # orphans: run prefixes in the bucket that the manifest does not list (interrupted uploads)
+    # orphans: run prefixes in the bucket that the manifest does not list (interrupted uploads). Only model
+    # prefixes: dfs/ (forecast.yml) and _ops/ belong to other jobs (2026-11-26: every poll deleted dfs/vsrt/ and
+    # dfs/shrt/ as "orphans", so the 예보 images were gone minutes after forecast.yml uploaded them)
     listed = {f"{m}/{r}/" for m, rs in runs.items() for r in rs}
     todo_prefixes = {f"{m}/{c:%Y%m%d%H}/" for c, m in todo}
     # a KIM run with partial.json is kept for a later poll (it is no longer in todo once the hub's daily limit
@@ -214,8 +216,9 @@ def cmd_poll(args, cfg):
                  and _resumable(config.for_model(cfg, k.split("/")[0]), st, k.split("/")[0],
                                 dt.datetime.strptime(k.split("/")[1], "%Y%m%d%H"))} \
         if any(kim.is_kma(config.for_model(cfg, m)) for m in config.model_ids(cfg)) else set()
+    model_ids = set(config.model_ids(cfg)) | set(runs)          # + models dropped from the config
     orphans = sorted({"/".join(k.split("/")[:2]) + "/" for k in sizes if k.count("/") >= 2
-                      and not k.startswith("_ops/")} - listed - todo_prefixes - resumable)
+                      and k.split("/")[0] in model_ids} - listed - todo_prefixes - resumable)
     for pfx in orphans:
         st.delete_prefix(pfx, sizes)
     if "NOTICE.txt" not in sizes:
