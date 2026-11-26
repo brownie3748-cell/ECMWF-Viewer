@@ -70,6 +70,37 @@ def main():
     def add(group, label, tmpl, var, f, e, effect="NTL"):
         reqs.append((group, label, tmpl.format(var=var, fc=_t(f), ef=_t(e), effect=effect)))
 
+    if os.environ.get("M9_ROUND") == "2":
+        _round2(add, fc, vh, now)
+    else:
+        _round1(add, fc, fc_prev, vh)
+    _run(reqs, key, out_dir, now, fc, vh)
+
+
+def _round2(add, fc, vh, now):
+    """Round 2: names for the short-range temperature / rain / snow images (TMP, PCP, SNO were blank in round 1),
+    the exact short-range horizon, and the newest ultra-short tm_fc."""
+    e = fc + dt.timedelta(hours=4)
+    for v in ("T1H", "T3H", "TMP", "TA", "PCP", "RN1", "R06", "R01", "SNO", "S06", "SD", "PTY"):
+        add("G shrt name", v, SHRT, v, fc, e)
+    for dtm in ("H1", "H3", "H6"):
+        reqs_tmpl = SHRT.replace("dtm=H0", f"dtm={dtm}")
+        for v in ("TMP", "PCP"):
+            add("H shrt dtm", f"{v} dtm={dtm}", reqs_tmpl, v, fc, e)
+    add("H shrt dtm", "TMP interval=3", SHRT.replace("interval=1", "interval=3"), "TMP", fc, e)
+    add("H shrt dtm", "TMP mode=A", SHRT.replace("mode=I", "mode=A"), "TMP", fc, e)
+    for h in (76, 80, 84, 85, 87, 88, 89, 90, 93):
+        add("I shrt +h", f"+{h}h", SHRT, "SKY", fc, fc + dt.timedelta(hours=h))
+    last = now.replace(minute=(now.minute // 10) * 10)
+    for back in (0, 10, 20, 30, 60):
+        f = last - dt.timedelta(minutes=back)
+        add("J vsrt fc", f"fc {f:%H%M}", VSRT, "SKY", f, now.replace(minute=0) + dt.timedelta(hours=1))
+    for h in (1, 5, 6):
+        add("J vsrt fc", f"fc now-10m +{h}h", VSRT, "PTY", last - dt.timedelta(minutes=10),
+            now.replace(minute=0) + dt.timedelta(hours=h))
+
+
+def _round1(add, fc, fc_prev, vh):
     # A: short-range elements
     for v in ("TMP", "POP", "PTY", "PCP", "SNO", "SKY", "REH", "WSD", "TMN", "TMX", "VEC", "WAV"):
         add("A shrt var", v, SHRT, v, fc, fc + dt.timedelta(hours=4))
@@ -94,6 +125,9 @@ def main():
         add("F vsrt +h", f"+{h}h", VSRT, "PTY", vh, vh + dt.timedelta(hours=h))
     add("F vsrt +h", "effect=GTL +2h", VSRT, "SKY", vh, vh + dt.timedelta(hours=2), "GTL")
 
+
+
+def _run(reqs, key, out_dir, now, fc, vh):
     rows, recs = [], []
     hashes: dict[str, str] = {}
     for i, (group, label, url) in enumerate(reqs):
@@ -118,7 +152,7 @@ def main():
             rec["same_as"] = hashes.get(h)
             hashes.setdefault(h, f"#{i}")
             if rec.get("format"):
-                (out_dir / f"{i:02d}_{group.split()[0]}_{label.replace(' ', '_').replace('/', '')}.{rec['format'].lower()}"
+                (out_dir / f"{i:02d}_{group.split()[0]}_{''.join(c if c.isalnum() or c in '+-=' else '_' for c in label)}.{rec['format'].lower()}"
                  ).write_bytes(b)
         except Exception as e:  # noqa: BLE001
             rec.update(error=repr(e).replace(key, "***") if key else repr(e), seconds=round(time.monotonic() - t0, 2))
