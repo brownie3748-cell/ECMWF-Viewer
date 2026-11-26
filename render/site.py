@@ -50,6 +50,8 @@ def manifest(cfg: dict, runs: dict[str, dict[str, dict]]) -> dict:
         rs = [dict(r) for _, r in sorted(runs.get(mid, {}).items())]
         for r in rs:
             r.pop("bytes", None)
+            if mc["data"].get("source") == "ens":        # plume: the app shows "<last valid time>까지"
+                r["end_step"] = config_mod.ens_last_step(mc, int(r["run"][8:10]))
         models.append({
             "id": mid,
             "label": mc["model_label_short"],

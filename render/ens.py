@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import requests  # noqa: E402
 
-from . import encode  # noqa: E402
+from . import config, encode  # noqa: E402
 
 log = logging.getLogger(__name__)
 TIMEOUT = 60
@@ -45,7 +45,7 @@ def steps(cfg: dict, run_hour: int = 0) -> list[int]:
     """Steps of a run: every `every_h` to `switch_h`, then every `every_h_long` (IFS ENS: 3 h to +144 h, then 6 h);
     06/18Z runs stop at `max_step_short`."""
     e = cfg["ens"]
-    last = e["max_step"] if run_hour in (0, 12) else e.get("max_step_short", e["max_step"])
+    last = config.ens_last_step(cfg, run_hour)
     sw = min(e.get("switch_h", last), last)
     out = list(range(0, sw + 1, e["every_h"]))
     long_every = e.get("every_h_long", e["every_h"])

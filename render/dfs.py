@@ -5,7 +5,7 @@ API Hub, copied as they are (no rendering) to the store under dfs/ with a small 
     dfs/<product>/<issuance KST YYYYMMDDHHMM>/<element>_<valid KST YYYYMMDDHH>.png
 
 Run by `python -m render dfs` from forecast.yml: its own workflow and concurrency group, so a two-hour KIM run in
-publish.yml never holds it back; it also keeps its own KMA usage file (_ops/kmadfs-<KST day>.json) and its own
+kim.yml never holds it back; it also keeps its own KMA usage file (_ops/kmadfs-<KST day>.json) and its own
 Class A counter (_ops/dfs-<month>.json), so the two jobs never write the same object.
 
 Measured 2026-11-26 (measure M9): an unavailable valid time returns a grey "no data" map (the same bytes for every
@@ -171,7 +171,7 @@ def run(cfg: dict, st, now: dt.datetime | None = None, force: bool = False) -> l
     usage = st.get_json(usage_key(day)) or {}
     if usage.get("day") != day:
         usage = {"day": day, "calls": 0, "bytes": 0}
-    ku = st.get_json(f"_ops/kma-{day}.json") or {}                    # the KIM job's count today (publish.yml)
+    ku = st.get_json(f"_ops/kma-{day}.json") or {}                    # the KIM job's count today (kim.yml)
     kim_bytes = ku.get("bytes", 0) if ku.get("day") == day else 0
     man_key = d["prefix"] + "index.json"
     man = st.get_json(man_key) or {}

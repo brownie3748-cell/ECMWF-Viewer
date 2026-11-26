@@ -326,13 +326,13 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
     An unavailable valid time returns a grey "no data" map, identical for every element of a product.
   - tm_fc: 초단기 snaps to 10-minute issues; 단기 must be an issuance hour (09:00 returns "no data").
 - Publisher `render/dfs.py`, `python -m render dfs`, workflow `forecast.yml` (main only, every 30 min, its own
-  concurrency group, so publish.yml's KIM runs never hold it back). Per product it fetches the newest issuance not
+  concurrency group, so kim.yml's KIM runs never hold it back). Per product it fetches the newest issuance not
   yet published: the "no data" map first, then the first element until the first "no data" hour, then the other
   elements up to that hour. Layout `dfs/<product>/<issuance KST>/<element>_<valid KST>.png` + `dfs/index.json`;
   the newest 2 issuances per product are kept.
 - Budget (estimated): a 단기 issuance ~700 calls (8 elements x ~87 h), 8 a day; 초단기 ~38 an hour; about 6,500
   calls and 0.6 GB a day. Own cap 8,000 calls/day (`_ops/kmadfs-<day>.json`); bytes checked together with the KIM
-  count against kma_quota.max_bytes_per_day, and the KIM guard in publish.yml now adds this job's calls and bytes.
+  count against kma_quota.max_bytes_per_day, and the KIM guard in kim.yml now adds this job's calls and bytes.
   Own Class A counter `_ops/dfs-<month>.json`, checked against the monthly limit minus the publish job's count.
 - App 0.9.0: "예보" model button after KIM 한반도, chips 기온 강수형태 하늘상태 강수량 강수확률 적설 습도 풍속.
   The run selector holds the two modes: "초단기 → 단기" (초단기 where it has the hour, then 단기) and "단기만".

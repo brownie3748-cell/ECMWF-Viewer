@@ -1,0 +1,58 @@
+name: kim
+
+# KIM runs from the KMA API Hub (kimr; kimg when enabled): poll, render the missing runs, upload to R2.
+# Split from publish.yml so that a two-hour KIM run never holds back the ECMWF runs: own concurrency group,
+# own request counter (_ops/kim-<month>.json); it writes only its own models' runs and entries in index.json.
+# A run stopped by the time budget or a cancel resumes from partial.json in the next run. Main only.
+on:
+  schedule:
+    - cron: "13,43 * * * *"       # every 30 min (best effort; an external workflow_dispatch can replace it)
+  workflow_dispatch:
+    inputs:
+      time_budget_min:
+        description: "Stop starting new runs after this many minutes"
+        default: "150"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kim
+  cancel-in-progress: false
+
+env:
+  TQDM_DISABLE: "1"
+  PYTHONWARNINGS: ignore
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Cache Natural Earth coastlines (cartopy)
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/cartopy
+          key: cartopy-naturalearth-v2
+
+      - name: Install
+        run: pip install -r requirements.lock
+
+      - name: Poll KIM, render, upload to R2, prune, manifest
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
+        run: python -m render poll --models kim --store r2 --work work --time-budget-min "${{ inputs.time_budget_min || '150' }}"

@@ -46,27 +46,72 @@ def process_order(cfg) -> list[str]:
     return order + [m for m in config.model_ids(cfg) if m not in order]
 
 
-def _poll_plan(cfg, store_runs, complete_by_model, rv):
+GROUPS = ("all", "ecmwf", "kim")
+# Each group's request counter in _ops/ (store.month): the jobs never write the same counter file.
+COUNTERS = {"all": "", "ecmwf": "", "kim": "kim-", "dfs": "dfs-"}
+
+
+def group_models(cfg, group: str) -> list[str]:
+    """Models one poll job handles: all, ecmwf (everything but the KMA API Hub models) or kim (publish.yml and
+    kim.yml run as separate jobs, so a two-hour KIM run never holds back the ECMWF runs)."""
+    ids = config.model_ids(cfg)
+    if group == "all":
+        return ids
+    is_k = {m: kim.is_kma(config.for_model(cfg, m)) for m in ids}
+    return [m for m in ids if is_k[m] == (group == "kim")]
+
+
+def owns_dropped(group: str) -> bool:
+    """Runs of a model dropped from the config are removed by the all / ecmwf job."""
+    return group != "kim"
+
+
+def use_own_counter(st, name: str) -> int:
+    """Count this job's requests in _ops/<prefix><month>.json and lower its Class A limit by what the other jobs
+    counted this month (their files are read once, at the start). Returns the other jobs' Class A count."""
+    month = st.month
+    others = sum((st.get_json(f"_ops/{pre}{month}.json") or {}).get("class_a", 0)
+                 for pre in set(COUNTERS.values()) - {COUNTERS[name]})
+    st.month, st._month_ops = COUNTERS[name] + month, None
+    st.scfg = dict(st.scfg, max_class_a_per_month=st.scfg["max_class_a_per_month"] - others)
+    return others
+
+
+def write_manifest(cfg, st, runs, mine) -> None:
+    """index.json with this job's models from `runs` and every other model as the store has it now: the other
+    poll job (publish.yml / kim.yml) may have published or pruned a run since this job started."""
+    if set(mine) >= set(config.model_ids(cfg)):
+        site.write_manifest(cfg, st, runs)
+        return
+    fresh = site.runs_from_manifest(st.get_json("index.json"))
+    merged = {m: (runs.get(m, {}) if m in mine else fresh.get(m, runs.get(m, {})))
+              for m in set(runs) | set(fresh)}
+    site.write_manifest(cfg, st, merged)
+
+
+def _poll_plan(cfg, store_runs, complete_by_model, rv, models=None, dropped=True):
     """Work for one poll: (todo [(cycle, model)], remove {model: [run]}).
 
     Newest cycle first; within a cycle the models in process_order (lightest first).
-    rv: render_version, an int for all models or {model: int}."""
+    rv: render_version, an int for all models or {model: int}. models: the models this job handles (default all);
+    dropped: also remove the runs of models no longer in the config."""
     rv_of = (lambda m: rv[m]) if isinstance(rv, dict) else (lambda m: rv)
+    models = config.model_ids(cfg) if models is None else models
     todo, remove = [], {}
     cycles = sorted({c for cs in complete_by_model.values() for c in cs}, reverse=True)
     for c in cycles:
         rs = f"{c:%Y%m%d%H}"
         for mid in process_order(cfg):
-            if c in complete_by_model.get(mid, []):
+            if mid in models and c in complete_by_model.get(mid, []):
                 have = store_runs.get(mid, {}).get(rs)
                 if not have or (have.get("rv") != rv_of(mid) and not _quota_model(cfg, mid)):
                     todo.append((c, mid))
-    for mid in config.model_ids(cfg):
+    for mid in models:
         target = {f"{c:%Y%m%d%H}" for c in complete_by_model.get(mid, [])}
         gone = sorted(set(store_runs.get(mid, {})) - target)
         if gone:
             remove[mid] = gone
-    for mid in set(store_runs) - set(config.model_ids(cfg)):     # model dropped from the config
+    for mid in set(store_runs) - set(config.model_ids(cfg)) if dropped else ():     # model dropped from the config
         remove[mid] = sorted(store_runs[mid])
     return todo, remove
 
@@ -159,7 +204,9 @@ def cmd_poll(args, cfg):
     stage = work / "stage"
     t_start = time.monotonic()
     st = store_mod.open_store(cfg, args.store)
-    rv = {mid: config.for_model(cfg, mid)["site"]["render_version"] for mid in config.model_ids(cfg)}
+    mine = group_models(cfg, args.models)
+    other_ops = use_own_counter(st, args.models) if args.models != "all" else 0
+    rv = {mid: config.for_model(cfg, mid)["site"]["render_version"] for mid in mine}
     old = st.get_json("index.json")
     runs = site.runs_from_manifest(old)
     keep = cfg["site"]["retention_runs"]
@@ -171,7 +218,7 @@ def cmd_poll(args, cfg):
         kma_usage["other_calls"], kma_usage["other_bytes"] = other.get("calls", 0), other.get("bytes", 0)
     kma_calls0 = kma_usage["calls"]
     probe_notes = []
-    for mid in config.model_ids(cfg):
+    for mid in mine:
         mcfg = config.for_model(cfg, mid)
         src = sources_mod.make_sources(mcfg)
         if kim.is_kma(mcfg):
@@ -179,11 +226,20 @@ def cmd_poll(args, cfg):
         sources[mid] = (mcfg, src)
         complete[mid] = _complete_runs(mcfg, st, mid, src, cycles, runs.get(mid, {}),
                                        mcfg["site"].get("retention_runs", keep), probe_notes)
-    todo, remove = _poll_plan(cfg, runs, complete, rv)
+    todo, remove = _poll_plan(cfg, runs, complete, rv, mine, owns_dropped(args.models))
+    # a run whose meta.json is in the store but not in the manifest (the other poll job wrote index.json in
+    # between, or a job stopped after the upload): adopt it instead of fetching it again (KIM: 1.9 GB of quota)
+    adopted = []
+    for c, mid in list(todo):
+        meta = st.get_json(f"{mid}/{c:%Y%m%d%H}/meta.json")
+        if meta and (meta.get("render_version", 1) == rv[mid] or _quota_model(cfg, mid)):
+            runs.setdefault(mid, {})[f"{c:%Y%m%d%H}"] = site.run_entry(meta)
+            todo.remove((c, mid))
+            adopted.append(f"{mid}/{c:%Y%m%d%H}")
     manifest_stale = old is None or site.manifest(cfg, runs)["models"] != old.get("models") \
         or old.get("path") != cfg["site"]["path"]
-    lines = ["## Poll result", "", f"Store: {st.name}", ""]
-    for mid in config.model_ids(cfg):
+    lines = ["## Poll result", "", f"Store: {st.name}; models: {args.models} ({', '.join(mine)})", ""]
+    for mid in mine:
         lines.append(f"- {mid}: complete runs in window {[f'{c:%Y%m%d%H}' for c in complete[mid]]}")
     if not todo and not remove and not manifest_stale:
         if kma_usage["calls"] != kma_calls0:
@@ -202,10 +258,12 @@ def cmd_poll(args, cfg):
             runs.get(mid, {}).pop(r, None)
             removed.append(f"{mid}/{r}")
     if removed:
-        site.write_manifest(cfg, st, runs)
+        write_manifest(cfg, st, runs, mine)
     for key in removed:
         st.delete_prefix(key + "/", sizes)
-    # orphans: run prefixes in the bucket that the manifest does not list (interrupted uploads)
+    # orphans: run prefixes in the bucket that the manifest does not list (interrupted uploads). Only model
+    # prefixes: dfs/ (forecast.yml) and _ops/ belong to other jobs (2026-11-26: every poll deleted dfs/vsrt/ and
+    # dfs/shrt/ as "orphans", so the 예보 images were gone minutes after forecast.yml uploaded them)
     listed = {f"{m}/{r}/" for m, rs in runs.items() for r in rs}
     todo_prefixes = {f"{m}/{c:%Y%m%d%H}/" for c, m in todo}
     # a KIM run with partial.json is kept for a later poll (it is no longer in todo once the hub's daily limit
@@ -214,8 +272,9 @@ def cmd_poll(args, cfg):
                  and _resumable(config.for_model(cfg, k.split("/")[0]), st, k.split("/")[0],
                                 dt.datetime.strptime(k.split("/")[1], "%Y%m%d%H"))} \
         if any(kim.is_kma(config.for_model(cfg, m)) for m in config.model_ids(cfg)) else set()
+    model_ids = set(mine) | ((set(runs) - set(config.model_ids(cfg))) if owns_dropped(args.models) else set())
     orphans = sorted({"/".join(k.split("/")[:2]) + "/" for k in sizes if k.count("/") >= 2
-                      and not k.startswith("_ops/")} - listed - todo_prefixes - resumable)
+                      and k.split("/")[0] in model_ids} - listed - todo_prefixes - resumable)
     for pfx in orphans:
         st.delete_prefix(pfx, sizes)
     if "NOTICE.txt" not in sizes:
@@ -261,7 +320,7 @@ def cmd_poll(args, cfg):
         finally:
             store_mod.clear_dir(stage)
         runs.setdefault(mid, {})[rs] = site.run_entry(meta)
-        site.write_manifest(cfg, st, runs)       # each finished run appears in the app right away
+        write_manifest(cfg, st, runs, mine)      # each finished run appears in the app right away
         rendered.append(meta)
         # a run published while this job works (long backfills) goes to the front of the queue
         new = _newer_complete(cfg, sources, complete, queue)
@@ -270,14 +329,15 @@ def cmd_poll(args, cfg):
             complete[item[1]].insert(0, item[0])
             late.append(f"{item[1]}/{item[0]:%Y%m%d%H}")
     if not rendered and not removed and manifest_stale:
-        site.write_manifest(cfg, st, runs)
+        write_manifest(cfg, st, runs, mine)
     if any(kim.is_kma(m) for m, _ in sources.values()):
         kim.save_usage(st, kma_usage)
     st.save_ops()
     _gh_output(changed="true")
     used = sum(sizes.values())
     ops = st.month_ops()
-    lines += ["", f"Removed: {removed or 'none'}; orphans deleted: {orphans or 'none'}",
+    lines += ["", f"Removed: {removed or 'none'}; orphans deleted: {orphans or 'none'}; "
+                  f"adopted from the store: {adopted or 'none'}",
               f"Skipped (time budget or cap, next poll): {skipped or 'none'}",
               f"Published while this job ran (moved to the front): {late or 'none'}",
               f"Failed (retried next poll): {failed or 'none'}",
@@ -297,8 +357,8 @@ def cmd_poll(args, cfg):
     lines += ["", f"**Storage: {used / 1e9:.2f} GB of cap {cfg['storage']['max_bytes'] / 1e9:.1f} GB** "
                   f"({len(sizes)} objects; " + ", ".join(f"{k} {v / 1e6:.0f} MB" for k, v in sorted(per_model.items()))
               + ")",
-              f"Requests this month (upper-bound count): Class A {ops['class_a']} of "
-              f"{cfg['storage']['max_class_a_per_month']}, Class B {ops['class_b']}"]
+              f"Requests this month (upper-bound count): Class A {ops['class_a']} (this job's counter) + "
+              f"{other_ops} (other jobs) of {cfg['storage']['max_class_a_per_month']}, Class B {ops['class_b']}"]
     if error:
         lines += ["", f"**STOPPED: {error}**"]
     _summary("\n".join(lines))
@@ -332,10 +392,7 @@ def cmd_dfs(args, cfg):
     """KMA forecast images (예보 tab): fetch new 초단기 / 단기 issuances, upload, prune, write dfs/index.json."""
     from . import dfs
     st = store_mod.open_store(cfg, args.store)
-    main_ops = st.month_ops()["class_a"]            # the publish job's monthly Class A count (_ops/<month>.json)
-    st.month = "dfs-" + st.month                     # this job keeps its own counter: the jobs never share a file
-    st._month_ops = None
-    st.scfg = dict(st.scfg, max_class_a_per_month=st.scfg["max_class_a_per_month"] - main_ops)
+    use_own_counter(st, "dfs")                       # own counter file; the limit counts the other jobs too
     lines = ["## KMA forecast images (예보)", ""]
     try:
         lines += dfs.run(cfg, st, force=args.force)
@@ -351,6 +408,8 @@ def main(argv=None):
     p = sub.add_parser("poll", help="render missing complete runs of every model, upload, prune, manifest")
     p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
     p.add_argument("--work", default="work")
+    p.add_argument("--models", choices=GROUPS, default="all",
+                   help="ecmwf: publish.yml; kim: kim.yml (KMA API Hub models); all: both in one job")
     p.add_argument("--time-budget-min", type=float, default=150)
     p.add_argument("--hard-stop-min", type=float, default=165,
                    help="a KIM run starts no new step after this (the job times out at 180 min)")

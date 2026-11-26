@@ -27,7 +27,8 @@ Full project brief: [docs/SPEC.md](docs/SPEC.md). Read it first.
   storage with the size / request guard (`render/store.py`, Cloudflare R2). Models: `[[models]]` in the config
   (`config.for_model`). See `docs/STAGE3.md`.
 - `app/`: viewer (`app/www`, plain JS) + Capacitor Android project (`app/android`); see `docs/STAGE2.md`.
-- Workflows: `publish.yml` (main only: poll, render, upload to R2), `pages.yml` (main only: web app to Pages), `ci.yml` (branches: tests + smoke render),
+- Workflows: `publish.yml` (main only: poll ECMWF models, render, upload to R2), `kim.yml` (main only: the same for
+  the KMA API Hub KIM models, `poll --models kim`), `pages.yml` (main only: web app to Pages), `ci.yml` (branches: tests + smoke render),
   `android.yml` (debug APK on branches; signed release from main only),
   `forecast.yml` (main only: KMA 초단기/단기 images for the 예보 tab, `render/dfs.py`),
   `measure.yml` (Stage 0 measurements, manual), `pages-test.yml` (M6, manual).
