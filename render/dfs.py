@@ -86,7 +86,7 @@ class Hub:
         if not self.key:
             raise RuntimeError("KMA_APIHUB_KEY is not set")
         u = self.url(product, var, fc, ef) + "&authKey=" + self.key
-        for attempt in range(3):
+        for attempt in range(4):                     # the hub resets connections now and then (measured)
             try:
                 r = self.session.get(u, timeout=self.d["timeout_s"])
                 self.usage["calls"] += 1
@@ -100,7 +100,7 @@ class Hub:
                 raise
             except Exception as e:  # noqa: BLE001
                 log.warning("%s %s %s: %r", product, var, f"{ef:%m%d%H}", e)
-            time.sleep(2 * (attempt + 1))
+            time.sleep(3 * (attempt + 1))
         return None
 
 
@@ -117,7 +117,12 @@ def fetch_issue(hub: Hub, product: str, fc: dt.datetime, now: dt.datetime) -> tu
     vars_ = element_vars(cfg, product)
     hours = valid_hours(product, cfg, fc, now)
     nodata = hub.get(product, vars_[0], fc, fc + dt.timedelta(days=10))
-    nodata_sha = _sha(nodata) if nodata else None
+    if nodata is None:
+        # Without the reference the range end cannot be told from data (2026-11-26: connection resets lost it and
+        # the grey +6 h map was published as a frame). Skip; the next run (30 min) tries again.
+        log.warning("%s %s: no 'no data' reference image, skipped", product, f"{fc:%m%d%H%M}")
+        return {}, {}
+    nodata_sha = _sha(nodata)
     frames: dict[str, list[str]] = {}
     files: dict[str, bytes] = {}
 

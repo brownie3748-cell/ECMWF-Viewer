@@ -84,5 +84,23 @@ class Publish(unittest.TestCase):
             self.assertTrue(lines)
 
 
+class NoReference(unittest.TestCase):
+    def test_reference_lost_skips_product(self):
+        """2026-11-26: connection resets lost the "no data" reference and the grey +6 h map was taken as data."""
+        class Flaky(FakeSession):
+            def get(self, url, timeout=None):
+                q = dict(p.split("=", 1) for p in url.split("?", 1)[1].split("&"))
+                if dt.datetime.strptime(q["tm_ef"], "%Y%m%d%H%M") - dt.datetime.strptime(q["tm_fc"], "%Y%m%d%H%M") \
+                        > dt.timedelta(days=5):
+                    raise ConnectionResetError(104, "Connection reset by peer")
+                return super().get(url, timeout)
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict("os.environ", {"KMA_APIHUB_KEY": "k"}), \
+                mock.patch.object(dfs.requests, "Session", Flaky), mock.patch.object(dfs.time, "sleep"):
+            st = store.open_store(CFG, f"local:{d}")
+            lines = dfs.run(CFG, st, now=dt.datetime(2026, 11, 26, 10, 42))
+            self.assertIsNone(st.get_json("dfs/index.json"))
+            self.assertTrue(all("not available yet" in x for x in lines[:2]), lines)
+
+
 if __name__ == "__main__":
     unittest.main()

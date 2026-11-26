@@ -338,3 +338,6 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   The run selector holds the two modes: "초단기 → 단기" (초단기 where it has the hour, then 단기) and "단기만".
   Frames start at the current hour. No legend (none available from the API).
 - Also fixed: the "이미지를 불러오지 못했어요" banner stayed after a later image loaded.
+- Fix (2026-11-26, first real test from the sandbox): connection resets lost the "no data" reference image, so the
+  range end could not be detected and the grey +6 h 초단기 map was taken as a frame (3 colours vs ~55, measured).
+  A product whose reference cannot be fetched is now skipped for that run; 4 tries per request instead of 3.
