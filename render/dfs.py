@@ -108,49 +108,51 @@ def _sha(b: bytes) -> str:
     return hashlib.sha1(b).hexdigest()
 
 
-def fetch_issue(hub: Hub, product: str, fc: dt.datetime, now: dt.datetime) -> tuple[dict, dict[str, bytes]]:
-    """Images of one issuance: ({var: [valid KST YYYYMMDDHH, ...]}, {store key: png}).
+def probe_range(hub: Hub, product: str, fc: dt.datetime, now: dt.datetime, files: dict) -> tuple[str | None, list]:
+    """Find the issuance's last valid hour with its first element: (last YYYYMMDDHH or None, frames of that element).
 
-    The "no data" map of this product is fetched first (a valid time far beyond the range); the first element
-    then finds the last valid hour (stops at the first "no data"), and the other elements are fetched up to it."""
+    The "no data" map of this product is fetched first (a valid time far beyond the range). Leading "no data"
+    hours are skipped (단기 starts at issuance + 1 h, measured 2026-11-26: 11 KST issuance, 11시 = no data); after
+    the first image the first "no data" hour ends the range."""
     cfg = hub.cfg
-    vars_ = element_vars(cfg, product)
-    hours = valid_hours(product, cfg, fc, now)
-    nodata = hub.get(product, vars_[0], fc, fc + dt.timedelta(days=10))
+    first = element_vars(cfg, product)[0]
+    nodata = hub.get(product, first, fc, fc + dt.timedelta(days=10))
     if nodata is None:
         # Without the reference the range end cannot be told from data (2026-11-26: connection resets lost it and
         # the grey +6 h map was published as a frame). Skip; the next run (30 min) tries again.
         log.warning("%s %s: no 'no data' reference image, skipped", product, f"{fc:%m%d%H%M}")
-        return {}, {}
+        return None, []
     nodata_sha = _sha(nodata)
-    frames: dict[str, list[str]] = {}
-    files: dict[str, bytes] = {}
-
-    def ok(b: bytes | None) -> bool:
-        return b is not None and len(b) > BLANK_MAX_BYTES and _sha(b) != nodata_sha
-
-    first = vars_[0]
-    last = None
-    for ef in hours:                                   # range probe with the first element
+    frames, last, lead_skips = [], None, 0
+    for ef in valid_hours(product, cfg, fc, now):
         b = hub.get(product, first, fc, ef)
-        if not ok(b):
-            if b is not None:
-                break                                  # "no data": the range ends here
+        if b is None:
             continue                                   # a failed request: skip this hour
+        if len(b) <= BLANK_MAX_BYTES or _sha(b) == nodata_sha:
+            if last is None and lead_skips < 3:
+                lead_skips += 1                        # before the first image: not the end yet
+                continue
+            break                                      # "no data": the range ends here
         files[key_for(cfg, product, fc, first, ef)] = b
-        frames.setdefault(first, []).append(f"{ef:%Y%m%d%H}")
+        frames.append(f"{ef:%Y%m%d%H}")
         last = ef
-    if last is None:
-        return {}, {}
-    todo = [(v, ef) for v in vars_[1:] for ef in hours if ef <= last]
+    return (f"{last:%Y%m%d%H}" if last else None), frames
+
+
+def fetch_element(hub: Hub, product: str, var: str, fc: dt.datetime, now: dt.datetime, first: str, last: str,
+                  files: dict) -> list[str]:
+    """One element's images between the issuance's first and last valid hour found by the probe (and from the
+    current hour on)."""
+    cfg = hub.cfg
+    lo, hi = (dt.datetime.strptime(x, "%Y%m%d%H") for x in (first, last))
+    hours = [ef for ef in valid_hours(product, cfg, fc, now) if lo <= ef <= hi]
+    frames = []
     with cf.ThreadPoolExecutor(cfg["dfs"]["parallel"]) as ex:
-        for (v, ef), b in zip(todo, ex.map(lambda t: hub.get(product, t[0], fc, t[1]), todo)):
-            if ok(b):
-                files[key_for(cfg, product, fc, v, ef)] = b
-                frames.setdefault(v, []).append(f"{ef:%Y%m%d%H}")
-    for v in frames:
-        frames[v].sort()
-    return frames, files
+        for ef, b in zip(hours, ex.map(lambda e: hub.get(product, var, fc, e), hours)):
+            if b is not None and len(b) > BLANK_MAX_BYTES:
+                files[key_for(cfg, product, fc, var, ef)] = b
+                frames.append(f"{ef:%Y%m%d%H}")
+    return frames
 
 
 def usage_key(day: str) -> str:
@@ -158,10 +160,13 @@ def usage_key(day: str) -> str:
 
 
 def run(cfg: dict, st, now: dt.datetime | None = None, force: bool = False) -> list[str]:
-    """Fetch every product whose newest issuance is not published yet; upload; prune; write dfs/index.json.
-    Returns summary lines."""
+    """Fetch the newest issuance of every product, element by element: each element's images are uploaded and
+    dfs/index.json and the usage count are saved as soon as the element is done, so a cancelled job keeps its work
+    and the next run resumes the missing elements (2026-11-26: the first run hit the 25-minute job limit with
+    ~700 calls fetched and nothing uploaded). Returns summary lines."""
     now = now or kst_now()
     d = cfg["dfs"]
+    t_start = time.monotonic()
     day = f"{now:%Y-%m-%d}"
     usage = st.get_json(usage_key(day)) or {}
     if usage.get("day") != day:
@@ -172,15 +177,32 @@ def run(cfg: dict, st, now: dt.datetime | None = None, force: bool = False) -> l
     man = st.get_json(man_key) or {}
     products = man.get("products", {})
     hub = Hub(cfg, usage)
-    lines, changed = [], False
-    sizes = None
+    lines = []
+
+    def save():
+        st.put_bytes(usage_key(day), json.dumps(usage).encode(), "no-cache")
+        m = {"schema": 1, "generated_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+             "tz": "KST", "elements": d["elements"], "attribution": d["credit"], "products": products}
+        st.put_bytes(man_key, json.dumps(m, ensure_ascii=False).encode(), "no-cache, max-age=0")
+
+    def upload(files: dict):
+        st.check_budget(len(files) + 2)
+        with cf.ThreadPoolExecutor(cfg["storage"]["upload_threads"]) as ex:
+            list(ex.map(lambda kv: st.put_bytes(kv[0], kv[1], cfg["storage"]["image_cache_control"]), files.items()))
+
     for product in PRODUCTS:
         fc = latest_issue(product, cfg, now)
-        have = products.get(product, [])
-        if not force and have and have[-1]["fc"] == f"{fc:%Y%m%d%H%M}":
+        fcs = f"{fc:%Y%m%d%H%M}"
+        have = products.setdefault(product, [])
+        entry = have[-1] if have and have[-1]["fc"] == fcs else None
+        if entry and entry.get("complete", True) and not force:
             lines.append(f"- {product}: {fc:%m-%d %H:%M} KST already published")
             continue
-        est = len(element_vars(cfg, product)) * len(valid_hours(product, cfg, fc, now)) + 1
+        if entry is None or force:
+            have[:] = [h for h in have if h["fc"] != fcs]
+            entry = {"fc": fcs, "frames": {}, "done": [], "complete": False}
+        vars_ = element_vars(cfg, product)
+        est = (len(vars_) - len(entry["done"])) * len(valid_hours(product, cfg, fc, now)) + 1
         est_bytes = est * d["est_bytes_per_image"]
         if usage["calls"] + est > d["max_calls_per_day"]:
             lines.append(f"- {product}: skipped, daily cap ({usage['calls']} used + ~{est} > {d['max_calls_per_day']})")
@@ -190,32 +212,45 @@ def run(cfg: dict, st, now: dt.datetime | None = None, force: bool = False) -> l
                          f"{usage['bytes'] / 1e9:.2f} GB + ~{est_bytes / 1e9:.2f} GB > "
                          f"{cfg['kma_quota']['max_bytes_per_day'] / 1e9:.1f} GB)")
             continue
-        t0 = time.monotonic()
-        calls0, bytes0 = usage["calls"], usage["bytes"]
-        frames, files = fetch_issue(hub, product, fc, now)
-        if not files:
-            lines.append(f"- {product}: {fc:%m-%d %H:%M} KST not available yet ({usage['calls'] - calls0} calls)")
-            continue
-        st.check_budget(len(files) + 2)
-        with cf.ThreadPoolExecutor(cfg["storage"]["upload_threads"]) as ex:
-            list(ex.map(lambda kv: st.put_bytes(kv[0], kv[1], cfg["storage"]["image_cache_control"]), files.items()))
-        have = [h for h in have if h["fc"] != f"{fc:%Y%m%d%H%M}"] + [{"fc": f"{fc:%Y%m%d%H%M}", "frames": frames}]
-        drop, have = have[:-d["keep_issuances"]], have[-d["keep_issuances"]:]
-        if drop:
-            sizes = sizes if sizes is not None else st.list_sizes()
-            for h in drop:
-                st.delete_prefix(f"{d['prefix']}{product}/{h['fc']}/", sizes)
-        products[product] = have
-        changed = True
-        n = sum(len(v) for v in frames.values())
-        lines.append(f"- {product}: {fc:%m-%d %H:%M} KST, {n} images, {sum(map(len, files.values())) / 1e6:.1f} MB, "
-                     f"{usage['calls'] - calls0} calls, {(usage['bytes'] - bytes0) / 1e6:.1f} MB from the hub, "
-                     f"{time.monotonic() - t0:.0f} s (measured); valid {min(min(v) for v in frames.values())}.."
-                     f"{max(max(v) for v in frames.values())} KST")
-    st.put_bytes(usage_key(day), json.dumps(usage).encode(), "no-cache")
-    if changed:
-        man = {"schema": 1, "generated_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-               "tz": "KST", "elements": d["elements"], "attribution": d["credit"], "products": products}
-        st.put_bytes(man_key, json.dumps(man, ensure_ascii=False).encode(), "no-cache, max-age=0")
+        t0, calls0, bytes0, n0 = time.monotonic(), usage["calls"], usage["bytes"], \
+            sum(len(v) for v in entry["frames"].values())
+        if not entry.get("last"):
+            files: dict = {}
+            last, frames = probe_range(hub, product, fc, now, files)
+            if last is None:
+                st.put_bytes(usage_key(day), json.dumps(usage).encode(), "no-cache")
+                lines.append(f"- {product}: {fc:%m-%d %H:%M} KST not available yet ({usage['calls'] - calls0} calls)")
+                continue
+            upload(files)
+            entry.update(first=frames[0], last=last, frames={vars_[0]: frames}, done=[vars_[0]])
+            have.append(entry)
+            save()
+        stopped = False
+        for v in vars_:
+            if v in entry["done"]:
+                continue
+            if time.monotonic() - t_start > d["time_budget_min"] * 60:
+                stopped = True                          # the next run resumes from here
+                break
+            files = {}
+            entry["frames"][v] = fetch_element(hub, product, v, fc, now, entry["first"], entry["last"], files)
+            upload(files)
+            entry["done"].append(v)
+            save()
+        if not stopped:
+            entry["complete"] = True
+            drop = have[:-d["keep_issuances"]]
+            del have[:-d["keep_issuances"]]
+            if drop:
+                sizes = st.list_sizes()
+                for h in drop:
+                    st.delete_prefix(f"{d['prefix']}{product}/{h['fc']}/", sizes)
+            save()
+        n = sum(len(v) for v in entry["frames"].values()) - n0
+        lines.append(f"- {product}: {fc:%m-%d %H:%M} KST, {n} images, {usage['calls'] - calls0} calls, "
+                     f"{(usage['bytes'] - bytes0) / 1e6:.1f} MB from the hub, {time.monotonic() - t0:.0f} s (measured); "
+                     f"valid to {entry['last']} KST; "
+                     + ("complete" if not stopped else f"stopped at the {d['time_budget_min']}-minute budget, "
+                                                       f"{len(entry['done'])}/{len(vars_)} elements (resumes next run)"))
     lines.append(f"- KMA API Hub today (this job's file): {usage['calls']} calls, {usage['bytes'] / 1e6:.1f} MB")
     return lines

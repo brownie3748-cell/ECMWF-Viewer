@@ -161,16 +161,16 @@ function issueLabel(product, fc) {        // fc "YYYYMMDDHHMM" KST
 function buildForecastRuns(dfs, now) {
   const base = kstKeyDate(kstKey(now));   // the current hour
   const baseUtc = `${base.getUTCFullYear()}${String(base.getUTCMonth() + 1).padStart(2, "0")}${String(base.getUTCDate()).padStart(2, "0")}${String(base.getUTCHours()).padStart(2, "0")}`;
-  const latest = (p) => (dfs.products[p] || []).slice(-1)[0];
   const runs = DFS_MODES.map((label, mode) => ({ run: baseUtc + "m" + mode, label, steps: [], urls: {}, srcs: {}, wpsh: null }));
   for (const e of dfs.elements) {
     const id = "dfs_" + e.id;
     runs.forEach((r, mode) => {
       const urls = {}, srcs = {};
       const add = (p) => {
-        const iss = latest(p);
         const v = e[p];
-        if (!iss || !v || !iss.frames[v]) return;
+        // newest issuance that has this element (a new issuance is published element by element)
+        const iss = v && (dfs.products[p] || []).slice().reverse().find((x) => (x.frames[v] || []).length);
+        if (!iss) return;
         for (const ef of iss.frames[v]) {
           const step = Math.round((kstKeyDate(ef) - base) / 3600e3);
           if (step < 0) continue;
@@ -446,6 +446,20 @@ function render() {
   const r = run();
   $("run").classList.toggle("latest", M().kind !== "dfs" && state.runIdx === M().runs.length - 1);
   const steps = stepsFor(r, state.chart);
+  if (!steps.length) {                       // 예보: this mode / element has no images yet (e.g. 단기 still coming)
+    updateModels();
+    updateChartPicker();
+    $("valid-kst").textContent = "–";
+    $("valid-sub").textContent = `${chartLabel(state.chart)} · ${r.label || ""}`;
+    $("img-base").removeAttribute("src");
+    $("img-overlay").hidden = true;
+    $("steps").innerHTML = "";
+    $("steps-count").textContent = "0";
+    gridKey = "";
+    setStatus("이 방식의 예보 그림이 아직 없어요. 잠시 뒤 ⟳ 를 눌러 주세요.");
+    return;
+  }
+  if ($("status").textContent.startsWith("이 방식의")) setStatus("");
   const i = Math.max(0, steps.indexOf(state.step));
   state.step = steps[i];
 

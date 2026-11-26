@@ -36,7 +36,7 @@ class FakeSession:
         if q["data1"] in ("TMP", "PCP"):
             return FakeResp(b"\x89PNG" + b"\0" * 168)                  # unknown element: 172-byte blank
         last = fc + dt.timedelta(hours=88 if prod == "shrt" else 5)
-        if ef > last:
+        if ef > last or (prod == "shrt" and ef <= fc):     # 단기 starts at issuance + 1 h (measured 2026-11-26)
             return FakeResp(_png("nodata-" + prod))
         return FakeResp(_png(url))
 
@@ -82,6 +82,39 @@ class Publish(unittest.TestCase):
             u = st.get_json("_ops/kmadfs-2026-11-26.json")
             self.assertGreater(u["calls"], 0)
             self.assertTrue(lines)
+
+
+class Incremental(unittest.TestCase):
+    def test_short_range_starts_after_issuance(self):
+        """11 KST issuance read at 11:43: 11시 is "no data", the frames start at 12시 (first real run, 2026-11-26)."""
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict("os.environ", {"KMA_APIHUB_KEY": "k"}), \
+                mock.patch.object(dfs.requests, "Session", FakeSession), mock.patch.object(dfs.time, "sleep"):
+            st = store.open_store(CFG, f"local:{d}")
+            dfs.run(CFG, st, now=dt.datetime(2026, 11, 26, 11, 43))
+            s = st.get_json("dfs/index.json")["products"]["shrt"][-1]
+            self.assertEqual((s["fc"], s["frames"]["T3H"][0], s["complete"]), ("202611261100", "2026112612", True))
+            self.assertEqual(s["frames"]["POP"][0], "2026112612")
+
+    def test_budget_stop_and_resume(self):
+        """A job that runs out of time keeps the elements it finished; the next run fetches only the rest."""
+        import copy
+        cfg0 = copy.deepcopy(CFG)
+        cfg0["dfs"]["time_budget_min"] = 0
+        now = dt.datetime(2026, 11, 26, 10, 14)
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict("os.environ", {"KMA_APIHUB_KEY": "k"}), \
+                mock.patch.object(dfs.requests, "Session", FakeSession), mock.patch.object(dfs.time, "sleep"):
+            st = store.open_store(CFG, f"local:{d}")
+            lines = dfs.run(cfg0, st, now=now)
+            s = st.get_json("dfs/index.json")["products"]["shrt"][-1]
+            self.assertEqual((s["done"], s["complete"]), (["T3H"], False))
+            self.assertTrue(any("resumes next run" in x for x in lines), lines)
+            calls0 = st.get_json("_ops/kmadfs-2026-11-26.json")["calls"]
+            dfs.run(CFG, st, now=now)
+            s = st.get_json("dfs/index.json")["products"]["shrt"][-1]
+            self.assertTrue(s["complete"])
+            self.assertEqual(len(s["done"]), 8)
+            calls = st.get_json("_ops/kmadfs-2026-11-26.json")["calls"] - calls0
+            self.assertLess(calls, 8 * 88)            # the probe / first element was not fetched again
 
 
 class NoReference(unittest.TestCase):
