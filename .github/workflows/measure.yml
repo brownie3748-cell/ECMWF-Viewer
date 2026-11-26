@@ -10,6 +10,9 @@ on:
       m8_urls:
         description: "M8: KMA API Hub request URL(s) without the authKey (space separated); empty = built-in KIM global + regional set"
         default: ""
+      m9_round:
+        description: "M9: measurement round (1, 2 or 3)"
+        default: "1"
 
 permissions:
   contents: read
@@ -90,6 +93,14 @@ jobs:
           KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
           M8_URLS: ${{ inputs.m8_urls }}
         run: python -m measure.m8_kma_apihub
+
+      - name: M9 KMA forecast images (ultra-short / short-range)
+        if: inputs.only == 'm9'
+        continue-on-error: true
+        env:
+          KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
+          M9_ROUND: ${{ inputs.m9_round }}
+        run: python -m measure.m9_kma_dfs
 
       - name: Report to job summary
         if: always()

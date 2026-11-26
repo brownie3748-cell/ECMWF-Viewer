@@ -167,7 +167,9 @@ class KimSource:
     def check_budget(self, calls: int, nbytes: float) -> None:
         q = self.cfg["kma_quota"]
         roll_usage(self.usage)
-        if self.usage["calls"] + calls > q["max_calls_per_day"] or self.usage["bytes"] + nbytes > q["max_bytes_per_day"]:
+        oc, ob = self.usage.get("other_calls", 0), self.usage.get("other_bytes", 0)    # the 예보 job (forecast.yml)
+        if self.usage["calls"] + oc + calls > q["max_calls_per_day"] or \
+                self.usage["bytes"] + ob + nbytes > q["max_bytes_per_day"]:
             raise QuotaError(f"KMA API Hub daily budget: used {self.usage['calls']} calls / "
                              f"{self.usage['bytes'] / 1e9:.2f} GB, next needs about {calls} calls / "
                              f"{nbytes / 1e9:.2f} GB (limits {q['max_calls_per_day']} / {q['max_bytes_per_day'] / 1e9:.1f} GB)")
