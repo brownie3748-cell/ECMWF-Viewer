@@ -1,5 +1,6 @@
 """Offline tests for the split poll jobs: publish.yml (--models ecmwf) and kim.yml (--models kim)."""
 
+import datetime as dt
 import json
 import pathlib
 import tempfile
@@ -8,9 +9,11 @@ import unittest
 from render import config, site
 from render import store as store_mod
 from render.__main__ import _poll_plan, group_models, use_own_counter, write_manifest
-from test_site import C
-
 CFG = config.load()
+
+
+def C(s):
+    return dt.datetime.strptime(s, "%Y%m%d%H")
 
 
 def entry(run):
