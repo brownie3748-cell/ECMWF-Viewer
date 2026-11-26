@@ -89,7 +89,12 @@ const chartIn = (mod, id) => mod.charts.find((c) => c.id === id && !c.overlay_of
 const chartDef = (id) => M().charts.find((c) => c.id === id);
 // Ensemble meteogram models (graph charts only): lower model row, own chips, always the newest run.
 const isEns = (mod) => mod.charts.length > 0 && mod.charts.every((c) => c.domain === "graph");
-const chartIsGraph = (id) => state.m.models.some((mod) => mod.charts.some((c) => c.id === id && c.domain === "graph"));
+// Model kinds: map charts, ensemble meteograms (lower row), KMA forecast images (예보). Each kind has its own chips.
+const kindOf = (mod) => (mod.kind === "dfs" ? "dfs" : isEns(mod) ? "ens" : "map");
+function chartKind(id) {
+  const mod = state.m.models.find((x) => x.charts.some((c) => c.id === id));
+  return mod ? kindOf(mod) : "map";
+}
 // WPSH line overlay for any chart on the same map domain (the overlay is drawn on the identical pixel frame).
 function overlayOf(id) {
   const c = chartDef(id);
@@ -99,6 +104,7 @@ function overlayOf(id) {
 const run = () => M().runs[state.runIdx];
 // Hourly charts (KIM 한반도 surface charts) also have the run's surface-only hourly steps.
 function stepsFor(r, chartId) {
+  if (r.urls) return Object.keys(r.urls[chartId] || {}).map(Number).sort((a, b) => a - b);   // 예보: per-chart frames
   const c = chartDef(chartId);
   const min = c.min_step || 0;
   const all = c.hourly && r.hourly_steps ? [...r.steps, ...r.hourly_steps].sort((a, b) => a - b) : r.steps;
@@ -107,6 +113,8 @@ function stepsFor(r, chartId) {
 function url(runId, chartId, step) {
   // A zoom model (KIM 지역 확대) reads the images of its data model with a chart prefix (z_msl_...).
   const mod = M();
+  const fr = mod.runs.find((x) => x.run === runId);
+  if (fr && fr.urls) return (fr.urls[chartId] || {})[step] || "";
   const p = state.m.path.replace("{model}", mod.data_model || mod.id).replace("{run}", runId)
     .replace("{chart}", (mod.chart_prefix || "") + chartId)
     .replace("{step:03d}", String(step).padStart(3, "0"));
@@ -119,6 +127,10 @@ function wpshFor(r, step) {
   return { drawn: true, H: v[0], line: v[1] };
 }
 function chartLabel(id) { return LABELS[id] || (chartDef(id) || {}).title || id; }
+function chartTitle(id) {
+  for (const mod of state.m.models) { const c = mod.charts.find((x) => x.id === id); if (c) return c.title || id; }
+  return id;
+}
 
 // ------------------------------------------------------------------ loading
 async function loadManifest() {
@@ -131,6 +143,64 @@ async function loadManifest() {
   return m;
 }
 
+// ------------------------------------------------------------------ 예보 (KMA forecast images)
+// dfs/index.json (written by forecast.yml): the newest 초단기예보 / 단기예보 issuances and their frames. The 예보
+// model has two "runs", one per mode, built here from the current hour (KST) on:
+//   0: 초단기예보 for its hours (+0..+5 h), then 단기예보;  1: 단기예보 only.
+const DFS_MODES = ["초단기 → 단기", "단기만"];
+function kstKey(d) {                      // Date -> "YYYYMMDDHH" in KST
+  const k = addH(d, 9);
+  return `${k.getUTCFullYear()}${String(k.getUTCMonth() + 1).padStart(2, "0")}${String(k.getUTCDate()).padStart(2, "0")}${String(k.getUTCHours()).padStart(2, "0")}`;
+}
+function kstKeyDate(s) {                  // "YYYYMMDDHH" (KST) -> Date
+  return addH(parseRun(s), -9);
+}
+function issueLabel(product, fc) {        // fc "YYYYMMDDHHMM" KST
+  return `${product === "vsrt" ? "초단기예보" : "단기예보"} ${+fc.slice(4, 6)}/${+fc.slice(6, 8)} ${fc.slice(8, 10)}:${fc.slice(10, 12)} 발표`;
+}
+function buildForecastRuns(dfs, now) {
+  const base = kstKeyDate(kstKey(now));   // the current hour
+  const baseUtc = `${base.getUTCFullYear()}${String(base.getUTCMonth() + 1).padStart(2, "0")}${String(base.getUTCDate()).padStart(2, "0")}${String(base.getUTCHours()).padStart(2, "0")}`;
+  const latest = (p) => (dfs.products[p] || []).slice(-1)[0];
+  const runs = DFS_MODES.map((label, mode) => ({ run: baseUtc + "m" + mode, label, steps: [], urls: {}, srcs: {}, wpsh: null }));
+  for (const e of dfs.elements) {
+    const id = "dfs_" + e.id;
+    runs.forEach((r, mode) => {
+      const urls = {}, srcs = {};
+      const add = (p) => {
+        const iss = latest(p);
+        const v = e[p];
+        if (!iss || !v || !iss.frames[v]) return;
+        for (const ef of iss.frames[v]) {
+          const step = Math.round((kstKeyDate(ef) - base) / 3600e3);
+          if (step < 0) continue;
+          urls[step] = `${state.base}dfs/${p}/${iss.fc}/${v}_${ef}.png`;
+          srcs[step] = issueLabel(p, iss.fc);
+        }
+      };
+      add("shrt");
+      if (mode === 0) add("vsrt");          // 초단기 replaces 단기 where it has the hour
+      r.urls[id] = urls;
+      r.srcs[id] = srcs;
+    });
+  }
+  for (const r of runs) r.steps = [...new Set(Object.values(r.urls).flatMap((u) => Object.keys(u).map(Number)))].sort((a, b) => a - b);
+  return runs;
+}
+async function addForecastModel(m) {
+  try {
+    const res = await fetch(state.base + "dfs/index.json?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+    const dfs = await res.json();
+    const runs = buildForecastRuns(dfs, new Date());
+    if (!runs.some((r) => r.steps.length)) return;
+    m.models.push({ id: "dfs", kind: "dfs", label: "예보", attribution: dfs.attribution, latest: null, runs,
+                    charts: dfs.elements.map((e) => ({ id: "dfs_" + e.id, title: e.label, domain: "dfs" })) });
+  } catch (e) {
+    console.warn("예보 자료 없음", e);      // the other models work without it
+  }
+}
+
 // keepView: stay on the same run and valid time (app resume). toLatest: jump to the newest run but keep the
 // valid time as close as possible (the ⟳ button).
 async function init(keepView, toLatest) {
@@ -138,6 +208,7 @@ async function init(keepView, toLatest) {
     const prev = state.m && run() ? run().run : null;
     const prevValid = state.m && prev ? addH(parseRun(prev), state.step) : null;
     state.m = await loadManifest();
+    await addForecastModel(state.m);
     $("notice-link").href = state.base + "NOTICE.txt";
     buildModels();
     buildChartPicker();
@@ -170,8 +241,8 @@ function selectModel(id, keepRun, keepValid, findValid) {
     const i = mod.runs.findIndex((r) => r.run === keepRun);
     if (i >= 0) state.runIdx = i;
   }
-  const kind = isEns(mod) ? "ens" : "map";
-  if (chartIsGraph(state.chart) !== (kind === "ens")) {
+  const kind = kindOf(mod);
+  if (chartKind(state.chart) !== kind) {
     // switching between map charts and meteograms: back to the last chart of that kind
     const last = localStorage.getItem("chart_" + kind);
     if (last && chartIn(mod, last)) state.chart = last;
@@ -182,6 +253,7 @@ function selectModel(id, keepRun, keepValid, findValid) {
     state.chart = near && chartIn(mod, near) ? near
       : chartIn(mod, "gz500") ? "gz500" : mod.charts.find((c) => !c.overlay_of).id;
   }
+  if (kind === "dfs") state.runIdx = Math.min(+(localStorage.getItem("dfs_mode") || 0), mod.runs.length - 1);
   if (findValid && keepValid) {
     for (let i = mod.runs.length - 1; i >= 0; i--) {
       if (hasValid(mod.runs[i], keepValid)) { state.runIdx = i; break; }
@@ -197,7 +269,7 @@ function selectChart(id) {
   const v = currentValid();
   state.chart = id;
   localStorage.setItem("chart", id);
-  localStorage.setItem("chart_" + (isEns(M()) ? "ens" : "map"), id);
+  localStorage.setItem("chart_" + kindOf(M()), id);
   setStepNear(v);
   render();
 }
@@ -218,7 +290,8 @@ function buildModels() {
       if (mod.id === state.model || b.disabled) return;
       stop();
       if (isEns(mod)) selectModel(mod.id, null, null, false);     // meteograms: newest run
-      else selectModel(mod.id, run() ? run().run : null, isEns(M()) ? null : currentValid(), true);
+      else if (mod.kind === "dfs") selectModel(mod.id, null, isEns(M()) ? null : currentValid(), false);
+      else selectModel(mod.id, run() ? run().run : null, isEns(M()) || M().kind === "dfs" ? null : currentValid(), true);
     };
     nav.appendChild(b);
   });
@@ -230,7 +303,7 @@ function buildModels() {
 function updateModels() {
   document.querySelectorAll(".model").forEach((b) => {
     const mod = state.m.models.find((x) => x.id === b.dataset.id);
-    const has = chartIn(mod, state.chart) || isEns(mod) !== isEns(M());   // other row: no "nearest chart" mark
+    const has = chartIn(mod, state.chart) || kindOf(mod) !== kindOf(M());   // other kind: no "nearest chart" mark
     b.disabled = !mod.runs.length;
     b.classList.toggle("other", !!mod.runs.length && !has);
     b.title = !mod.runs.length ? "자료 준비 중" : (has ? "" : `${mod.label}에는 이 차트가 없어 비슷한 차트로 열어요`);
@@ -244,7 +317,7 @@ function buildRuns() {
   M().runs.forEach((r, i) => {
     const o = document.createElement("option");
     o.value = String(i);
-    o.textContent = runShort(r.run);
+    o.textContent = r.label || runShort(r.run);
     sel.appendChild(o);
   });
 }
@@ -259,7 +332,7 @@ function buildChartPicker() {
     const b = document.createElement("button");
     b.className = "chip";
     b.dataset.id = id;
-    b.textContent = LABELS[id] || id;
+    b.textContent = LABELS[id] || chartTitle(id);
     b.onclick = () => { if (!b.disabled && id !== state.chart) selectChart(id); };
     nav.append(b);
   });
@@ -268,7 +341,7 @@ function buildChartPicker() {
 function updateChartPicker() {
   document.querySelectorAll(".chip").forEach((b) => {
     const ok = !!chartIn(M(), b.dataset.id);
-    b.hidden = chartIsGraph(b.dataset.id) !== isEns(M());      // map chips for map models, cities for meteograms
+    b.hidden = chartKind(b.dataset.id) !== kindOf(M());     // map chips / cities (meteograms) / 예보 elements
     b.disabled = !ok;
     b.title = ok ? "" : `${M().label}에는 없는 차트`;
     b.classList.toggle("on", b.dataset.id === state.chart);
@@ -371,7 +444,7 @@ function pump(gen) {
 let gridKey = "";
 function render() {
   const r = run();
-  $("run").classList.toggle("latest", state.runIdx === M().runs.length - 1);
+  $("run").classList.toggle("latest", M().kind !== "dfs" && state.runIdx === M().runs.length - 1);
   const steps = stepsFor(r, state.chart);
   const i = Math.max(0, steps.indexOf(state.step));
   state.step = steps[i];
@@ -388,9 +461,11 @@ function render() {
   const valid = addH(parseRun(r.run), state.step);
   const ens = isEns(M());                     // meteogram: one image per run, no time controls / WPSH
   ["controls", "slider", "steps-card", "toggles"].forEach((id) => { $(id).hidden = ens; });
+  $("compare").hidden = M().kind === "dfs";   // 예보: one forecast per mode, nothing to compare
   $("compare").textContent = ens ? "과거 런 비교" : "과거 런 비교 (같은 시각)";
   $("valid-kst").textContent = fmtKst(valid);
   $("valid-sub").textContent = ens ? `${fmtUtc(valid)} 런 · ${M().label} ${chartLabel(state.chart)} 앙상블`
+    : r.srcs ? `${chartLabel(state.chart)} · ${(r.srcs[state.chart] || {})[state.step] || ""}`
     : `${fmtUtc(valid)} · +${state.step}h · ${M().label} ${chartLabel(state.chart)}`;
 
   // WPSH overlay (any chart on the same map domain as a WPSH overlay)
@@ -416,6 +491,7 @@ function showImages(base, overlay, baseUrl, ovUrl, withSpinner) {
   if (withSpinner) $("loading").hidden = loaded.has(baseUrl);
   base.onload = () => {
     loaded.add(baseUrl);
+    if ($("status").textContent.startsWith("이미지를")) setStatus("");   // an earlier failed image
     // zoom charts are nearly square: the viewer follows the image's own shape
     if (base.naturalWidth) base.closest(".viewer").style.aspectRatio = `${base.naturalWidth} / ${base.naturalHeight}`;
     if (withSpinner) { $("loading").hidden = true; updateStepGrid(); }
@@ -601,7 +677,14 @@ function wire() {
   $("theme").onclick = toggleTheme;
   $("info").onclick = () => $("info-dlg").showModal();
   $("info-close").onclick = () => $("info-dlg").close();
-  $("run").onchange = (e) => { stop(); const v = currentValid(); state.runIdx = +e.target.value; setStepNear(v); render(); };
+  $("run").onchange = (e) => {
+    stop();
+    const v = currentValid();
+    state.runIdx = +e.target.value;
+    if (M().kind === "dfs") localStorage.setItem("dfs_mode", String(state.runIdx));
+    setStepNear(v);
+    render();
+  };
   $("reload").onclick = () => { stop(); init(true, true); };
   $("prev").onclick = () => { stop(); move(-1); };
   $("next").onclick = () => { stop(); move(1); };

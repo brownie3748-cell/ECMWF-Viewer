@@ -166,6 +166,9 @@ def cmd_poll(args, cfg):
     cycles = recent_cycles(cfg["site"]["lookback_runs"])
     complete, sources = {}, {}
     kma_usage = kim.load_usage(st)             # shared by the KIM models: one daily API Hub budget
+    other = st.get_json(f"_ops/kmadfs-{kma_usage['day']}.json") or {}      # the 예보 job's own count (forecast.yml)
+    if other.get("day") == kma_usage["day"]:
+        kma_usage["other_calls"], kma_usage["other_bytes"] = other.get("calls", 0), other.get("bytes", 0)
     kma_calls0 = kma_usage["calls"]
     probe_notes = []
     for mid in config.model_ids(cfg):
@@ -325,6 +328,22 @@ def cmd_latest(args, cfg):
     sys.exit("no complete run found")
 
 
+def cmd_dfs(args, cfg):
+    """KMA forecast images (예보 tab): fetch new 초단기 / 단기 issuances, upload, prune, write dfs/index.json."""
+    from . import dfs
+    st = store_mod.open_store(cfg, args.store)
+    main_ops = st.month_ops()["class_a"]            # the publish job's monthly Class A count (_ops/<month>.json)
+    st.month = "dfs-" + st.month                     # this job keeps its own counter: the jobs never share a file
+    st._month_ops = None
+    st.scfg = dict(st.scfg, max_class_a_per_month=st.scfg["max_class_a_per_month"] - main_ops)
+    lines = ["## KMA forecast images (예보)", ""]
+    try:
+        lines += dfs.run(cfg, st, force=args.force)
+    finally:
+        st.save_ops()
+        _summary("\n".join(lines))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m render")
     ap.add_argument("--config", default=None, help="path to config.toml (default: render/config.toml)")
@@ -344,10 +363,13 @@ def main(argv=None):
     p = sub.add_parser("latest", help="print the newest complete run")
     p.add_argument("--model", default="ifs")
     p.add_argument("--main-only", action="store_true", help="00/12Z runs only")
+    p = sub.add_parser("dfs", help="KMA forecast images (초단기 / 단기) for the 예보 tab")
+    p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
+    p.add_argument("--force", action="store_true", help="fetch the newest issuances even if published")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = config.load(args.config)
-    {"poll": cmd_poll, "render-run": cmd_render_run, "latest": cmd_latest}[args.cmd](args, cfg)
+    {"poll": cmd_poll, "render-run": cmd_render_run, "latest": cmd_latest, "dfs": cmd_dfs}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

@@ -314,3 +314,27 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   `[value, opacity, colour]`. Ensemble `render_version` 3.
 - Past-run comparison for meteograms: compares every run's graph (step 0) instead of one valid time, which only
   ever found the current run (measured in the app: 1 frame before, 11 AIFS-ENS runs after).
+
+## 예보 tab: KMA 초단기예보 / 단기예보 images (owner 2026-11-26)
+- Source: KMA API Hub grid images `nph-dfs_vsrt_ana2` (초단기) and `nph-dfs_shrt_ana_5d` (단기), copied unmodified.
+  Measured with measure M9 (rounds 1-3, 133 calls):
+  - PNG, 601x1034 at size=600 (16-64 KB), 1001x1723 at size=1000 (~90 KB); 1-3 s per request (some up to 17 s).
+  - Bare maps: no legend, title or time; no `mode`, `legend` or `title` value changes that.
+  - Elements: 초단기 T1H RN1 SKY PTY REH WSD LGT VEC; 단기 T3H POP PTY SKY REH WSD R06 S06 TMN TMX VEC WAV.
+    TMP, PCP, SNO (the current 단기예보 names) return a 172-byte blank on this API.
+  - Ranges: 초단기 +0..+5 h; 단기 02-17 KST issuances to 24 h of D+3, 20/23 KST issuances to 24 h of D+4 (the same end).
+    An unavailable valid time returns a grey "no data" map, identical for every element of a product.
+  - tm_fc: 초단기 snaps to 10-minute issues; 단기 must be an issuance hour (09:00 returns "no data").
+- Publisher `render/dfs.py`, `python -m render dfs`, workflow `forecast.yml` (main only, every 30 min, its own
+  concurrency group, so publish.yml's KIM runs never hold it back). Per product it fetches the newest issuance not
+  yet published: the "no data" map first, then the first element until the first "no data" hour, then the other
+  elements up to that hour. Layout `dfs/<product>/<issuance KST>/<element>_<valid KST>.png` + `dfs/index.json`;
+  the newest 2 issuances per product are kept.
+- Budget (estimated): a 단기 issuance ~700 calls (8 elements x ~87 h), 8 a day; 초단기 ~38 an hour; about 6,500
+  calls and 0.6 GB a day. Own cap 8,000 calls/day (`_ops/kmadfs-<day>.json`); bytes checked together with the KIM
+  count against kma_quota.max_bytes_per_day, and the KIM guard in publish.yml now adds this job's calls and bytes.
+  Own Class A counter `_ops/dfs-<month>.json`, checked against the monthly limit minus the publish job's count.
+- App 0.9.0: "예보" model button after KIM 한반도, chips 기온 강수형태 하늘상태 강수량 강수확률 적설 습도 풍속.
+  The run selector holds the two modes: "초단기 → 단기" (초단기 where it has the hour, then 단기) and "단기만".
+  Frames start at the current hour. No legend (none available from the API).
+- Also fixed: the "이미지를 불러오지 못했어요" banner stayed after a later image loaded.
