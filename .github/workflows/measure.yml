@@ -11,7 +11,7 @@ on:
         description: "M8: KMA API Hub request URL(s) without the authKey (space separated); empty = built-in KIM global + regional set"
         default: ""
       m9_round:
-        description: "M9: measurement round (1 or 2)"
+        description: "M9: measurement round (1, 2 or 3)"
         default: "1"
 
 permissions:

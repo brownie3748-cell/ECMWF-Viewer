@@ -70,11 +70,36 @@ def main():
     def add(group, label, tmpl, var, f, e, effect="NTL"):
         reqs.append((group, label, tmpl.format(var=var, fc=_t(f), ef=_t(e), effect=effect)))
 
-    if os.environ.get("M9_ROUND") == "2":
+    if os.environ.get("M9_ROUND") == "3":
+        _round3(add, fc, vh, now)
+    elif os.environ.get("M9_ROUND") == "2":
         _round2(add, fc, vh, now)
     else:
         _round1(add, fc, fc_prev, vh)
     _run(reqs, key, out_dir, now, fc, vh)
+
+
+def _round3(add, fc, vh, now):
+    """Round 3: legend / title options (round 1-2 images are bare maps), R06/S06 valid hours, the range of
+    earlier issuances (do 20/23 KST issuances reach D+4?)."""
+    e = fc + dt.timedelta(hours=4)
+    for mode in ("A", "B", "C", "G", "L", "M", "N", "S", "T"):
+        add("K legend", f"T3H mode={mode}", SHRT.replace("mode=I", f"mode={mode}"), "T3H", fc, e)
+    for extra in ("&legend=1", "&legend=Y", "&lgd=Y", "&title=1"):
+        add("K legend", f"T3H {extra[1:]}", SHRT + extra, "T3H", fc, e)
+    add("K legend", "T3H size=1000", SHRT.replace("size=600", "size=1000"), "T3H", fc, e)
+    add("K legend", "T3H color=C", SHRT.replace("color=E", "color=C"), "T3H", fc, e)
+    add("K legend", "vsrt T1H mode=A", VSRT.replace("mode=I", "mode=A"), "T1H", vh, vh + dt.timedelta(hours=2))
+    base = fc.replace(hour=0)
+    for h in range(fc.hour + 1, fc.hour + 13):
+        add("L R06 hours", f"R06 {h % 24:02d}h", SHRT, "R06", fc, base + dt.timedelta(hours=h))
+    prev = fc
+    for _ in range(4):                                       # the four issuances before: last valid hour
+        prev -= dt.timedelta(hours=3)
+        end_d3 = (prev.replace(hour=0) + dt.timedelta(days=4))     # 24 h of D+3
+        for e2, tag in ((end_d3, "D+3 24h"), (end_d3 + dt.timedelta(hours=1), "D+4 01h"),
+                        (end_d3 + dt.timedelta(hours=24), "D+4 24h")):
+            add("M range", f"fc {prev:%d%H} {tag}", SHRT, "SKY", prev, e2)
 
 
 def _round2(add, fc, vh, now):
