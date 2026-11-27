@@ -298,7 +298,7 @@ t = { title = "{level}hPa Temperature Anomaly (C), GPH (gpm)", levels = [-21, -1
 t2m = { title = "2m Temperature Anomaly (C), MSLP (hPa)", levels = [-21, -18, -15, -12, -9, -6, -4, -2, -1, 1, 2, 4, 6, 9, 12, 15, 18, 21], unit = "C", step = 1 }
 gz500 = { title = "500hPa Height Anomaly (gpm), GPH (gpm)", levels = [-480, -420, -360, -300, -240, -180, -120, -60, -30, 30, 60, 120, 180, 240, 300, 360, 420, 480], unit = "gpm", step = 30 }
 ept = { title = "{level}hPa Theta-e Anomaly (K), GPH (gpm)", levels = [-42, -36, -30, -24, -18, -12, -8, -4, -2, 2, 4, 8, 12, 18, 24, 30, 36, 42], unit = "K", step = 2 }
-msl_interval = 4                  # hPa, black isobars on the 2 m chart
+msl_interval = 2                  # hPa, black isobars on the 2 m chart (as the 지상 charts, owner 2026-11-27)
 smooth_sigma = 1.0                # grid points, on the anomaly (the 0.25 deg climatology is smooth already)
 credit = "Anomaly vs ERA5 1990-2019 climatology: contains modified Copernicus Climate Change Service information 2026 (CC BY 4.0)."
 mask_color = "#d4d4d4"            # 925 / 850 hPa below ground
