@@ -146,7 +146,8 @@ function url(runId, chartId, step) {
   const p = state.m.path.replace("{model}", mod.data_model || mod.id).replace("{run}", runId)
     .replace("{chart}", (mod.chart_prefix || "") + chartId)
     .replace("{step:03d}", String(step).padStart(3, "0"));
-  return state.base + p;
+  // runs rendered as WebP (2026-11-27 on) say so; older runs keep .png
+  return state.base + (fr && fr.ext ? p.replace(/\.png$/, "." + fr.ext) : p);
 }
 function wpshFor(r, step) {
   if (!r.wpsh) return { drawn: false, why: "06·18UTC 런은 선을 그리지 않아요" };
@@ -246,6 +247,29 @@ async function init(keepView, toLatest) {
   } catch (e) {
     console.error(e);
     setStatus("자료를 불러오지 못했어요. 인터넷 연결을 확인하고 ⟳ 를 눌러 주세요. (" + e.message + ")");
+  }
+}
+
+// A run still being rendered (partial: its steps so far) is published step by step: while one is in the
+// manifest, the manifest is fetched again every minute and the view keeps its run and valid time.
+const LIVE_REFRESH_MS = 60e3;
+const anyPartial = () => state.m && state.m.models.some((x) => x.runs.some((r) => r.partial));
+async function refreshLive() {
+  if (document.hidden || state.timer || $("compare-dlg").open || !anyPartial()) return;
+  try {
+    const m = await loadManifest();
+    if (m.generated_utc === state.m.generated_utc) return;
+    const dfs = state.m.models.find((x) => x.kind === "dfs");
+    if (dfs) m.models.push(dfs);                // 예보 has its own index (forecast.yml), kept as it is
+    const prev = run() ? run().run : null;
+    const prevValid = prev ? addH(parseRun(prev), state.step) : null;
+    if (state.timer || $("compare-dlg").open) return;      // started while the manifest loaded
+    state.m = m;
+    buildModels();
+    buildChartPicker();
+    selectModel(state.model, prev, prevValid);
+  } catch (e) {
+    console.warn("새로고침 실패", e);
   }
 }
 
@@ -415,7 +439,7 @@ function buildRuns() {
   M().runs.forEach((r, i) => {
     const o = document.createElement("option");
     o.value = String(i);
-    o.textContent = r.label || runShort(r.run);
+    o.textContent = r.label || runShort(r.run) + (r.partial ? " ⏳" : "");   // ⏳: still being rendered
     sel.appendChild(o);
   });
 }
@@ -609,7 +633,8 @@ function render() {
     : fmtKst(valid);
   $("valid-sub").textContent = ens ? `${fmtUtc(valid)} 런 · ${M().label} ${chartLabel(state.chart)} ${ensGroupLabel(state.chart)} 앙상블`
     : r.srcs ? `${chartLabel(state.chart)} · ${(r.srcs[state.chart] || {})[state.step] || ""}`
-    : `${fmtUtc(valid)} · +${state.step}h · ${M().label} ${chartLabel(state.chart)}`;
+    : `${fmtUtc(valid)} · +${state.step}h · ${M().label} ${chartLabel(state.chart)}`
+      + (r.partial && r.steps.length ? ` · 나오는 중 (+${Math.max(...r.steps)}h / +${r.final_step}h)` : "");
 
   // WPSH overlay (any chart on the same map domain as a WPSH overlay)
   const ov = overlayOf(state.chart);
@@ -626,7 +651,7 @@ function render() {
   const baseUrl = url(r.run, state.chart, state.step);
   showImages($("img-base"), $("img-overlay"), baseUrl, overlayUrl(r, state.step), true);
 
-  const key = `${M().id}|${r.run}|${state.chart}|${state.wpsh}`;
+  const key = `${M().id}|${r.run}|${state.chart}|${state.wpsh}|${steps.length}`;   // a live run gains steps
   if (key !== gridKey) { gridKey = key; buildStepGrid(); prefetch(); } else updateStepGrid();
 }
 
@@ -860,3 +885,4 @@ function wire() {
 
 wire();
 init(false);
+setInterval(refreshLive, LIVE_REFRESH_MS);

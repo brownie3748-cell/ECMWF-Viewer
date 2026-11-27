@@ -3,8 +3,9 @@
 Layout in the store (R2 bucket or local directory):
     index.json                       manifest, written after every change (last)
     NOTICE.txt                       licence / attribution notice
-    <model>/<run>/<chart>_<step>.png images
+    <model>/<run>/<chart>_<step>.png images (.webp for runs whose entry has ext = webp)
     <model>/<run>/meta.json          written after the run's images (= run complete)
+    <model>/<run>/partial.json       steps of a run still being rendered (its entry has partial = true)
     _ops/<YYYY-MM>.json              request counter for the monthly budget
 """
 
@@ -29,6 +30,11 @@ def run_entry(meta: dict) -> dict:
         e["hourly_steps"] = meta["hourly_steps"]     # surface-only steps; old apps ignore them
     if meta.get("charts"):
         e["charts"] = meta["charts"]                 # ENS: the graphs this run has (rain_* from 2026-11-27)
+    if meta.get("ext", "png") != "png":
+        e["ext"] = meta["ext"]                       # image file type of this run (webp from 2026-11-27; app 0.12)
+    if meta.get("partial"):
+        e["partial"] = True                          # still being rendered: steps so far (app 0.12 refreshes)
+        e["final_step"] = meta["final_step"]
     return e
 
 

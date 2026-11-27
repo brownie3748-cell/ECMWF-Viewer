@@ -104,7 +104,7 @@ def _poll_plan(cfg, store_runs, complete_by_model, rv, models=None, dropped=True
         for mid in process_order(cfg):
             if mid in models and c in complete_by_model.get(mid, []):
                 have = store_runs.get(mid, {}).get(rs)
-                if not have or (have.get("rv") != rv_of(mid) and not _quota_model(cfg, mid)):
+                if not have or have.get("partial") or (have.get("rv") != rv_of(mid) and not _quota_model(cfg, mid)):
                     todo.append((c, mid))
     for mid in models:
         target = {f"{c:%Y%m%d%H}" for c in complete_by_model.get(mid, [])}
@@ -122,42 +122,139 @@ def _quota_model(cfg, mid) -> bool:
     return kim.is_kma(config.for_model(cfg, mid))
 
 
-PARTIAL = "partial.json"                  # <model>/<run>/partial.json: steps of an unfinished KIM run in the store
+PARTIAL = "partial.json"                  # <model>/<run>/partial.json: steps of a run still being rendered
 
 
 def _resumable(mcfg, st, mid, c) -> bool:
-    """A KIM run an earlier job partly rendered (and that is still young enough to finish)."""
+    """A KIM run an earlier job partly rendered (and that is still young enough to finish). ECMWF runs: False (a
+    partly rendered ECMWF run is in the manifest as partial and goes back into the poll's todo list)."""
+    if not kim.is_kma(mcfg):
+        return False
     age_h = (dt.datetime.now(dt.timezone.utc).replace(tzinfo=None) - c).total_seconds() / 3600
     if age_h > mcfg["kma"].get("max_fetch_age_h", 1e9) + mcfg["kma"].get("resume_extra_h", 12):
         return False
     return bool(st.get_json(f"{mid}/{c:%Y%m%d%H}/{PARTIAL}"))
 
 
-def _resume_hook(st, mid, rs, rv, sizes, usage, deadline):
-    """render_run's resume dict: each finished step's images go to the store at once, with partial.json."""
-    prefix, key = f"{mid}/{rs}/", f"{mid}/{rs}/{PARTIAL}"
-    part = st.get_json(key) or {}
-    if part.get("rv") != rv:
-        part = {"rv": rv, "done": {}}
-    cap = st.scfg["max_bytes"]
-    cc = st.scfg["image_cache_control"]
+class LiveRun:
+    """A run published step by step (owner 2026-11-27: "like Tropical Tidbits"): each rendered step's images go to
+    the store at once (upload threads, so downloads and rendering do not wait), and the run's manifest entry
+    (partial = true, the steps uploaded so far) is rewritten at most every site.live_publish_s seconds. The
+    app shows those steps and refreshes the manifest while a run is partial. partial.json (the steps' results)
+    lets the next poll resume a run a job did not finish (KIM: the downloads cost daily API quota).
 
-    def on_step(result, files):
-        new = sum(p.stat().st_size for p in files)
-        if sum(sizes.values()) + new > cap:
-            raise store_mod.StorageCapError(f"{prefix}: step +{result['step']} would pass the storage cap")
+    `runs` is the job's {model: {run: entry}} (updated in place); the caller replaces the partial entry with the
+    one from meta.json when the run is finished, as before."""
+
+    def __init__(self, cfg, mcfg, st, mid, run, rv, sizes, runs, mine, usage=None, deadline=None):
+        import concurrent.futures as cf
+        import threading
+
+        self.cfg, self.mcfg, self.st, self.mid, self.run = cfg, mcfg, st, mid, run
+        self.rs = f"{run:%Y%m%d%H}"
+        self.prefix, self.key = f"{mid}/{self.rs}/", f"{mid}/{self.rs}/{PARTIAL}"
+        self.sizes, self.runs, self.mine, self.usage, self.deadline = sizes, runs, mine, usage, deadline
+        part = st.get_json(self.key) or {}
+        self.part = part if part.get("rv") == rv else {"rv": rv, "done": {}}
+        self.done = dict(self.part["done"])             # resumed steps, then every step whose upload finished
+        self.total = sum(sizes.values())
+        self.cap = st.scfg["max_bytes"]
+        self.cc = st.scfg["image_cache_control"]
+        self.every = 0 if usage is not None else mcfg["site"].get("live_publish_s", 60)   # KIM: every step
+        self.last_pub = 0.0
+        self.published = set()                          # resumed steps are published with the first new one
+        self.lock, self.pub_lock = threading.Lock(), threading.Lock()
+        self.pool = cf.ThreadPoolExecutor(st.scfg["upload_threads"])
+        self.futures = []
+        self.final_step = max(fetch.published_steps(run.hour, mcfg))
+
+    def resume(self) -> dict:
+        return {"done": self.part["done"], "on_step": self.on_step, "deadline": self.deadline}
+
+    def _upload(self, result, files):
         for p in files:
             data = p.read_bytes()
-            st.put_bytes(prefix + p.name, data, cc)
-            sizes[prefix + p.name] = len(data)
+            self.st.put_bytes(self.prefix + p.name, data, self.cc)
+            with self.lock:
+                self.sizes[self.prefix + p.name] = len(data)
             p.unlink()
-        part["done"][str(result["step"])] = result
-        raw = json.dumps(part).encode()
-        st.put_bytes(key, raw, "no-cache")
-        sizes[key] = len(raw)
-        kim.save_usage(st, usage)          # the quota count survives a cancelled job too
+        with self.lock:
+            self.done[str(result["step"])] = result
 
-    return {"done": part["done"], "on_step": on_step, "deadline": deadline}
+    def on_step(self, result, files):
+        """render_run: step result rendered, its image files on disk (deleted here once uploaded)."""
+        new = sum(p.stat().st_size for p in files)
+        if self.total + new > self.cap:
+            raise store_mod.StorageCapError(f"{self.prefix}: step +{result['step']} would pass the storage cap")
+        self.total += new
+        self.st.check_budget(len(files))
+        fut = self.pool.submit(self._upload, result, files)
+        self.futures.append(fut)
+        if self.usage is not None:                       # KIM: the step is recorded once its upload is done
+            fut.result()
+            self._raise_failed()
+            self.maybe_publish()
+            return
+        fut.add_done_callback(self._published_after_upload)   # e.g. the first step: in the app at once
+        self._raise_failed()
+
+    def _published_after_upload(self, fut):
+        if fut.exception() is None:
+            try:
+                self.maybe_publish()
+            except Exception as e:  # noqa: BLE001
+                log.warning("%s: live manifest update failed (%r); the next step tries again", self.prefix, e)
+
+    def _raise_failed(self):
+        for f in self.futures:
+            if f.done() and f.exception():
+                raise f.exception()
+
+    def entry(self) -> dict | None:
+        with self.lock:
+            results = list(self.done.values())
+        if not results:
+            return None
+        s = pipeline.run_summary(self.mcfg, self.run, results)
+        return site.run_entry(dict(s, run=self.rs, render_version=self.part["rv"], partial=True,
+                                   final_step=self.final_step))
+
+    def maybe_publish(self, force: bool = False):
+        with self.pub_lock:                              # upload threads and the main thread
+            self._publish(force)
+
+    def _publish(self, force: bool):
+        now = time.monotonic()
+        with self.lock:
+            new = set(self.done) - self.published
+        if not new or (not force and now - self.last_pub < self.every):
+            return
+        e = self.entry()
+        with self.lock:
+            self.part["done"] = dict(self.done)
+            self.published |= set(self.done)
+        raw = json.dumps(self.part).encode()
+        self.st.put_bytes(self.key, raw, "no-cache")
+        with self.lock:
+            self.sizes[self.key] = len(raw)
+        if self.usage is not None:
+            kim.save_usage(self.st, self.usage)         # the quota count survives a cancelled job too
+        self.runs.setdefault(self.mid, {})[self.rs] = e
+        write_manifest(self.cfg, self.st, self.runs, self.mine)
+        self.last_pub = now
+
+    def close(self, finished: bool) -> None:
+        """Wait for the uploads. finished: meta.json follows (the caller writes the final entry); otherwise the
+        steps uploaded so far stay published as a partial run for the next poll."""
+        self.pool.shutdown(wait=True)
+        errors = [f.exception() for f in self.futures if f.exception()]
+        if not finished:
+            try:
+                self.maybe_publish(force=True)
+            except Exception as e:  # noqa: BLE001
+                log.warning("%s: could not record the steps rendered so far (%s)", self.prefix, e)
+        if errors:
+            raise errors[0]
 
 
 def _complete_runs(mcfg, st, mid, src, cycles, stored: dict, keep: int, notes: list) -> list[dt.datetime]:
@@ -167,7 +264,7 @@ def _complete_runs(mcfg, st, mid, src, cycles, stored: dict, keep: int, notes: l
         rs = f"{c:%Y%m%d%H}"
         if stored.get(rs):
             out.append(c)                  # already published: complete, no need to ask the source again
-        elif kim.is_kma(mcfg) and _resumable(mcfg, st, mid, c):
+        elif _resumable(mcfg, st, mid, c):
             out.append(c)                  # partly rendered by an earlier job: complete, no probe
         elif not quota_stop:
             try:
@@ -295,14 +392,15 @@ def cmd_poll(args, cfg):
             continue
         mcfg, src = sources[mid]
         store_mod.clear_dir(stage)
+        live = None
         try:
             if kim.is_kma(mcfg):               # do not start a KIM run the daily API budget cannot finish
                 src.check_budget(*kim.run_cost(mcfg, len(fetch.published_steps(c.hour, mcfg)),
                                                 len(fetch.hourly_steps(c.hour, mcfg))))
-            resume = None
-            if kim.is_kma(mcfg):
-                resume = _resume_hook(st, mid, rs, rv[mid], sizes, kma_usage,
-                                      t_start + args.hard_stop_min * 60)
+            if mcfg["data"].get("source") != "ens":      # map models: published step by step (ENS: one graph)
+                live = LiveRun(cfg, mcfg, st, mid, c, rv[mid], sizes, runs, mine,
+                               usage=kma_usage if kim.is_kma(mcfg) else None,
+                               deadline=t_start + args.hard_stop_min * 60 if kim.is_kma(mcfg) else None)
             if any(x["id"].startswith("a_") for x in mcfg["site"]["charts"]):
                 # 편차 maps: the climatology days this run needs, read by the render workers (ANOM_CLIM_DIR)
                 from . import clim as clim_mod
@@ -311,9 +409,19 @@ def cmd_poll(args, cfg):
                 if clim_mod.fetch_grid(st, cfg, c, max(steps_all), cdir):
                     log.warning("%s %s: map climatology missing in the store (run clim.yml): no 편차 maps", mid, rs)
                 os.environ["ANOM_CLIM_DIR"] = str(cdir)
-            meta = pipeline.render_run(mcfg, src, c, stage, work, cfg_path=args.config, resume=resume)
+            meta = pipeline.render_run(mcfg, src, c, stage, work, cfg_path=args.config,
+                                       resume=live.resume() if live else None)
+            if live:
+                live.close(finished=True)
         except (kim.QuotaError, RuntimeError) as e:
+            if live:
+                try:
+                    live.close(finished=False)  # the steps uploaded so far stay in the app; the next poll resumes
+                except Exception as e2:  # noqa: BLE001
+                    log.warning("%s %s: uploads after the failure: %r", mid, rs, e2)
             failed.append(f"{mid}/{rs}: {str(e)[:200]}")
+            if isinstance(e, store_mod.StorageCapError):
+                error = str(e)                 # storage cap / request budget: no further uploads this poll
             if isinstance(e, kim.QuotaError):  # hub or own daily limit: no other KIM run can start this poll
                 queue = [(qc, qm) for qc, qm in queue if not kim.is_kma(sources[qm][0])]
             store_mod.clear_dir(stage)
@@ -323,8 +431,8 @@ def cmd_poll(args, cfg):
                 kim.save_usage(st, kma_usage)   # after every KIM run: a cancelled job keeps its count
         try:
             meta["uploaded_bytes"] = st.upload_dir(stage / mid / rs, f"{mid}/{rs}/", sizes, last="meta.json",
-                                                   keep_others=resume is not None)
-            if resume is not None:
+                                                   keep_others=live is not None)
+            if live is not None:
                 st.delete_prefix(f"{mid}/{rs}/{PARTIAL}", sizes)
         except store_mod.StorageCapError as e:
             error = str(e)

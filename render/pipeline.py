@@ -77,8 +77,8 @@ def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None,
 
     def save(chart_id, frame):
         data = encode.encode(frame.png_bytes(), fmt, cfg["output"]["png8_colors"], cfg["output"]["webp_quality"])
-        path = out / cfg["site"]["path"].format(model=cfg["model_id"], run=run_s, chart=chart_id,
-                                                step=step).split("/", 2)[-1]
+        path = out / encode.with_ext(cfg["site"]["path"].format(model=cfg["model_id"], run=run_s, chart=chart_id,
+                                                                step=step), fmt).split("/", 2)[-1]
         path.write_bytes(data)
         sizes[chart_id] = len(data)
 
@@ -115,6 +115,28 @@ def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None,
     wpsh = [round(res["H"]), round(res["line_gpm"])] if res.get("drawn") else None
     return {"step": step, "seconds": time.monotonic() - t0, "bytes": sum(sizes.values()),
             "images": len(sizes), "wpsh": wpsh, "charts": sorted(sizes)}
+
+
+def run_summary(cfg: dict, run: dt.datetime, results: list[dict]) -> dict:
+    """The manifest part of a run from its rendered steps: main / hourly steps, WPSH, images, the 편차 charts.
+    Used for meta.json and for the entry of a run still being rendered (published step by step)."""
+    results = sorted(results, key=lambda r: r["step"])
+    hourly = [r["step"] for r in results if fetch.is_hourly_only(r["step"], cfg)]
+    main = [r for r in results if r["step"] not in hourly]
+    out = {
+        "steps": [r["step"] for r in main],
+        "hourly_steps": hourly,             # surface-only steps (data.hourly): only the hourly charts exist
+        "wpsh": {str(r["step"]): r["wpsh"] for r in main} if run.hour in cfg["wpsh"]["run_hours"] else None,
+        "images": sum(r["images"] for r in results),
+        "bytes": sum(r["bytes"] for r in results),
+        "ext": encode.EXT[cfg["output"]["format"]],
+    }
+    # 편차 maps: listed only when every main step has them (the app then never asks for a missing image)
+    want_a = [c["id"] for c in cfg["site"]["charts"] if c["id"].startswith("a_")]
+    if want_a and main:
+        have = set.intersection(*[set(r.get("charts", [])) for r in main])
+        out["charts"] = [c["id"] for c in cfg["site"]["charts"] if not c["id"].startswith("a_") or c["id"] in have]
+    return out
 
 
 def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: pathlib.Path,
@@ -219,34 +241,17 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
         if len(missing) > allow:
             raise RuntimeError(f"{len(missing)} steps failed to download: {missing}")
     shutil.rmtree(gdir, ignore_errors=True)
-    results.sort(key=lambda r: r["step"])
-    wpsh = None
-    hourly = [r["step"] for r in results if fetch.is_hourly_only(r["step"], cfg)]
-    results = [r for r in results if r["step"] not in hourly] + [r for r in results if r["step"] in hourly]
-    main = results[:len(results) - len(hourly)]
-    if run.hour in cfg["wpsh"]["run_hours"]:
-        wpsh = {str(r["step"]): r["wpsh"] for r in main}
-    meta = {
+    meta = dict(run_summary(cfg, run, results), **{
         "model": model,
         "run": run_s,
-        "steps": [r["step"] for r in main],
-        "hourly_steps": hourly,             # surface-only steps (data.hourly): only the hourly charts exist
         "missing_steps": missing,
-        "wpsh": wpsh,
         "render_version": cfg["site"]["render_version"],
         "rendered_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sources": sorted(srcs),
-        "images": sum(r["images"] for r in results),
-        "bytes": sum(r["bytes"] for r in results),
         "download_seconds": round(dl_seconds, 1),
         "wall_seconds": round(time.monotonic() - t0, 1),
         "render_seconds_sum": round(sum(r["seconds"] for r in results), 1),
-    }
-    # 편차 maps: listed only when every main step has them (the app then never asks for a missing image)
-    want_a = [c["id"] for c in cfg["site"]["charts"] if c["id"].startswith("a_")]
-    if want_a and main:
-        have = set.intersection(*[set(r.get("charts", [])) for r in main])
-        meta["charts"] = [c["id"] for c in cfg["site"]["charts"] if not c["id"].startswith("a_") or c["id"] in have]
+    })
     if getattr(sources, "stats", None):
         meta["field_ranges"] = dict(sources.stats)      # KIM: min/max per field, a units sanity check
     if hasattr(sources, "request_summary"):

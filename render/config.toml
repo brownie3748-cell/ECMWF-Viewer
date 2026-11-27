@@ -353,7 +353,9 @@ retention_runs = 12             # newest complete runs kept on the published sit
 lookback_runs = 18              # how many past 6-hourly cycles to consider when polling
 process_order = ["ifs", "aifs", "aifsens", "ifsens", "kimg", "kimr", "ifs01"]   # within a cycle: lightest model first (0.1 deg is slowest)
 workers = 4                     # parallel render processes
-path = "{model}/{run}/{chart}_{step:03d}.png"
+live_publish_s = 60             # a run is published step by step: its manifest entry is rewritten at most this often
+                                # (KIM: after every step). Owner 2026-11-27: "see the first steps before the last"
+path = "{model}/{run}/{chart}_{step:03d}.png"   # .webp for runs rendered as webp8 (their manifest entry has ext)
 schema_version = 2
 render_version = 17             # 17: vorticity on the 500 hPa wide map; 16: theta-e palette (279 K white, 18 K colour families, black > 360 K); 15: 500 hPa vorticity + red dashed isotherms, theta-e charts; 14: H + gpm at 500 hPa highs on the wide map; 13: WPSH search to 170E + secondary centre; 12: KMA rain cut-off for snowfall; 11: snow area on msl, snow chart; bump when chart content changes: runs rendered with an older version are re-rendered
 # Published charts, in display order (id, title, level, domain, overlay_of, min_step).
@@ -731,7 +733,9 @@ manifest_cache_control = "no-cache, max-age=0"
 upload_threads = 16
 
 [output]
-format = "png8"                 # png | png8 | webp (decided after M3)
+format = "webp8"                # png | png8 | webp_lossless | webp_q | webp8. webp8 (2026-11-27): the png8 pixels in a
+                                # lossless WebP file, 14 % smaller (measured, 52 AIFS charts), so ~0.9 GB less in R2
+                                # (estimated). Runs keep the type they were rendered with (app 0.12 reads ext).
 png8_colors = 256
 webp_quality = 85
 
