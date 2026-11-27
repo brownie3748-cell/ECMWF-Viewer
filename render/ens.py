@@ -297,7 +297,7 @@ def render_run(cfg: dict, src: EnsSource, run: dt.datetime, site: pathlib.Path, 
                 continue
             data = encode.encode(plume(cfg, run, ps, pt["name"], chart, pc), out["format"], out["png8_colors"],
                                  out["webp_quality"])
-            (rdir / f"{cid}_000.png").write_bytes(data)
+            (rdir / f"{cid}_000.{encode.EXT[out['format']]}").write_bytes(data)
             nbytes += len(data)
             charts.append(cid)
     (rdir / "series.json").write_text(json.dumps({str(s): v for s, v in series.items()}))
@@ -305,7 +305,7 @@ def render_run(cfg: dict, src: EnsSource, run: dt.datetime, site: pathlib.Path, 
             "render_version": cfg["site"]["render_version"],
             "rendered_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "sources": sorted(src.order), "images": len(charts), "charts": charts, "bytes": nbytes,
-            "download_seconds": round(dl, 1), "wall_seconds": round(time.monotonic() - t0, 1),
+            "ext": encode.EXT[out["format"]], "download_seconds": round(dl, 1), "wall_seconds": round(time.monotonic() - t0, 1),
             "render_seconds_sum": 0.0,
             "points": {p["id"]: [p["lat"], p["lon"]] for p in cfg["ens"]["points"]}}
     (rdir / "meta.json").write_text(json.dumps(meta, indent=1))

@@ -542,3 +542,45 @@ class AifsEns(unittest.TestCase):
         self.assertEqual(ens.steps(m, 6)[-1], 144)
         self.assertEqual(m["ens"]["files"], ["ef"])
         self.assertEqual(len(ens.steps(a, 6)), 61)                    # AIFS-ENS 06/18Z still to +360 h
+
+
+class WebpAndLive(unittest.TestCase):
+    """2026-11-27: webp8 (png8 pixels in lossless WebP) and runs published step by step."""
+
+    def test_webp8_keeps_the_png8_pixels(self):
+        import io
+
+        from PIL import Image
+
+        from render import encode
+        rng = np.random.default_rng(0)
+        a = (rng.integers(0, 6, (60, 80, 3)) * 50).astype("uint8")        # few colours, like a chart
+        buf = io.BytesIO()
+        Image.fromarray(a).save(buf, format="PNG")
+        p8, w8 = encode.encode(buf.getvalue(), "png8"), encode.encode(buf.getvalue(), "webp8")
+        self.assertEqual(w8[8:12], b"WEBP")
+        dec = [np.asarray(Image.open(io.BytesIO(b)).convert("RGB")) for b in (p8, w8)]
+        self.assertTrue((dec[0] == dec[1]).all())
+        self.assertEqual(encode.with_ext("ifs/2026112700/msl_024.png", "webp8"), "ifs/2026112700/msl_024.webp")
+        self.assertEqual(encode.with_ext("ifs/2026112700/msl_024.png", "png8"), "ifs/2026112700/msl_024.png")
+
+    def test_entry_ext_and_partial(self):
+        base = {"run": "2026112700", "steps": [0, 3], "wpsh": None, "render_version": 5}
+        self.assertNotIn("ext", site.run_entry(dict(base, ext="png")))         # old apps: unchanged entries
+        e = site.run_entry(dict(base, ext="webp", partial=True, final_step=360))
+        self.assertEqual((e["ext"], e["partial"], e["final_step"]), ("webp", True, 360))
+        self.assertNotIn("partial", site.run_entry(dict(base, ext="webp")))
+        m = site.manifest(CFG, {"ifs": {"2026112700": e}})
+        r = m["models"][0]["runs"][0]
+        self.assertEqual((r["ext"], r["partial"]), ("webp", True))
+
+    def test_run_summary(self):
+        from render import pipeline
+        ifs = config.for_model(CFG, "ifs")
+        res = [{"step": s, "bytes": 2, "images": 1, "wpsh": [5900, 5850], "charts": ["msl", "a_t2m"]} for s in (3, 0)]
+        s = pipeline.run_summary(ifs, C("2026112700"), res)
+        self.assertEqual((s["steps"], s["images"], s["bytes"], s["ext"]), ([0, 3], 2, 4, "webp"))
+        self.assertEqual(s["wpsh"], {"0": [5900, 5850], "3": [5900, 5850]})
+        self.assertIn("a_t2m", s["charts"])
+        self.assertNotIn("a_t850", s["charts"])           # not in every step: not listed
+        self.assertIsNone(pipeline.run_summary(ifs, C("2026112706"), res)["wpsh"])

@@ -354,3 +354,23 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
     - Parallel 2, request timeout 25 s, 30-minute time budget, job limit 45 min.
     - App: per element, the newest issuance that has it. A mode with no images yet shows a message instead of
       breaking.
+
+## Runs published step by step, WebP images (owner 2026-11-27)
+
+- `render/__main__.py` `LiveRun`: for every map model a rendered step is handed to upload threads at once (render and
+  download do not wait); after an upload the run's manifest entry is rewritten when `site.live_publish_s` (60 s) has
+  passed since the last one: `{"run", "steps", "hourly_steps", "wpsh", "charts", "ext", "partial": true,
+  "final_step"}` (built by `pipeline.run_summary`, the same code as `meta.json`). `partial.json` is written with it.
+  KIM keeps its per-step behaviour (each step waits for its upload; quota count saved with every step).
+- When the run finishes, `meta.json` is uploaded and its entry replaces the partial one. When a run fails or the
+  job stops, the steps uploaded so far stay published; `_poll_plan` puts a run whose entry is partial back into the
+  todo list and the next poll resumes it from `partial.json` (same `render_version` only).
+- App 0.12: a partial run is listed as `11/27 00Z ⏳`, the time line adds `나오는 중 (+72h / +360h)`, and while any run
+  in the manifest is partial the app fetches `index.json` every 60 s (not while playing or comparing) and keeps the
+  run and valid time on screen. Older apps simply see a run with fewer steps.
+- ECMWF publication: IFS runs are released as a whole (measured 2026-11-26 by polling: +360 h about 30 s after
+  +240 h; every step index of IFS 0.25 12Z has `Last-Modified` 19:34 UTC, IFS 0.1 21:34, IFS ENS 19:40), so
+  rendering cannot usefully start before the last step exists. `Last-Modified` is not the release time for AIFS:
+  its 00Z steps say 05:45 ... 07:34, but the run to +240 h had been rendered here by 05:34 (measured).
+- `output.format = "webp8"`: quantised like PNG8, saved as lossless WebP (14 % smaller, measured). File names follow
+  the format (`msl_024.webp`); the manifest entry of such a run has `ext: "webp"` and the app swaps the extension.
