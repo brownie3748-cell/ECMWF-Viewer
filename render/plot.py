@@ -705,6 +705,27 @@ def overlay_wpsh(cfg, F, run, step, domain="default"):
     return fr, res
 
 
+def anom_bands(anchors, colors, step=None):
+    """(levels, colours) of the 편차 shading: the anchor bands split into bands of `step`, each coloured by linear
+    interpolation (RGB) between the anchor bands' middles; a white anchor band stays white edge to edge."""
+    if not step:
+        return list(anchors), list(colors)
+    xs, cs = [], []
+    for i, col in enumerate(colors):
+        rgb = mcolors.to_rgb(col)
+        if rgb == (1.0, 1.0, 1.0):
+            xs += [anchors[i], anchors[i + 1]]
+            cs += [rgb, rgb]
+        else:
+            xs.append((anchors[i] + anchors[i + 1]) / 2.0)
+            cs.append(rgb)
+    lv = np.arange(anchors[0], anchors[-1] + step / 2.0, step)
+    mid = (lv[:-1] + lv[1:]) / 2.0
+    cs = np.array(cs)
+    out = np.stack([np.interp(mid, xs, cs[:, k]) for k in range(3)], axis=-1)
+    return [float(x) for x in lv], [mcolors.to_hex(x) for x in out]
+
+
 def chart_anom(cfg, F, kind, level, run, step, clim):
     """편차 map: model field minus the ERA5 1990-2019 climatology of the valid time (clim: render.clim.grid_at),
     blue - white - red bands, with the model's own height (or MSLP for 2 m) as black lines.
@@ -732,12 +753,12 @@ def chart_anom(cfg, F, kind, level, run, step, clim):
     if level and level in cfg["charts"]["gz"]["mask_underground"]:
         a[_underground(S, level)] = np.nan
         fr.ax.set_facecolor(c["mask_color"])              # below ground: grey, not "normal" white
-    lv = s["levels"]
-    cmap = mcolors.ListedColormap(c["colors"])
+    lv, colors = anom_bands(s["levels"], c["colors"], s.get("step"))
+    cmap = mcolors.ListedColormap(colors)
     cmap = cmap.with_extremes(under=c.get("under", c["colors"][0]), over=c.get("over", c["colors"][-1]))
     cf = _contourf(fr, S, a, levels=lv, cmap=cmap, norm=mcolors.BoundaryNorm(lv, cmap.N), extend="both",
                    transform=PC, zorder=1)
-    fr.colorbar(cf, label=s["unit"], ticks=lv)
+    fr.colorbar(cf, label=s["unit"], ticks=s["levels"])
     if kind == "t2m":
         z, iv = derive.nan_gaussian(S[("msl", 0)] / 100.0, 2.0), c["msl_interval"]   # smoothed over terrain
     else:
