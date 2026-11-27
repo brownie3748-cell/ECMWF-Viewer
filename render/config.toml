@@ -410,7 +410,9 @@ charts = [
 id = "ifs"
 label = "IFS 0.25°"
 charts = "all"
-override = {}
+# 00/12Z to +360 h (owner 2026-11-27; measured 2026-11-26: +246..+360 h published, the +360 h file ~30 s after
+# +240 h). 06/18Z stay at +144 h (+150 h: 404). IFS 0.1 deg stops at +240 h (+246 h: 404), so it keeps the base.
+override = { data = { max_step_main = 360 } }
 
 [[models]]
 id = "ifs01"
@@ -463,7 +465,8 @@ charts = "all"
 model = "aifs-single"
 tp_short_accum_h = 6            # AIFS output is 6-hourly only
 publish_every_h = 6
-max_step_short = 240            # 06/18Z too: AIFS publishes 0-360 h for every run (measured 2026-11-21 06Z: 61 steps)
+max_step_main = 360             # owner 2026-11-27: every run to +360 h (measured 2026-11-26 12/18Z: +360 h published)
+max_step_short = 360            # 06/18Z too: AIFS publishes 0-360 h for every run (measured 2026-11-21 06Z: 61 steps)
 [models.override.site]
 render_version = 18             # 18: vorticity on the 500 hPa wide map; 17: theta-e palette; 16: 500 hPa vorticity, theta-e charts; 15: H + gpm at 500 hPa highs on the wide map; 14: WPSH search to 170E + secondary centre; 13: KMA rain cut-off for snowfall; 12: snow area on msl, snow chart; 11: 06/18Z runs to +240 h; 10: stable labels, province lines, terrain-only smoothing; 9: 2 m temperature chart, labelled isotherms; 8: filled contours in map x/y; 7: Lambert map for every model (AIFS skipped version 6, the IFS 3-hourly switch)
 [[models.override.data.groups]]
