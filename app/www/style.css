@@ -130,6 +130,12 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
 .step.cur { outline: 3px solid var(--cur); outline-offset: -1px; }
 
 /* chart chips: sticky under the top bar, scroll sideways */
+/* 차트 | 편차 tabs above the map chips */
+.tabs { display: flex; gap: 0; padding: 6px var(--gap) 0; }
+.tabs[hidden] { display: none; }
+.tabs button { flex: 1; border: 0; border-bottom: 2px solid var(--line); background: none; color: var(--muted, #888);
+  padding: 5px 0; font-size: .85rem; font-weight: 700; cursor: pointer; }
+.tabs button.on { color: var(--accent-strong); border-bottom-color: var(--accent); }
 .chips { display: flex; gap: 5px; overflow-x: auto; padding: 6px var(--gap); scrollbar-width: none;
   background: var(--bg); position: sticky; top: 52px; z-index: 4; }
 .chips::-webkit-scrollbar { display: none; }

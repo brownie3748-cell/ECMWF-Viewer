@@ -56,6 +56,8 @@ def manifest(cfg: dict, runs: dict[str, dict[str, dict]]) -> dict:
                 r["end_step"] = config_mod.ens_last_step(mc, int(r["run"][8:10]))
                 # runs rendered before the rain_* graphs (2026-11-27) have the temperature graphs only
                 r.setdefault("charts", [c["id"] for c in mc["site"]["charts"] if c["id"].startswith("plume_")])
+            elif any(c["id"].startswith("a_") for c in mc["site"]["charts"]):     # runs rendered before 편차 maps
+                r.setdefault("charts", [c["id"] for c in mc["site"]["charts"] if not c["id"].startswith("a_")])
         models.append({
             "id": mid,
             "label": mc["model_label_short"],

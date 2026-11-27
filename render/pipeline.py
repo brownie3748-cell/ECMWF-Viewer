@@ -31,8 +31,9 @@ def _init_worker(cfg_path: str | None, model_id: str):
     _CFG = config_mod.for_model(config_mod.load(cfg_path), model_id)
 
 
-def chart_jobs(cfg, F, P, run, step):
-    """{chart_id: callable returning a plot.Frame} for one step (msl includes precipitation when P is given)."""
+def chart_jobs(cfg, F, P, run, step, clim=None):
+    """{chart_id: callable returning a plot.Frame} for one step (msl includes precipitation when P is given;
+    the 편차 maps a_* only with the climatology of the valid time, see render.clim.grid_at)."""
     window = fetch.tp_window(step, cfg)
     jobs = {
         "msl": lambda: plot.chart_msl(cfg, F, run, step, P, window if P is not None else None),
@@ -49,6 +50,12 @@ def chart_jobs(cfg, F, P, run, step):
         jobs["snow"] = lambda: plot.chart_snow(cfg, F, P, run, step, window)
     for lv in (925, 850, 700, 500, 300, 200):
         jobs[f"gz{lv}"] = (lambda lv=lv: plot.chart_gz(cfg, F, lv, run, step))
+    if clim is not None:
+        jobs["a_t2m"] = lambda: plot.chart_anom(cfg, F, "t2m", None, run, step, clim)
+        jobs["a_gz500"] = lambda: plot.chart_anom(cfg, F, "gz500", None, run, step, clim)
+        for lv in (925, 850, 700):
+            jobs[f"a_t{lv}"] = (lambda lv=lv: plot.chart_anom(cfg, F, "t", lv, run, step, clim))
+            jobs[f"a_ept{lv}"] = (lambda lv=lv: plot.chart_anom(cfg, F, "ept", lv, run, step, clim))
     return jobs
 
 
@@ -75,10 +82,20 @@ def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None,
         path.write_bytes(data)
         sizes[chart_id] = len(data)
 
-    jobs = chart_jobs(cfg, F, P, run, step)
+    clim = None
+    if any(c.startswith("a_") for c in want):
+        from . import clim as clim_mod
+        clim = clim_mod.grid_at(cfg, run + dt.timedelta(hours=step))     # None: no climatology, no 편차 maps
+    jobs = chart_jobs(cfg, F, P, run, step, clim)
     for cid in want:
         if cid in jobs:
-            save(cid, jobs[cid]())
+            if not cid.startswith("a_"):
+                save(cid, jobs[cid]())
+                continue
+            try:                         # a 편차 map never fails the run (KIM: a lost run costs ~1.9 GB of quota)
+                save(cid, jobs[cid]())
+            except Exception as e:  # noqa: BLE001
+                log.warning("%s %s +%d %s: skipped (%r)", cfg["model_id"], run_s, step, cid, e)
     z = None if hourly_only else cfg["site"].get("zoom")
     if z:                                               # Korea zoom: same charts on the zoom map, prefixed ids
         zcfg = dict(cfg, domains=dict(cfg["domains"], default=cfg["domains"][z["domain"]]))
@@ -97,7 +114,7 @@ def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None,
             pathlib.Path(p).unlink(missing_ok=True)
     wpsh = [round(res["H"]), round(res["line_gpm"])] if res.get("drawn") else None
     return {"step": step, "seconds": time.monotonic() - t0, "bytes": sum(sizes.values()),
-            "images": len(sizes), "wpsh": wpsh}
+            "images": len(sizes), "wpsh": wpsh, "charts": sorted(sizes)}
 
 
 def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: pathlib.Path,
@@ -225,6 +242,11 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
         "wall_seconds": round(time.monotonic() - t0, 1),
         "render_seconds_sum": round(sum(r["seconds"] for r in results), 1),
     }
+    # 편차 maps: listed only when every main step has them (the app then never asks for a missing image)
+    want_a = [c["id"] for c in cfg["site"]["charts"] if c["id"].startswith("a_")]
+    if want_a and main:
+        have = set.intersection(*[set(r.get("charts", [])) for r in main])
+        meta["charts"] = [c["id"] for c in cfg["site"]["charts"] if not c["id"].startswith("a_") or c["id"] in have]
     if getattr(sources, "stats", None):
         meta["field_ranges"] = dict(sources.stats)      # KIM: min/max per field, a units sanity check
     if hasattr(sources, "request_summary"):

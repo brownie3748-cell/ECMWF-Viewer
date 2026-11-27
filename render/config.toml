@@ -96,14 +96,21 @@ colorbar_pad_px = 12
 # 219 stations incl. 29 Feb; Daegu 143 has 1981-2010 only, so tmst falls back to 2011).
 key = "clim/points.json"
 era5_base = "https://storage.googleapis.com/weatherbench2/datasets/era5-hourly-climatology/1990-2019_6h_1440x721.zarr/"
+# points: extracted at the ENS points (clim/points.json); grid: kept on the map area for the 편차 maps
+# (clim/grid/<day of year>.npz, int16 = value x pack)
 era5_fields = [
-  { key = "t850", var = "temperature", level = 850, scale = 1.0, offset = -273.15 },
-  { key = "z500", var = "geopotential", level = 500, scale = 0.10197162, offset = 0.0 },   # m2 s-2 / g = gpm
+  { key = "t850", var = "temperature", level = 850, scale = 1.0, offset = -273.15, grid = true, pack = 100 },
+  { key = "z500", var = "geopotential", level = 500, scale = 0.10197162, offset = 0.0, grid = true, pack = 1 },   # gpm
   # theta-e climate on the 강수 graphs: theta-e of the mean T and q (an approximation of the mean theta-e)
-  { key = "t925", var = "temperature", level = 925, scale = 1.0, offset = -273.15 },
-  { key = "q850", var = "specific_humidity", level = 850, scale = 1.0, offset = 0.0 },
-  { key = "q925", var = "specific_humidity", level = 925, scale = 1.0, offset = 0.0 },
+  { key = "t925", var = "temperature", level = 925, scale = 1.0, offset = -273.15, grid = true, pack = 100 },
+  { key = "q850", var = "specific_humidity", level = 850, scale = 1.0, offset = 0.0, grid = true, pack = 1e6 },
+  { key = "q925", var = "specific_humidity", level = 925, scale = 1.0, offset = 0.0, grid = true, pack = 1e6 },
+  { key = "t2m", var = "2m_temperature", scale = 1.0, offset = -273.15, points = false, grid = true, pack = 100 },
+  { key = "t700", var = "temperature", level = 700, scale = 1.0, offset = -273.15, points = false, grid = true, pack = 100 },
+  { key = "q700", var = "specific_humidity", level = 700, scale = 1.0, offset = 0.0, points = false, grid = true, pack = 1e6 },
 ]
+grid_key = "clim/grid/{doy:03d}.npz"
+grid_margin_deg = 2.0              # around the union of the map models' default domains
 kma_url = "https://apihub.kma.go.kr/api/typ01/url/sfc_norm1.php?norm=D&tmst={tmst}&stn=0&MM1=1&DD1=1&MM2=12&DD2=31"
 kma_tmst = [2021, 2011]            # 1991-2020 normals; 1981-2010 where a station has no newer ones
 parallel = 8
@@ -274,6 +281,20 @@ anchors = [
   [100, "#00443c"],
 ]
 
+[charts.anom]
+# 편차 maps (owner 2026-11-27): model field minus the ERA5 1990-2019 climatology of the valid day and hour
+# (clim/grid/, 0.25 deg, interpolated to the model grid). Theta-e climate = theta-e of the mean T and q.
+# Shading: blue (below normal) - white - red (above), symmetric fixed levels; black lines: the model's own field.
+colors = ["#08306b", "#1f5fa8", "#4a90c8", "#86bde0", "#c3def0", "#ffffff", "#fdd5c2", "#f8a183", "#e8604b", "#c22a2a", "#7d0b0b"]
+t = { title = "{level}hPa Temperature Anomaly (C), GPH (gpm)", levels = [-12, -9, -6, -4, -2, -1, 1, 2, 4, 6, 9, 12], unit = "C" }
+t2m = { title = "2m Temperature Anomaly (C), MSLP (hPa)", levels = [-12, -9, -6, -4, -2, -1, 1, 2, 4, 6, 9, 12], unit = "C" }
+gz500 = { title = "500hPa Height Anomaly (gpm), GPH (gpm)", levels = [-300, -240, -180, -120, -60, -30, 30, 60, 120, 180, 240, 300], unit = "gpm" }
+ept = { title = "{level}hPa Theta-e Anomaly (K), GPH (gpm)", levels = [-24, -18, -12, -8, -4, -2, 2, 4, 8, 12, 18, 24], unit = "K" }
+msl_interval = 4                  # hPa, black isobars on the 2 m chart
+smooth_sigma = 1.0                # grid points, on the anomaly (the 0.25 deg climatology is smooth already)
+credit = "Anomaly vs ERA5 1990-2019 climatology (WeatherBench2), contains modified Copernicus C3S information."
+mask_color = "#d4d4d4"            # 925 / 850 hPa below ground
+
 [charts.ept]
 # Equivalent potential temperature (Bolton 1980) at 925 / 850 / 700 hPa (owner 2026-11-24). From t and q (IFS and
 # KIM 700 hPa: q from r), so no extra download.
@@ -355,6 +376,15 @@ charts = [
   { id = "wpsh500_wide", title = "WPSH line (wide)", level = 500, domain = "wide", overlay_of = "gz500_wide" },
   { id = "gz300", title = "300hPa", level = 300, domain = "default" },
   { id = "gz200", title = "200hPa", level = 200, domain = "default" },
+  # 편차 tab (owner 2026-11-27): anomalies from the ERA5 1990-2019 climatology (clim.yml builds clim/grid/)
+  { id = "a_t2m", title = "2 m temperature anomaly", domain = "default" },
+  { id = "a_gz500", title = "500hPa height anomaly", domain = "default" },
+  { id = "a_t925", title = "925hPa temperature anomaly", domain = "default" },
+  { id = "a_t850", title = "850hPa temperature anomaly", domain = "default" },
+  { id = "a_t700", title = "700hPa temperature anomaly", domain = "default" },
+  { id = "a_ept925", title = "925hPa theta-e anomaly", domain = "default" },
+  { id = "a_ept850", title = "850hPa theta-e anomaly", domain = "default" },
+  { id = "a_ept700", title = "700hPa theta-e anomaly", domain = "default" },
   { id = "plume_seoul", title = "Seoul Z500 / T850 / T2m plume", domain = "graph" },
   { id = "plume_cheongju", title = "Cheongju Z500 / T850 / T2m plume", domain = "graph" },
   { id = "plume_daejeon", title = "Daejeon Z500 / T850 / T2m plume", domain = "graph" },
@@ -385,7 +415,8 @@ override = {}
 [[models]]
 id = "ifs01"
 label = "IFS 0.1°"
-charts = ["msl", "snow", "t2m", "gz925", "mfc925", "ept925", "gz850", "mfc850", "ept850", "gz700", "rh700", "ept700", "gz500", "wpsh500"]
+charts = ["msl", "snow", "t2m", "gz925", "mfc925", "ept925", "gz850", "mfc850", "ept850", "gz700", "rh700", "ept700", "gz500", "wpsh500",
+          "a_t2m", "a_gz500", "a_t925", "a_t850", "a_t700", "a_ept925", "a_ept850", "a_ept700"]
 [models.override.data]
 resolution = "0p1"
 grid_deg = 0.1
@@ -599,7 +630,8 @@ credit = "Source: KMA API Hub, KIM global model (KOGL Type 1, Korea Meteorologic
 id = "kimr"
 label = "KIM 한반도"
 min_step = { snow = 1 }            # 1 h window: snowfall from +1 h
-charts = ["gz500", "msl", "snow", "t2m", "gz925", "mfc925", "ept925", "gz850", "mfc850", "ept850", "gz700", "rh700", "ept700"]   # owner 2026-11-24: Korea map only
+charts = ["gz500", "msl", "snow", "t2m", "gz925", "mfc925", "ept925", "gz850", "mfc850", "ept850", "gz700", "rh700", "ept700",
+          "a_t2m", "a_gz500", "a_t925", "a_t850", "a_t700", "a_ept925", "a_ept850", "a_ept700"]   # owner 2026-11-24: Korea map only
 [models.override.data]
 source = "kma"
 run_hours = [0, 12]

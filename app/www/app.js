@@ -24,11 +24,18 @@ const CHIPS = [
   ["plume_seoul", "서울"], ["plume_cheongju", "청주"], ["plume_daejeon", "대전"], ["plume_gangneung", "강릉"], ["plume_daegu", "대구"], ["plume_gwangju", "광주"], ["plume_busan", "부산"], ["plume_jeju", "제주"],
   ["rain_seoul", "서울"], ["rain_cheongju", "청주"], ["rain_daejeon", "대전"], ["rain_gangneung", "강릉"], ["rain_daegu", "대구"], ["rain_gwangju", "광주"], ["rain_busan", "부산"], ["rain_jeju", "제주"],
 ];
+// 편차 tab (anomaly maps a_*): the map chips are split into two tabs, 차트 and 편차.
+const ANOM_CHIPS = [
+  ["a_t2m", "지상 기온"], ["a_gz500", "500 고도"],
+  ["a_t925", "925 기온"], ["a_t850", "850 기온"], ["a_t700", "700 기온"],
+  ["a_ept925", "925 상당온위"], ["a_ept850", "850 상당온위"], ["a_ept700", "700 상당온위"],
+];
+const isAnom = (id) => (id || "").startsWith("a_");
 // Ensemble meteogram groups: each ENS model button is split into these halves (chart id = <group>_<city>).
 const ENS_GROUPS = [["plume", "기온"], ["rain", "강수"]];
 const ensGroup = (id) => (id || "").split("_")[0];
 const ensCity = (id) => (id || "").split("_").slice(1).join("_");
-const LABELS = Object.fromEntries(CHIPS);
+const LABELS = Object.fromEntries(CHIPS.concat(ANOM_CHIPS));
 
 const $ = (id) => document.getElementById(id);
 
@@ -133,7 +140,8 @@ function wpshFor(r, step) {
   return { drawn: true, H: v[0], line: v[1] };
 }
 function ensGroupLabel(id) { return (ENS_GROUPS.find(([g]) => g === ensGroup(id)) || [])[1] || ""; }
-function chartLabel(id) { return LABELS[id] || (chartDef(id) || {}).title || id; }
+function chartLabel(id) {
+  if (isAnom(id)) return `${LABELS[id]} 편차`; return LABELS[id] || (chartDef(id) || {}).title || id; }
 function chartTitle(id) {
   for (const mod of state.m.models) { const c = mod.charts.find((x) => x.id === id); if (c) return c.title || id; }
   return id;
@@ -257,7 +265,8 @@ function selectModel(id, keepRun, keepValid, findValid) {
   if (!chartIn(mod, state.chart)) {
     // nearest chart the model has: 강설 -> 지상·강수 (KIM has no snowfall), wide/upper levels -> 500
     const near = { snow: "msl", gz500_wide: "gz500", gz300: "gz500", gz200: "gz500" }[state.chart];
-    state.chart = near && chartIn(mod, near) ? near
+    const anom = isAnom(state.chart) && mod.charts.find((c) => isAnom(c.id));
+    state.chart = anom ? anom.id : near && chartIn(mod, near) ? near
       : chartIn(mod, "gz500") ? "gz500" : mod.charts.find((c) => !c.overlay_of).id;
   }
   if (kind === "dfs") state.runIdx = Math.min(+(localStorage.getItem("dfs_mode") || 0), mod.runs.length - 1);
@@ -282,6 +291,29 @@ function selectChart(id) {
   state.chart = id;
   localStorage.setItem("chart", id);
   localStorage.setItem("chart_" + kindOf(M()), id);
+  if (kindOf(M()) === "map") localStorage.setItem("chart_tab_" + (isAnom(id) ? "anom" : "map"), id);
+  setStepNear(v);
+  render();
+}
+
+// 차트 | 편차 tab: back to the last chart of that tab, on the newest run that has it at the same valid time
+// (runs rendered before the 편차 maps have none).
+function selectTab(tab) {
+  if ((tab === "anom") === isAnom(state.chart)) return;
+  stop();
+  const v = currentValid();
+  const last = localStorage.getItem("chart_tab_" + tab);
+  const first = M().charts.find((c) => !c.overlay_of && isAnom(c.id) === (tab === "anom"));
+  const id = last && chartIn(M(), last) ? last : first && first.id;
+  if (!id) return;
+  state.chart = id;
+  localStorage.setItem("chart", id);
+  localStorage.setItem("chart_map", id);
+  if (!stepsFor(run(), id).length) {
+    for (let i = M().runs.length - 1; i >= 0; i--) {
+      if (stepsFor(M().runs[i], id).length) { state.runIdx = i; $("run").value = String(i); break; }
+    }
+  }
   setStepNear(v);
   render();
 }
@@ -375,7 +407,8 @@ function buildChartPicker() {
   nav.innerHTML = "";
   const all = [];
   state.m.models.forEach((mod) => mod.charts.forEach((c) => { if (!c.overlay_of && !all.includes(c.id)) all.push(c.id); }));
-  const order = CHIPS.map(([id]) => id).filter((id) => all.includes(id)).concat(all.filter((id) => !LABELS[id]));
+  const order = CHIPS.concat(ANOM_CHIPS).map(([id]) => id).filter((id) => all.includes(id))
+    .concat(all.filter((id) => !LABELS[id]));
   order.forEach((id) => {
     const b = document.createElement("button");
     b.className = "chip";
@@ -390,11 +423,15 @@ function updateChartPicker() {
   document.querySelectorAll(".chip").forEach((b) => {
     const ok = !!chartIn(M(), b.dataset.id);
     b.hidden = chartKind(b.dataset.id) !== kindOf(M())      // map chips / cities (meteograms) / 예보 elements
-      || (isEns(M()) && ensGroup(b.dataset.id) !== ensGroup(state.chart));   // ENS: cities of 기온 or 강수 only
+      || (isEns(M()) && ensGroup(b.dataset.id) !== ensGroup(state.chart))    // ENS: cities of 기온 or 강수 only
+      || (kindOf(M()) === "map" && isAnom(b.dataset.id) !== isAnom(state.chart));   // 차트 or 편차 tab
     b.disabled = !ok;
     b.title = ok ? "" : `${M().label}에는 없는 차트`;
     b.classList.toggle("on", b.dataset.id === state.chart);
   });
+  const tabs = $("map-tabs");                    // 차트 | 편차: map models that have anomaly maps
+  tabs.hidden = kindOf(M()) !== "map" || !M().charts.some((c) => isAnom(c.id));
+  tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("on", (b.dataset.tab === "anom") === isAnom(state.chart)));
   const on = document.querySelector(".chip.on");
   if (on) on.scrollIntoView({ inline: "nearest", block: "nearest" });
 }
@@ -506,6 +543,7 @@ function render() {
     $("steps-count").textContent = "0";
     gridKey = "";
     setStatus(isEns(M()) ? "이 런에는 이 그래프가 없어요. 다른 런을 골라 주세요."
+      : M().kind !== "dfs" ? "이 런에는 이 차트가 없어요. 다른 런을 골라 주세요."
       : "이 방식의 예보 그림이 아직 없어요. 잠시 뒤 ⟳ 를 눌러 주세요.");
     return;
   }
@@ -752,6 +790,7 @@ function wire() {
     render();
   };
   $("reload").onclick = () => { stop(); init(true, true); };
+  document.querySelectorAll("#map-tabs button").forEach((b) => { b.onclick = () => selectTab(b.dataset.tab); });
   $("prev").onclick = () => { stop(); move(-1); };
   $("next").onclick = () => { stop(); move(1); };
   $("play").onclick = togglePlay;

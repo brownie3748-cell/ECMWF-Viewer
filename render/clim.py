@@ -42,7 +42,21 @@ def _codec(meta: dict):
     return numcodecs.get_codec(meta["compressor"])
 
 
-def era5(cfg: dict, pts: dict) -> dict:
+def grid_box(cfg: dict) -> dict:
+    """lat / lon box of the map climatology: the union of the map models' default domains plus a margin."""
+    from . import config, ens, plot
+    boxes = []
+    for mid in config.model_ids(cfg):
+        mc = config.for_model(cfg, mid)
+        if not ens.is_ens(mc) and any(c["id"].startswith("a_") for c in mc["site"]["charts"]):
+            boxes.append(plot.domain_geometry(mc["domains"]["default"])["bbox"])
+    m = cfg["clim"]["grid_margin_deg"]
+    return {"lat_min": min(b["lat_min"] for b in boxes) - m, "lat_max": max(b["lat_max"] for b in boxes) + m,
+            "lon_min": min(b["lon_min"] for b in boxes) - m, "lon_max": max(b["lon_max"] for b in boxes) + m}
+
+
+def era5(cfg: dict, pts: dict, box: dict | None = None) -> tuple[dict, dict | None]:
+    """(points part of clim/points.json, map grid {"lat", "lon", field: float32 [366, 4, nlat, nlon]})."""
     from .ens import bilinear
     c = cfg["clim"]
     base = c["era5_base"]
@@ -65,29 +79,60 @@ def era5(cfg: dict, pts: dict) -> dict:
         raise RuntimeError("unexpected ERA5 climatology grid")
     hours = [int(h) for h in array("hour", "0")]
     levels = [int(v) for v in array("level", "0")]
-    out = {pid: {f["key"]: [[None] * NHOUR for _ in range(NDOY)] for f in c["era5_fields"]} for pid in pts}
+    pf = [f for f in c["era5_fields"] if f.get("points", True)]
+    gf = [f for f in c["era5_fields"] if f.get("grid")] if box else []
+    out = {pid: {f["key"]: [[None] * NHOUR for _ in range(NDOY)] for f in pf} for pid in pts}
+    grid = None
+    if gf:
+        jy = np.where((lat >= box["lat_min"]) & (lat <= box["lat_max"]))[0]
+        ix = np.where((lon >= box["lon_min"]) & (lon <= box["lon_max"]))[0]
+        grid = {"lat": lat[jy][::-1].astype(np.float32), "lon": lon[ix].astype(np.float32)}   # lat ascending
+        for f in gf:
+            grid[f["key"]] = np.full((NDOY, NHOUR, len(jy), len(ix)), np.nan, np.float32)
 
     def job(f, hc, dc):
-        key = f"{hc}.{dc}.{levels.index(f['level'])}.0.0"
+        lev = f.get("level")
+        key = f"{hc}.{dc}.{levels.index(lev)}.0.0" if lev else f"{hc}.{dc}.0.0"
         a = array(f["var"], key).reshape(CH, CH, NLAT, NLON)
         for h in range(CH):
             for d in range(CH):
                 hi, di = hc * CH + h, dc * CH + d
                 if hi >= NHOUR or di >= NDOY:
                     continue
-                v = a[h, d].ravel()
-                for pid, p in pts.items():
-                    x = bilinear(v, NLON, NLAT, p["lat"], p["lon"], 90.0, 0.0, 0.25, 0.25)
-                    y = x * f["scale"] + f["offset"]
-                    out[pid][f["key"]][di][hi] = float(f"{y:.5g}") if abs(y) < 1 else round(y, 2)   # q: kg/kg
+                v = a[h, d]
+                if f.get("points", True):
+                    flat = v.ravel()
+                    for pid, p in pts.items():
+                        x = bilinear(flat, NLON, NLAT, p["lat"], p["lon"], 90.0, 0.0, 0.25, 0.25)
+                        y = x * f["scale"] + f["offset"]
+                        out[pid][f["key"]][di][hi] = float(f"{y:.5g}") if abs(y) < 1 else round(y, 2)   # q: kg/kg
+                if grid is not None and f.get("grid"):
+                    grid[f["key"]][di, hi] = v[jy][:, ix][::-1] * f["scale"] + f["offset"]
 
-    jobs = [(f, hc, dc) for f in c["era5_fields"] for hc in range(-(-NHOUR // CH)) for dc in range(-(-NDOY // CH))]
+    used = {f["key"]: f for f in pf + gf}.values()
+    jobs = [(f, hc, dc) for f in used for hc in range(-(-NHOUR // CH)) for dc in range(-(-NDOY // CH))]
     with cf.ThreadPoolExecutor(c["parallel"]) as ex:
         list(ex.map(lambda j: job(*j), jobs))
     missing = sum(v is None for p in out.values() for f in p.values() for day in f for v in day)
-    if missing:
-        raise RuntimeError(f"ERA5 climatology: {missing} values missing")
-    return {"period": "1990-2019", "hours_utc": hours, "chunks": len(jobs), "points": out}
+    if missing or (grid and any(np.isnan(grid[f["key"]]).any() for f in gf)):
+        raise RuntimeError(f"ERA5 climatology: values missing ({missing} at points)")
+    return {"period": "1990-2019", "hours_utc": hours, "chunks": len(jobs), "points": out}, grid
+
+
+def grid_files(cfg: dict, grid: dict) -> dict[str, bytes]:
+    """{store key: npz bytes}, one file per day of year: per field int16 [4 hours, lat, lon] = value x pack."""
+    import io
+    out = {}
+    gf = [f for f in cfg["clim"]["era5_fields"] if f.get("grid")]
+    for d in range(NDOY):
+        arrs = {"lat": grid["lat"], "lon": grid["lon"]}
+        for f in gf:
+            arrs[f["key"]] = np.round(grid[f["key"]][d] * f["pack"]).astype(np.int16)
+            arrs[f["key"] + "_pack"] = np.float64(f["pack"])
+        buf = io.BytesIO()
+        np.savez_compressed(buf, **arrs)
+        out[cfg["clim"]["grid_key"].format(doy=d + 1)] = buf.getvalue()
+    return out
 
 
 def parse_kma(text: str) -> dict:
@@ -139,10 +184,84 @@ def kma(cfg: dict, pts: dict) -> dict:
     return {"points": out}
 
 
-def build(cfg: dict) -> dict:
+def build(cfg: dict) -> tuple[dict, dict[str, bytes]]:
+    """(clim/points.json content, {clim/grid/<doy>.npz: bytes})."""
     pts = points(cfg)
-    return {"schema": 1, "generated_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "era5": era5(cfg, pts), "kma": kma(cfg, pts)}
+    box = grid_box(cfg)
+    e, grid = era5(cfg, pts, box)
+    files = grid_files(cfg, grid) if grid else {}
+    return ({"schema": 1, "generated_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+             "era5": e, "kma": kma(cfg, pts), "grid": {"box": box, "files": len(files)}}, files)
+
+
+# ------------------------------------------------------------------ map climatology (편차 maps)
+_GRID_CACHE: dict = {}
+
+
+def fetch_grid(st, cfg: dict, run: dt.datetime, last_step: int, local: "os.PathLike") -> int:
+    """Download the day-of-year files a run needs (run .. run + last_step + 6 h, UTC) into `local`.
+    Returns how many were missing in the store (0 = all there)."""
+    import pathlib
+    local = pathlib.Path(local)
+    local.mkdir(parents=True, exist_ok=True)
+    missing = 0
+    t, end = run - dt.timedelta(days=1), run + dt.timedelta(hours=last_step + 6)
+    while t <= end + dt.timedelta(days=1):
+        key = cfg["clim"]["grid_key"].format(doy=t.timetuple().tm_yday)
+        path = local / key.rsplit("/", 1)[-1]
+        if not path.exists():
+            raw = st.get_bytes(key)
+            if raw is None:
+                missing += 1
+            else:
+                path.write_bytes(raw)
+        t += dt.timedelta(days=1)
+    return missing
+
+
+def _load_doy(local: str, key_tmpl: str, doy: int) -> dict | None:
+    import pathlib
+    k = (local, doy)
+    if k not in _GRID_CACHE:
+        if len(_GRID_CACHE) > 8:
+            _GRID_CACHE.clear()
+        path = pathlib.Path(local) / key_tmpl.format(doy=doy).rsplit("/", 1)[-1]
+        if not path.exists():
+            return None
+        z = np.load(path)
+        _GRID_CACHE[k] = {n: z[n] for n in z.files}
+    return _GRID_CACHE[k]
+
+
+def grid_at(cfg: dict, valid_utc: dt.datetime, local: str | None = None) -> dict | None:
+    """Map climatology at a valid time: {"lat", "lon" (ascending), field: float32 [lat, lon]}, linear in time
+    between the 6-hourly values; None when the day files are not there (anomaly maps are then skipped)."""
+    local = local or os.environ.get("ANOM_CLIM_DIR")
+    if not local:
+        return None
+    a = valid_utc.replace(minute=0, second=0, microsecond=0, hour=(valid_utc.hour // 6) * 6)
+    b = a + dt.timedelta(hours=6)
+    w = (valid_utc - a).total_seconds() / 21600.0
+    za = _load_doy(local, cfg["clim"]["grid_key"], a.timetuple().tm_yday)
+    zb = _load_doy(local, cfg["clim"]["grid_key"], b.timetuple().tm_yday)
+    if za is None or zb is None:
+        return None
+    out = {"lat": za["lat"], "lon": za["lon"]}
+    for f in cfg["clim"]["era5_fields"]:
+        if f.get("grid"):
+            k = f["key"]
+            va = za[k][a.hour // 6].astype(np.float32) / float(za[k + "_pack"])
+            vb = zb[k][b.hour // 6].astype(np.float32) / float(zb[k + "_pack"])
+            out[k] = va * (1 - w) + vb * w
+    return out
+
+
+def regrid(g: dict, key: str, lat: np.ndarray, lon: np.ndarray) -> np.ndarray:
+    """Bilinear from the climatology grid (0.25 deg, ascending lat / lon) to a model's lat / lon axes."""
+    from scipy.interpolate import RegularGridInterpolator
+    f = RegularGridInterpolator((g["lat"], g["lon"]), g[key], bounds_error=False, fill_value=np.nan)
+    la, lo = np.meshgrid(lat, lon, indexing="ij")
+    return f(np.stack([la.ravel(), lo.ravel()], axis=-1)).reshape(la.shape).astype(np.float32)
 
 
 # ------------------------------------------------------------------ used while drawing (render/ens.py)

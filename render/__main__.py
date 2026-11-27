@@ -303,6 +303,14 @@ def cmd_poll(args, cfg):
             if kim.is_kma(mcfg):
                 resume = _resume_hook(st, mid, rs, rv[mid], sizes, kma_usage,
                                       t_start + args.hard_stop_min * 60)
+            if any(x["id"].startswith("a_") for x in mcfg["site"]["charts"]):
+                # 편차 maps: the climatology days this run needs, read by the render workers (ANOM_CLIM_DIR)
+                from . import clim as clim_mod
+                cdir = work / "clim_grid"
+                steps_all = fetch.published_steps(c.hour, mcfg) + fetch.hourly_steps(c.hour, mcfg)
+                if clim_mod.fetch_grid(st, cfg, c, max(steps_all), cdir):
+                    log.warning("%s %s: map climatology missing in the store (run clim.yml): no 편차 maps", mid, rs)
+                os.environ["ANOM_CLIM_DIR"] = str(cdir)
             meta = pipeline.render_run(mcfg, src, c, stage, work, cfg_path=args.config, resume=resume)
         except (kim.QuotaError, RuntimeError) as e:
             failed.append(f"{mid}/{rs}: {str(e)[:200]}")
@@ -412,17 +420,27 @@ def cmd_clim(args, cfg):
     st = store_mod.open_store(cfg, args.store)
     use_own_counter(st, "clim")
     t0 = time.monotonic()
-    data = clim_mod.build(cfg)
+    data, files = clim_mod.build(cfg)
     raw = json.dumps(data, separators=(",", ":")).encode()
-    st.check_budget(2)
+    sizes = st.list_sizes()
+    new = len(raw) + sum(len(b) for b in files.values())
+    after = sum(v for k, v in sizes.items() if not k.startswith("clim/")) + new
+    if after > st.scfg["max_bytes"]:
+        sys.exit(f"storage guard: clim files ({new / 1e6:.0f} MB) would bring the bucket to {after / 1e9:.2f} GB")
+    st.check_budget(len(files) + 2)
+    with __import__("concurrent.futures").futures.ThreadPoolExecutor(cfg["storage"]["upload_threads"]) as ex:
+        list(ex.map(lambda kv: st.put_bytes(kv[0], kv[1], "public, max-age=86400"), files.items()))
     st.put_bytes(cfg["clim"]["key"], raw, "no-cache, max-age=0")
     st.save_ops()
     k = data["kma"]["points"]
-    _summary("\n".join(["## Climate lines (clim/points.json)", "",
+    _summary("\n".join(["## Climate (clim/points.json, clim/grid/)", "",
                         f"- ERA5: {len(data['era5']['points'])} points, {data['era5']['chunks']} chunks read",
-                        f"- KMA normals: " + ", ".join(f"{p} {v['stn']} ({v['tmst'] - 30}-{v['tmst'] - 1})"
-                                                         for p, v in k.items()),
-                        f"- {len(raw) / 1e3:.0f} kB uploaded, {time.monotonic() - t0:.0f} s (measured)"]))
+                        f"- Map climatology: {len(files)} day files, {sum(len(b) for b in files.values()) / 1e6:.0f} MB, "
+                        f"box {data['grid']['box']}",
+                        "- KMA normals: " + ", ".join(f"{p} {v['stn']} ({v['tmst'] - 30}-{v['tmst'] - 1})"
+                                                       for p, v in k.items()),
+                        f"- {new / 1e6:.0f} MB uploaded, {time.monotonic() - t0:.0f} s (measured); bucket after: "
+                        f"{after / 1e9:.2f} GB"]))
 
 
 def main(argv=None):

@@ -60,7 +60,8 @@ fields cropped; derived quantities computed; charts rendered. Not an official KM
 
 Climate lines on the ensemble graphs
 ------------------------------------
-500 hPa height and 850 hPa temperature: ERA5 1990-2019 6-hourly climatology as published by WeatherBench2
+The ERA5 1990-2019 6-hourly climatology as published by WeatherBench2 is used for the climate lines (500 / 850 /
+925 hPa) and as the reference of the 편차 (anomaly) maps
 (https://storage.googleapis.com/weatherbench2/), interpolated to the graph points.
 Contains modified Copernicus Climate Change Service information (ERA5, Hersbach et al. 2020).
 Neither the European Commission nor ECMWF is responsible for any use of this information.

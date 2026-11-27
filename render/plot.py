@@ -162,7 +162,7 @@ class Frame:
         ex, ey = (x1 - x0) * edge_frac, (y1 - y0) * edge_frac
         return x0 + ex <= x <= x1 - ex and y0 + ey <= y <= y1 - ey
 
-    def header(self, title: str, run: dt.datetime, step: int):
+    def header(self, title: str, run: dt.datetime, step: int, extra_credit: str | None = None):
         st = self.cfg["style"]
         f = self.fig
         W, H = self.W, self.H
@@ -177,6 +177,9 @@ class Frame:
                fontsize=st["footer_size"], ha="right", va="baseline")
         self._kst_after(t1, f"  ({kst(valid, self.cfg):%Y-%m-%d %H}KST)", st["footer_size"])
         f.text(L / W, 7 / H, st["credit"], fontsize=st["credit_size"], color="#444444", ha="left", va="baseline")
+        if extra_credit:                                   # second source (편차 maps): top right, above the model name
+            f.text((L + self.mw) / W, (H - 10) / H, extra_credit, fontsize=st["credit_size"], color="#444444",
+                   ha="right", va="baseline")
 
     def _kst_after(self, t1, text, size):
         # place a black text immediately to the right of the red UTC text
@@ -700,3 +703,50 @@ def overlay_wpsh(cfg, F, run, step, domain="default"):
                color=w["line_color"], fontweight="bold", zorder=8,
                bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=w["line_color"], lw=0.8, alpha=0.9))
     return fr, res
+
+
+def chart_anom(cfg, F, kind, level, run, step, clim):
+    """편차 map: model field minus the ERA5 1990-2019 climatology of the valid time (clim: render.clim.grid_at),
+    blue - white - red bands, with the model's own height (or MSLP for 2 m) as black lines.
+    kind: "t2m", "gz500", "t" or "ept" (level 925 / 850 / 700)."""
+    from . import clim as clim_mod
+    c = cfg["charts"]["anom"]
+    s = c[kind]
+    fr = Frame(cfg, "default", strong_coast=True)
+    S = _sub(F, fr)
+    cl = lambda k: clim_mod.regrid(clim, k, S.lat, S.lon)   # noqa: E731
+    if kind == "t2m":
+        a = S[("2t", 0)] - 273.15 - cl("t2m")
+    elif kind == "gz500":
+        a = S[("gh", 500)] - cl("z500")
+    elif kind == "t":
+        a = S[("t", level)] - 273.15 - cl(f"t{level}")
+    else:
+        derive.ensure_q(S, level)
+        te = derive.theta_e(S[("t", level)], S[("q", level)], level)
+        tc = derive.theta_e(cl(f"t{level}") + 273.15, np.maximum(cl(f"q{level}"), 1e-7), level)
+        a = te - tc
+    a = np.asarray(a, dtype=np.float64)
+    if c.get("smooth_sigma", 0) > 0:
+        a = derive.nan_gaussian(a, c["smooth_sigma"])
+    if level and level in cfg["charts"]["gz"]["mask_underground"]:
+        a[_underground(S, level)] = np.nan
+        fr.ax.set_facecolor(c["mask_color"])              # below ground: grey, not "normal" white
+    lv = s["levels"]
+    cmap = mcolors.ListedColormap(c["colors"])
+    cmap.set_under(c["colors"][0])
+    cmap.set_over(c["colors"][-1])
+    cf = _contourf(fr, S, a, levels=lv, cmap=cmap, norm=mcolors.BoundaryNorm(lv, cmap.N), extend="both",
+                   transform=PC, zorder=1)
+    fr.colorbar(cf, label=s["unit"], ticks=lv)
+    if kind == "t2m":
+        z, iv = derive.nan_gaussian(S[("msl", 0)] / 100.0, 2.0), c["msl_interval"]   # smoothed over terrain
+    else:
+        lev = 500 if kind == "gz500" else level
+        z, iv = S[("gh", lev)].copy(), cfg["charts"]["gz"]["gh_interval"][str(lev)]
+        if lev in cfg["charts"]["gz"]["mask_underground"]:
+            z[_underground(S, lev)] = np.nan
+    cs = fr.ax.contour(S.lon, S.lat, z, levels=_levels(z, iv), colors="k", linewidths=1.0, transform=PC, zorder=5)
+    _clabel(fr, cs, "a", fmt="%d", fontsize=8)
+    fr.header(s["title"].format(level=level), run, step, c["credit"])
+    return fr
