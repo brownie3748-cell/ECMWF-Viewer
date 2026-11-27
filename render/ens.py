@@ -32,7 +32,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import requests  # noqa: E402
 
-from . import config, derive, encode  # noqa: E402
+from . import clim as clim_mod, config, derive, encode  # noqa: E402
 
 log = logging.getLogger(__name__)
 TIMEOUT = 60
@@ -189,7 +189,7 @@ class EnsSource:
         raise RuntimeError(f"AIFS-ENS step {step} failed on every source: {last!r}")
 
 
-def plume(cfg: dict, run: dt.datetime, series: dict, name: str, chart: str = "plume") -> bytes:
+def plume(cfg: dict, run: dt.datetime, series: dict, name: str, chart: str = "plume", clim: dict | None = None) -> bytes:
     """Three panels of one chart (CHARTS): every member grey, control blue, mean black, 10-90 % band.
     plume: 500 hPa height, 850 hPa T, 2 m T (series without z500, stored before 2026-11-25: the two temperature
     panels only); rain: 850 / 925 hPa theta-e and 6 h precipitation (series needs t925 / q / tp, see derived)."""
@@ -204,6 +204,8 @@ def plume(cfg: dict, run: dt.datetime, series: dict, name: str, chart: str = "pl
                              squeeze=False)
     axes = axes[:, 0]
     xlim = (run + kst, run + dt.timedelta(hours=st[-1]) + kst)
+    ccol = cfg.get("clim", {}).get("color", "#ff5a1f")
+    clim_drawn = False
     for ax, (key, label) in zip(axes, panels):
         ks = [s for s in st if series[s].get(key)]            # pr6: 6-hourly steps only
         x = [run + dt.timedelta(hours=s) + kst for s in ks]
@@ -217,6 +219,26 @@ def plume(cfg: dict, run: dt.datetime, series: dict, name: str, chart: str = "pl
         if 0 in members:
             ax.plot(x, a[members.index(0)], color="#1f5fbf", lw=1.4, label="control")
         ax.plot(x, np.nanmean(pf, axis=0), color="k", lw=2.0, label="mean")
+        if clim and key in ("z500", "t850"):              # ERA5 1990-2019 at the valid times
+            cv = clim_mod.era5_at(clim, key, [run + dt.timedelta(hours=s) for s in ks])
+            if cv:
+                ax.plot(x, cv, color=ccol, lw=1.6, label="clim (ERA5 1990-2019)")
+                clim_drawn = True
+        if clim and key in ("te850", "te925"):            # theta-e of the ERA5 mean T and q
+            cv = clim_mod.theta_e_at(clim, key[2:], [run + dt.timedelta(hours=s) for s in ks])
+            if cv:
+                ax.plot(x, cv, color=ccol, lw=1.6, label="clim (ERA5 1990-2019)")
+                clim_drawn = True
+        if clim and key == "t2m":                          # KMA daily normal max / min, per KST day
+            days = [x[0].replace(hour=0) + dt.timedelta(days=i) for i in range((x[-1] - x[0]).days + 2)]
+            kv = clim_mod.kma_at(clim, days)
+            if kv:
+                mx, mn, tmst = kv
+                xs = [d + dt.timedelta(days=k) for d in days for k in (0, 1)]
+                period = f"{tmst - 30}-{tmst - 1}"
+                ax.plot(xs, [v for v in mx for _ in (0, 1)], color=ccol, lw=1.3, label=f"clim max/min (KMA {period})")
+                ax.plot(xs, [v for v in mn for _ in (0, 1)], color=ccol, lw=1.3)
+                clim_drawn = True
         if key == "pr6":
             ax.set_ylim(0, max(1.0, ax.get_ylim()[1]))           # dry runs: a 0-1 mm axis, not a flat line at 0
         lo, hi = ax.get_ylim()                 # reference lines only where the data already reaches
@@ -226,7 +248,7 @@ def plume(cfg: dict, run: dt.datetime, series: dict, name: str, chart: str = "pl
         ax.set_ylim(lo, hi)
         ax.set_ylabel(label)
         ax.grid(alpha=0.3)
-        ax.legend(loc="upper right", fontsize=8, ncol=3)
+        ax.legend(loc="upper right", fontsize=8, ncol=4)
     axes[-1].set_xlim(*xlim)
     axes[-1].xaxis.set_major_locator(mdates.DayLocator())
     axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
@@ -236,8 +258,9 @@ def plume(cfg: dict, run: dt.datetime, series: dict, name: str, chart: str = "pl
     ctl = " + control" if 0 in mem else ""
     fig.suptitle(f"{e[title_key].format(name=name)}   {n} members{ctl}\n"
                  f"{cfg['style']['model_label']}   run {run:%Y-%m-%d %H}UTC ({run + kst:%m-%d %H}KST)", fontsize=11)
-    fig.text(0.01, 0.005, cfg["style"]["credit"], fontsize=6.5, color="#555")
-    fig.tight_layout(rect=(0, 0.015, 1, 1))
+    credit = cfg["style"]["credit"] + ("\n" + cfg["clim"]["credit"] if clim_drawn else "")
+    fig.text(0.01, 0.005, credit, fontsize=6.5, color="#555", linespacing=1.3)
+    fig.tight_layout(rect=(0, 0.025 if clim_drawn else 0.015, 1, 1))
     import io
     buf = io.BytesIO()
     fig.savefig(buf, format="png")
@@ -265,11 +288,14 @@ def render_run(cfg: dict, src: EnsSource, run: dt.datetime, site: pathlib.Path, 
     charts = []
     for pt in cfg["ens"]["points"]:
         ps = derived({s: v[pt["id"]] for s, v in series.items()})
+        cl = cfg["ens"].get("clim") or {}                 # clim/points.json, attached by the poll (if built)
+        pc = {"era5": cl.get("era5", {}).get("points", {}).get(pt["id"]),
+              "kma": cl.get("kma", {}).get("points", {}).get(pt["id"])}
         for chart in CHARTS:
             cid = f"{chart}_{pt['id']}"
             if cid not in want:
                 continue
-            data = encode.encode(plume(cfg, run, ps, pt["name"], chart), out["format"], out["png8_colors"],
+            data = encode.encode(plume(cfg, run, ps, pt["name"], chart, pc), out["format"], out["png8_colors"],
                                  out["webp_quality"])
             (rdir / f"{cid}_000.png").write_bytes(data)
             nbytes += len(data)

@@ -1,0 +1,40 @@
+name: clim
+
+# Climate lines for the ENS 기온 graphs: ERA5 1990-2019 climatology (WeatherBench2, 500 hPa height and 850 hPa T)
+# and KMA ASOS daily normals (2 m T) at the ENS points, written once to R2 as clim/points.json. Every ENS render
+# after that draws them. Manual, main only; run again only when the points change.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clim
+  cancel-in-progress: false
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install
+        run: pip install -r requirements.lock numcodecs==0.17.1   # zarr chunk codec, this job only
+      - name: Build and upload clim/points.json
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
+        run: python -m render clim --store r2

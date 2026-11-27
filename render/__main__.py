@@ -48,7 +48,7 @@ def process_order(cfg) -> list[str]:
 
 GROUPS = ("all", "ecmwf", "kim")
 # Each group's request counter in _ops/ (store.month): the jobs never write the same counter file.
-COUNTERS = {"all": "", "ecmwf": "", "kim": "kim-", "dfs": "dfs-"}
+COUNTERS = {"all": "", "ecmwf": "", "kim": "kim-", "dfs": "dfs-", "clim": "clim-"}
 
 
 def group_models(cfg, group: str) -> list[str]:
@@ -218,8 +218,13 @@ def cmd_poll(args, cfg):
         kma_usage["other_calls"], kma_usage["other_bytes"] = other.get("calls", 0), other.get("bytes", 0)
     kma_calls0 = kma_usage["calls"]
     probe_notes = []
+    clim = None
     for mid in mine:
         mcfg = config.for_model(cfg, mid)
+        if mcfg["data"].get("source") == "ens":            # climate lines for the 기온 graphs (clim.yml builds them)
+            if clim is None:
+                clim = st.get_json(cfg["clim"]["key"]) or {}
+            mcfg["ens"]["clim"] = clim
         src = sources_mod.make_sources(mcfg)
         if kim.is_kma(mcfg):
             src.usage = kma_usage
@@ -298,6 +303,14 @@ def cmd_poll(args, cfg):
             if kim.is_kma(mcfg):
                 resume = _resume_hook(st, mid, rs, rv[mid], sizes, kma_usage,
                                       t_start + args.hard_stop_min * 60)
+            if any(x["id"].startswith("a_") for x in mcfg["site"]["charts"]):
+                # 편차 maps: the climatology days this run needs, read by the render workers (ANOM_CLIM_DIR)
+                from . import clim as clim_mod
+                cdir = work / "clim_grid"
+                steps_all = fetch.published_steps(c.hour, mcfg) + fetch.hourly_steps(c.hour, mcfg)
+                if clim_mod.fetch_grid(st, cfg, c, max(steps_all), cdir):
+                    log.warning("%s %s: map climatology missing in the store (run clim.yml): no 편차 maps", mid, rs)
+                os.environ["ANOM_CLIM_DIR"] = str(cdir)
             meta = pipeline.render_run(mcfg, src, c, stage, work, cfg_path=args.config, resume=resume)
         except (kim.QuotaError, RuntimeError) as e:
             failed.append(f"{mid}/{rs}: {str(e)[:200]}")
@@ -401,6 +414,35 @@ def cmd_dfs(args, cfg):
         _summary("\n".join(lines))
 
 
+def cmd_clim(args, cfg):
+    """Build clim/points.json (ERA5 climatology + KMA normals at the ENS points) and upload it to the store."""
+    from . import clim as clim_mod
+    st = store_mod.open_store(cfg, args.store)
+    use_own_counter(st, "clim")
+    t0 = time.monotonic()
+    data, files = clim_mod.build(cfg)
+    raw = json.dumps(data, separators=(",", ":")).encode()
+    sizes = st.list_sizes()
+    new = len(raw) + sum(len(b) for b in files.values())
+    after = sum(v for k, v in sizes.items() if not k.startswith("clim/")) + new
+    if after > st.scfg["max_bytes"]:
+        sys.exit(f"storage guard: clim files ({new / 1e6:.0f} MB) would bring the bucket to {after / 1e9:.2f} GB")
+    st.check_budget(len(files) + 2)
+    with __import__("concurrent.futures").futures.ThreadPoolExecutor(cfg["storage"]["upload_threads"]) as ex:
+        list(ex.map(lambda kv: st.put_bytes(kv[0], kv[1], "public, max-age=86400"), files.items()))
+    st.put_bytes(cfg["clim"]["key"], raw, "no-cache, max-age=0")
+    st.save_ops()
+    k = data["kma"]["points"]
+    _summary("\n".join(["## Climate (clim/points.json, clim/grid/)", "",
+                        f"- ERA5: {len(data['era5']['points'])} points, {data['era5']['chunks']} chunks read",
+                        f"- Map climatology: {len(files)} day files, {sum(len(b) for b in files.values()) / 1e6:.0f} MB, "
+                        f"box {data['grid']['box']}",
+                        "- KMA normals: " + ", ".join(f"{p} {v['stn']} ({v['tmst'] - 30}-{v['tmst'] - 1})"
+                                                       for p, v in k.items()),
+                        f"- {new / 1e6:.0f} MB uploaded, {time.monotonic() - t0:.0f} s (measured); bucket after: "
+                        f"{after / 1e9:.2f} GB"]))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m render")
     ap.add_argument("--config", default=None, help="path to config.toml (default: render/config.toml)")
@@ -425,10 +467,12 @@ def main(argv=None):
     p = sub.add_parser("dfs", help="KMA forecast images (초단기 / 단기) for the 예보 tab")
     p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
     p.add_argument("--force", action="store_true", help="fetch the newest issuances even if published")
+    p = sub.add_parser("clim", help="climate lines for the ENS graphs (ERA5 climatology + KMA normals), once")
+    p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = config.load(args.config)
-    {"poll": cmd_poll, "render-run": cmd_render_run, "latest": cmd_latest, "dfs": cmd_dfs}[args.cmd](args, cfg)
+    {"poll": cmd_poll, "render-run": cmd_render_run, "latest": cmd_latest, "dfs": cmd_dfs, "clim": cmd_clim}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

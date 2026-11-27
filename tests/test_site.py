@@ -47,15 +47,18 @@ class Models(unittest.TestCase):
 
     def test_chart_lists(self):
         ifs = config.for_model(CFG, "ifs")
-        self.assertEqual(len(ifs["site"]["charts"]), 18)          # + theta-e 925/850/700 (owner 2026-11-24)
+        self.assertEqual(len(ifs["site"]["charts"]), 26)          # + theta-e 925/850/700 (2026-11-24), 8 편차 maps (2026-11-27)
         self.assertEqual(65 * 18 - 1, 1169)           # images per IFS 00Z run: no snow chart at +0h
         ids = [c["id"] for c in ifs["site"]["charts"]]
         self.assertEqual(ids[0], "msl")
-        self.assertEqual(ids[-1], "gz200")
+        self.assertEqual([i for i in ids if not i.startswith("a_")][-1], "gz200")
+        for mid in ("ifs", "ifs01", "aifs", "kimr"):     # 편차 maps (owner 2026-11-27)
+            a = [c["id"] for c in config.for_model(CFG, mid)["site"]["charts"] if c["id"].startswith("a_")]
+            self.assertEqual(len(a), 8, mid)
         hi = [c["id"] for c in config.for_model(CFG, "ifs01")["site"]["charts"]]
         for gone in ("gz300", "gz200", "gz500_wide", "wpsh500_wide"):
             self.assertNotIn(gone, hi)
-        self.assertEqual(len(config.for_model(CFG, "aifs")["site"]["charts"]), 18)
+        self.assertEqual(len(config.for_model(CFG, "aifs")["site"]["charts"]), 26)
         for mid in ("ifs", "ifs01", "aifs", "kimr"):
             ids = [c["id"] for c in config.for_model(CFG, mid)["site"]["charts"]]
             self.assertTrue({"ept925", "ept850", "ept700"} <= set(ids), mid)
@@ -442,6 +445,67 @@ class AifsEns(unittest.TestCase):
         self.assertFalse(any(c.startswith("rain_") for c in r[0]["charts"]))      # rendered before rain_*
         self.assertEqual(r[1]["charts"], ["plume_seoul", "rain_seoul"])
         self.assertEqual(site.run_entry({"run": "x", "steps": [0], "wpsh": None, "charts": ["a"]})["charts"], ["a"])
+
+    def test_clim_lines(self):
+        """KMA normals parsing (format measured 2026-11-27) and the climate values at valid times."""
+        import datetime as dt
+        from render import clim, ens
+        text = ("#START7777\n# ST,STN, MM, DD,    TA,TA_MAX,TA_MIN,\n"
+                "2021,108,  2, 29,   3.6,   8.2,  -0.4,   0.4,=\n2021,108, 11, 27,   4.4,   8.5,   0.8,   1.0,=\n"
+                "2021,108, 11, 28, -99.0,   8.0,   0.5,   1.0,=\n#7777END\n")
+        k = clim.parse_kma(text)
+        self.assertEqual(k[108]["1127"], [4.4, 8.5, 0.8])
+        self.assertEqual(k[108]["0229"], [3.6, 8.2, -0.4])
+        self.assertNotIn("1128", k[108])                               # missing value
+        e = {"t850": [[float(d * 10 + h) for h in range(4)] for d in range(366)]}
+        v = clim.era5_at({"era5": e}, "t850", [dt.datetime(2026, 1, 1, 0), dt.datetime(2026, 1, 1, 3),
+                                                 dt.datetime(2026, 1, 1, 21)])
+        self.assertEqual(v, [0.0, 0.5, 3 * 0.5 + 10 * 0.5])           # 18Z -> next day 00Z
+        mx, mn, tmst = clim.kma_at({"kma": {"tmst": 2021, "days": k[108]}}, [dt.datetime(2026, 11, 27)])
+        self.assertEqual((mx, mn, tmst), ([8.5], [0.8], 2021))
+        e = config.for_model(CFG, "aifsens")
+        series = {s: {"t850": {m: -5.0 for m in range(51)}, "t2m": {m: 3.0 for m in range(51)},
+                      "z500": {m: 5500.0 for m in range(51)}} for s in ens.steps(e)}
+        pc = {"era5": {"t850": [[-3.0] * 4] * 366, "z500": [[5550.0] * 4] * 366},
+              "kma": {"tmst": 2011, "days": {f"{m:02d}{d:02d}": [4.0, 8.0, 0.0] for m in range(1, 13)
+                                             for d in range(1, 32)}}}
+        self.assertEqual(ens.plume(e, dt.datetime(2026, 11, 26, 0), series, "Seoul", "plume", pc)[:4], b"\x89PNG")
+
+    def test_anomaly_map(self):
+        """편차 map from a synthetic climatology on the 0.25 deg grid (the real one is built by clim.yml)."""
+        import datetime as dt
+        import io
+        import tempfile
+        import numpy as np
+        from render import clim, grib, plot
+        c = config.for_model(CFG, "ifs")
+        lat = np.arange(20, 55.01, 0.25, dtype=np.float32)
+        lon = np.arange(100, 152.01, 0.25, dtype=np.float32)
+        shp = (len(lat), len(lon))
+        gf = [f for f in CFG["clim"]["era5_fields"] if f.get("grid")]
+        with tempfile.TemporaryDirectory() as t:
+            for doy in (331, 332):
+                arrs = {"lat": lat, "lon": lon}
+                for f in gf:
+                    base = {"t": 0.0, "z": 5500.0, "q": 0.004}[f["key"][0]]
+                    arrs[f["key"]] = np.round(np.full((4,) + shp, base) * f["pack"]).astype(np.int16)
+                    arrs[f["key"] + "_pack"] = np.float64(f["pack"])
+                np.savez_compressed(f"{t}/{doy:03d}.npz", **arrs)
+            g = clim.grid_at(CFG, dt.datetime(2026, 11, 27, 21), t)            # 27 Nov = day 331
+            self.assertAlmostEqual(float(g["z500"][10, 10]), 5500.0, places=3)
+            F = grib.Fields(np.arange(15, 60.01, 0.5), np.arange(95, 160.01, 0.5))
+            sh = (len(F.lat), len(F.lon))
+            for k, v in {("2t", 0): 278.15, ("msl", 0): 101300.0, ("sp", 0): 101000.0, ("gh", 500): 5560.0,
+                         ("gh", 925): 760.0, ("gh", 850): 1450.0, ("gh", 700): 3000.0,
+                         ("t", 925): 280.0, ("t", 850): 276.0, ("t", 700): 268.0,
+                         ("q", 925): 0.005, ("q", 850): 0.004, ("q", 700): 0.002}.items():
+                F.data[k] = np.full(sh, v, np.float32) + np.linspace(0, 3, sh[1], dtype=np.float32)
+            for kind, lev in (("t2m", None), ("gz500", None), ("t", 850), ("ept", 700)):
+                fr = plot.chart_anom(c, F, kind, lev, dt.datetime(2026, 11, 27, 0), 21, g)
+                self.assertEqual(fr.png_bytes()[:4], b"\x89PNG")
+        reg = clim.regrid({"lat": lat, "lon": lon, "x": np.add.outer(lat, lon * 0)}, "x",
+                          np.array([30.1]), np.array([120.3]))
+        self.assertAlmostEqual(float(reg[0, 0]), 30.1, places=3)
 
     def test_z500_fields(self):
         """500 hPa height: IFS ENS gh (gpm), AIFS-ENS z (geopotential / g), measured 2026-11-25."""

@@ -67,6 +67,10 @@ class _Base:
         raw = self._get(key)
         return json.loads(raw) if raw else None
 
+    def get_bytes(self, key: str) -> bytes | None:
+        self.ops["class_b"] += 1
+        return self._get(key)
+
     def put_bytes(self, key: str, data: bytes, cache_control: str) -> None:
         self.ops["class_a"] += 1
         self._put(key, data, cache_control)

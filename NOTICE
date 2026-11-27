@@ -56,3 +56,20 @@ Source: Korea Meteorological Administration (기상청). Licence: Korea Open Gov
 Type 1 - attribution required (https://www.kogl.or.kr/info/licenseType1.do).
 Modifications: regional fields interpolated from the 3 km Lambert grid to a 0.05 deg lat/lon grid; global
 fields cropped; derived quantities computed; charts rendered. Not an official KMA product.
+
+
+Climate lines on the ensemble graphs and the 편차 (anomaly) maps
+-----------------------------------------------------------------
+ERA5 Reanalysis Data (Modified)
+Contains modified Copernicus Climate Change Service information 2026.
+Changes made: the ERA5 1990-2019 6-hourly climatology (as published by WeatherBench2,
+https://storage.googleapis.com/weatherbench2/) is interpolated to the graph points and cropped to the map area,
+theta-e is computed from its mean temperature and humidity, and forecast-minus-climatology anomalies are drawn.
+Source: European Centre for Medium-Range Weather Forecasts (ECMWF) / Copernicus Climate Data Store (CDS)
+License: Creative Commons Attribution 4.0 International (CC BY 4.0) (https://creativecommons.org/licenses/by/4.0/)
+Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus
+information or data it contains.
+
+2 m temperature normals on the graphs: KMA ASOS daily climatological normals (평년값, 1991-2020; Daegu 1981-2010)
+from the KMA API Hub. Source: Korea Meteorological Administration (기상청), KOGL Type 1 - attribution required.
+Not an official KMA product.

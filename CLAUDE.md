@@ -31,6 +31,7 @@ Full project brief: [docs/SPEC.md](docs/SPEC.md). Read it first.
   the KMA API Hub KIM models, `poll --models kim`), `pages.yml` (main only: web app to Pages), `ci.yml` (branches: tests + smoke render),
   `android.yml` (debug APK on branches; signed release from main only),
   `forecast.yml` (main only: KMA 초단기/단기 images for the 예보 tab, `render/dfs.py`),
+  `clim.yml` (main only, manual: climate for the ENS graph lines and the 편차 maps, `render/clim.py`),
   `measure.yml` (Stage 0 measurements, manual), `pages-test.yml` (M6, manual).
 - Design notes: `docs/STAGE1.md`; decisions: `docs/DECISIONS.md`.
 - `measure/` Stage 0 measurement scripts (M1-M6).
