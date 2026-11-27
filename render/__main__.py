@@ -161,7 +161,7 @@ class LiveRun:
         self.cap = st.scfg["max_bytes"]
         self.cc = st.scfg["image_cache_control"]
         self.every = 0 if usage is not None else mcfg["site"].get("live_publish_s", 60)   # KIM: every step
-        self.last_pub = 0.0
+        self.last_pub = None                            # None: the first finished step is published at once
         self.published = set()                          # resumed steps are published with the first new one
         self.lock, self.pub_lock = threading.Lock(), threading.Lock()
         self.pool = cf.ThreadPoolExecutor(st.scfg["upload_threads"])
@@ -227,7 +227,7 @@ class LiveRun:
         now = time.monotonic()
         with self.lock:
             new = set(self.done) - self.published
-        if not new or (not force and now - self.last_pub < self.every):
+        if not new or (not force and self.last_pub is not None and now - self.last_pub < self.every):
             return
         e = self.entry()
         with self.lock:
