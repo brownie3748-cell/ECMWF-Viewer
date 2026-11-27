@@ -56,3 +56,13 @@ Source: Korea Meteorological Administration (기상청). Licence: Korea Open Gov
 Type 1 - attribution required (https://www.kogl.or.kr/info/licenseType1.do).
 Modifications: regional fields interpolated from the 3 km Lambert grid to a 0.05 deg lat/lon grid; global
 fields cropped; derived quantities computed; charts rendered. Not an official KMA product.
+
+
+Climate lines on the ensemble graphs
+------------------------------------
+500 hPa height and 850 hPa temperature: ERA5 1990-2019 6-hourly climatology as published by WeatherBench2
+(https://storage.googleapis.com/weatherbench2/), interpolated to the graph points.
+Contains modified Copernicus Climate Change Service information (ERA5, Hersbach et al. 2020).
+Neither the European Commission nor ECMWF is responsible for any use of this information.
+2 m temperature: KMA ASOS daily climatological normals (평년값, 1991-2020; Daegu 1981-2010) from the KMA API Hub.
+Source: Korea Meteorological Administration (기상청), KOGL Type 1 - attribution required. Not an official KMA product.

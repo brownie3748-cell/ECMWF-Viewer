@@ -443,6 +443,31 @@ class AifsEns(unittest.TestCase):
         self.assertEqual(r[1]["charts"], ["plume_seoul", "rain_seoul"])
         self.assertEqual(site.run_entry({"run": "x", "steps": [0], "wpsh": None, "charts": ["a"]})["charts"], ["a"])
 
+    def test_clim_lines(self):
+        """KMA normals parsing (format measured 2026-11-27) and the climate values at valid times."""
+        import datetime as dt
+        from render import clim, ens
+        text = ("#START7777\n# ST,STN, MM, DD,    TA,TA_MAX,TA_MIN,\n"
+                "2021,108,  2, 29,   3.6,   8.2,  -0.4,   0.4,=\n2021,108, 11, 27,   4.4,   8.5,   0.8,   1.0,=\n"
+                "2021,108, 11, 28, -99.0,   8.0,   0.5,   1.0,=\n#7777END\n")
+        k = clim.parse_kma(text)
+        self.assertEqual(k[108]["1127"], [4.4, 8.5, 0.8])
+        self.assertEqual(k[108]["0229"], [3.6, 8.2, -0.4])
+        self.assertNotIn("1128", k[108])                               # missing value
+        e = {"t850": [[float(d * 10 + h) for h in range(4)] for d in range(366)]}
+        v = clim.era5_at({"era5": e}, "t850", [dt.datetime(2026, 1, 1, 0), dt.datetime(2026, 1, 1, 3),
+                                                 dt.datetime(2026, 1, 1, 21)])
+        self.assertEqual(v, [0.0, 0.5, 3 * 0.5 + 10 * 0.5])           # 18Z -> next day 00Z
+        mx, mn, tmst = clim.kma_at({"kma": {"tmst": 2021, "days": k[108]}}, [dt.datetime(2026, 11, 27)])
+        self.assertEqual((mx, mn, tmst), ([8.5], [0.8], 2021))
+        e = config.for_model(CFG, "aifsens")
+        series = {s: {"t850": {m: -5.0 for m in range(51)}, "t2m": {m: 3.0 for m in range(51)},
+                      "z500": {m: 5500.0 for m in range(51)}} for s in ens.steps(e)}
+        pc = {"era5": {"t850": [[-3.0] * 4] * 366, "z500": [[5550.0] * 4] * 366},
+              "kma": {"tmst": 2011, "days": {f"{m:02d}{d:02d}": [4.0, 8.0, 0.0] for m in range(1, 13)
+                                             for d in range(1, 32)}}}
+        self.assertEqual(ens.plume(e, dt.datetime(2026, 11, 26, 0), series, "Seoul", "plume", pc)[:4], b"\x89PNG")
+
     def test_z500_fields(self):
         """500 hPa height: IFS ENS gh (gpm), AIFS-ENS z (geopotential / g), measured 2026-11-25."""
         from render import ens

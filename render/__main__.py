@@ -48,7 +48,7 @@ def process_order(cfg) -> list[str]:
 
 GROUPS = ("all", "ecmwf", "kim")
 # Each group's request counter in _ops/ (store.month): the jobs never write the same counter file.
-COUNTERS = {"all": "", "ecmwf": "", "kim": "kim-", "dfs": "dfs-"}
+COUNTERS = {"all": "", "ecmwf": "", "kim": "kim-", "dfs": "dfs-", "clim": "clim-"}
 
 
 def group_models(cfg, group: str) -> list[str]:
@@ -218,8 +218,13 @@ def cmd_poll(args, cfg):
         kma_usage["other_calls"], kma_usage["other_bytes"] = other.get("calls", 0), other.get("bytes", 0)
     kma_calls0 = kma_usage["calls"]
     probe_notes = []
+    clim = None
     for mid in mine:
         mcfg = config.for_model(cfg, mid)
+        if mcfg["data"].get("source") == "ens":            # climate lines for the 기온 graphs (clim.yml builds them)
+            if clim is None:
+                clim = st.get_json(cfg["clim"]["key"]) or {}
+            mcfg["ens"]["clim"] = clim
         src = sources_mod.make_sources(mcfg)
         if kim.is_kma(mcfg):
             src.usage = kma_usage
@@ -401,6 +406,25 @@ def cmd_dfs(args, cfg):
         _summary("\n".join(lines))
 
 
+def cmd_clim(args, cfg):
+    """Build clim/points.json (ERA5 climatology + KMA normals at the ENS points) and upload it to the store."""
+    from . import clim as clim_mod
+    st = store_mod.open_store(cfg, args.store)
+    use_own_counter(st, "clim")
+    t0 = time.monotonic()
+    data = clim_mod.build(cfg)
+    raw = json.dumps(data, separators=(",", ":")).encode()
+    st.check_budget(2)
+    st.put_bytes(cfg["clim"]["key"], raw, "no-cache, max-age=0")
+    st.save_ops()
+    k = data["kma"]["points"]
+    _summary("\n".join(["## Climate lines (clim/points.json)", "",
+                        f"- ERA5: {len(data['era5']['points'])} points, {data['era5']['chunks']} chunks read",
+                        f"- KMA normals: " + ", ".join(f"{p} {v['stn']} ({v['tmst'] - 30}-{v['tmst'] - 1})"
+                                                         for p, v in k.items()),
+                        f"- {len(raw) / 1e3:.0f} kB uploaded, {time.monotonic() - t0:.0f} s (measured)"]))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m render")
     ap.add_argument("--config", default=None, help="path to config.toml (default: render/config.toml)")
@@ -425,10 +449,12 @@ def main(argv=None):
     p = sub.add_parser("dfs", help="KMA forecast images (초단기 / 단기) for the 예보 tab")
     p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
     p.add_argument("--force", action="store_true", help="fetch the newest issuances even if published")
+    p = sub.add_parser("clim", help="climate lines for the ENS graphs (ERA5 climatology + KMA normals), once")
+    p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = config.load(args.config)
-    {"poll": cmd_poll, "render-run": cmd_render_run, "latest": cmd_latest, "dfs": cmd_dfs}[args.cmd](args, cfg)
+    {"poll": cmd_poll, "render-run": cmd_render_run, "latest": cmd_latest, "dfs": cmd_dfs, "clim": cmd_clim}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

@@ -88,6 +88,24 @@ margin_bottom_px = 64
 colorbar_width_px = 16
 colorbar_pad_px = 12
 
+[clim]
+# Climate lines on the ENS 기온 graphs (owner 2026-11-27), built once by clim.yml (`python -m render clim`) into
+# the store; every ENS render reads them. 500 hPa height and 850 hPa T: ERA5 1990-2019 6-hourly climatology from
+# WeatherBench2 (public bucket, no account; measured 2026-11-27: 0.25 deg, hours 00/06/12/18 UTC, day of year
+# 1-366, ~20 MB per chunk of 3 hours x 3 days). 2 m T: KMA ASOS daily normals (API Hub sfc_norm1, measured:
+# 219 stations incl. 29 Feb; Daegu 143 has 1981-2010 only, so tmst falls back to 2011).
+key = "clim/points.json"
+era5_base = "https://storage.googleapis.com/weatherbench2/datasets/era5-hourly-climatology/1990-2019_6h_1440x721.zarr/"
+era5_fields = [
+  { key = "t850", var = "temperature", level = 850, scale = 1.0, offset = -273.15 },
+  { key = "z500", var = "geopotential", level = 500, scale = 0.10197162, offset = 0.0 },   # m2 s-2 / g = gpm
+]
+kma_url = "https://apihub.kma.go.kr/api/typ01/url/sfc_norm1.php?norm=D&tmst={tmst}&stn=0&MM1=1&DD1=1&MM2=12&DD2=31"
+kma_tmst = [2021, 2011]            # 1991-2020 normals; 1981-2010 where a station has no newer ones
+parallel = 8
+color = "#ff5a1f"
+credit = "Climate lines: ERA5 1990-2019 climatology via WeatherBench2 (contains modified Copernicus Climate Change Service information); KMA ASOS daily normals (KOGL Type 1)."
+
 [style]
 font_family = "DejaVu Sans"
 title_size = 13
@@ -451,14 +469,14 @@ files = ["cf", "pf"]
 # Points (ASOS station coordinates, rounded): one plume chart "plume_<id>" each; the download is the same for any
 # number of points. Coastal points (Gangneung, Busan, Jeju) are bilinear on 0.25 deg and may include sea points.
 points = [
-  { id = "seoul", name = "Seoul", lat = 37.57, lon = 126.97 },
-  { id = "cheongju", name = "Cheongju", lat = 36.64, lon = 127.44 },
-  { id = "daejeon", name = "Daejeon", lat = 36.37, lon = 127.37 },
-  { id = "gangneung", name = "Gangneung", lat = 37.75, lon = 128.89 },
-  { id = "daegu", name = "Daegu", lat = 35.88, lon = 128.62 },
-  { id = "gwangju", name = "Gwangju", lat = 35.17, lon = 126.89 },
-  { id = "busan", name = "Busan", lat = 35.1, lon = 129.03 },
-  { id = "jeju", name = "Jeju", lat = 33.51, lon = 126.53 },
+  { id = "seoul", name = "Seoul", lat = 37.57, lon = 126.97, stn = 108 },
+  { id = "cheongju", name = "Cheongju", lat = 36.64, lon = 127.44, stn = 131 },
+  { id = "daejeon", name = "Daejeon", lat = 36.37, lon = 127.37, stn = 133 },
+  { id = "gangneung", name = "Gangneung", lat = 37.75, lon = 128.89, stn = 105 },
+  { id = "daegu", name = "Daegu", lat = 35.88, lon = 128.62, stn = 143 },
+  { id = "gwangju", name = "Gwangju", lat = 35.17, lon = 126.89, stn = 156 },
+  { id = "busan", name = "Busan", lat = 35.1, lon = 129.03, stn = 159 },
+  { id = "jeju", name = "Jeju", lat = 33.51, lon = 126.53, stn = 184 },
 ]
 max_step = 360
 every_h = 6
@@ -494,14 +512,14 @@ every_h_long = 6
 # Points (ASOS station coordinates, rounded): one plume chart "plume_<id>" each; the download is the same for any
 # number of points. Coastal points (Gangneung, Busan, Jeju) are bilinear on 0.25 deg and may include sea points.
 points = [
-  { id = "seoul", name = "Seoul", lat = 37.57, lon = 126.97 },
-  { id = "cheongju", name = "Cheongju", lat = 36.64, lon = 127.44 },
-  { id = "daejeon", name = "Daejeon", lat = 36.37, lon = 127.37 },
-  { id = "gangneung", name = "Gangneung", lat = 37.75, lon = 128.89 },
-  { id = "daegu", name = "Daegu", lat = 35.88, lon = 128.62 },
-  { id = "gwangju", name = "Gwangju", lat = 35.17, lon = 126.89 },
-  { id = "busan", name = "Busan", lat = 35.1, lon = 129.03 },
-  { id = "jeju", name = "Jeju", lat = 33.51, lon = 126.53 },
+  { id = "seoul", name = "Seoul", lat = 37.57, lon = 126.97, stn = 108 },
+  { id = "cheongju", name = "Cheongju", lat = 36.64, lon = 127.44, stn = 131 },
+  { id = "daejeon", name = "Daejeon", lat = 36.37, lon = 127.37, stn = 133 },
+  { id = "gangneung", name = "Gangneung", lat = 37.75, lon = 128.89, stn = 105 },
+  { id = "daegu", name = "Daegu", lat = 35.88, lon = 128.62, stn = 143 },
+  { id = "gwangju", name = "Gwangju", lat = 35.17, lon = 126.89, stn = 156 },
+  { id = "busan", name = "Busan", lat = 35.1, lon = 129.03, stn = 159 },
+  { id = "jeju", name = "Jeju", lat = 33.51, lon = 126.53, stn = 184 },
 ]
 max_step = 360
 every_h = 3
