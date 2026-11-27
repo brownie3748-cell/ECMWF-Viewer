@@ -1,6 +1,11 @@
-"""Ensemble plume charts (AIFS-ENS, ECMWF ENS): every member's 500 hPa height, 850 hPa and 2 m temperature at
-points, one graph per
-point and run.
+"""Ensemble plume charts (AIFS-ENS, ECMWF ENS) at points, two graphs per point and run:
+    plume_<point>  every member's 500 hPa height, 850 hPa and 2 m temperature ("기온")
+    rain_<point>   every member's 850 / 925 hPa equivalent potential temperature and 6 h precipitation ("강수")
+
+Both models carry t and q at 850 / 925 hPa and tp (accumulated from the run start) in every step file, measured
+2026-11-26 in the 00Z indexes; tp units differ (AIFS-ENS kg m-2 = mm, IFS ENS m), so tp is converted by its GRIB
+`units` key. The new fields add about 1.5 MB per member and step (measured message sizes), about doubling the
+download (estimated: AIFS-ENS ~18 min, ENS ~25 min per run).
 
 ECMWF ENS: `ifs/0p25/enfo`, one `ef` file per step with 50 perturbed members (no control at 0.25 deg), 3-hourly to
 +144 h then 6-hourly to +360 h (00/12Z; 06/18Z to +144 h), measured 2026-11-25.
@@ -27,13 +32,46 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import requests  # noqa: E402
 
-from . import config, encode  # noqa: E402
+from . import config, derive, encode  # noqa: E402
 
 log = logging.getLogger(__name__)
 TIMEOUT = 60
 G = 9.80665
-KEYS = ("z500", "t850", "t2m")
-PANELS = (("z500", "500 hPa height (gpm)"), ("t850", "850 hPa temperature (C)"), ("t2m", "2 m temperature (C)"))
+KEYS = ("z500", "t850", "t2m", "t925", "q850", "q925", "tp")
+# chart prefix -> (title key in [ens], panels (series key, axis label))
+CHARTS = {
+    "plume": ("title", (("z500", "500 hPa height (gpm)"), ("t850", "850 hPa temperature (C)"),
+                        ("t2m", "2 m temperature (C)"))),
+    "rain": ("title_rain", (("te850", "850 hPa theta-e (K)"), ("te925", "925 hPa theta-e (K)"),
+                            ("pr6", "6 h precipitation (mm)"))),
+}
+PANELS = CHARTS["plume"][1]
+
+
+def _tp_mm(v, units: str = "m"):
+    if units == "m":                       # IFS ENS (measured)
+        return v * 1000.0
+    if units in ("kg m**-2", "kg m-2", "mm"):  # AIFS-ENS (measured)
+        return v
+    raise RuntimeError(f"tp in unexpected units {units!r}")
+
+
+def derived(series: dict) -> dict:
+    """series + te850 / te925 (K, Bolton) and pr6 (mm in the 6 h ending at the step, only at steps that are a
+    multiple of 6 h with the step 6 h earlier present; small negative packing noise clipped to 0)."""
+    out = {}
+    for s, f in series.items():
+        g = dict(f)
+        for lev, tk in (("850", lambda m: f["t850"][m] + 273.15), ("925", lambda m: f["t925"][m])):
+            q = f.get("q" + lev, {})
+            if q and f.get("t" + lev):
+                g["te" + lev] = {m: float(derive.theta_e(np.float64(tk(m)), np.float64(q[m]), float(lev)))
+                                 for m in q if m in f["t" + lev]}
+        prev = series.get(s - 6, {}).get("tp")
+        if s % 6 == 0 and prev and f.get("tp"):
+            g["pr6"] = {m: max(0.0, f["tp"][m] - prev[m]) for m in f["tp"] if m in prev}
+        out[s] = g
+    return out
 URLS = {"google": "https://storage.googleapis.com/ecmwf-open-data", "ecmwf": "https://data.ecmwf.int/forecasts"}
 
 
@@ -95,8 +133,10 @@ class EnsSource:
 
     # (key, GRIB param, level, value -> plotted unit). 500 hPa height: IFS ENS "gh" (gpm), AIFS-ENS "z"
     # (geopotential, m2 s-2), measured in the step indexes 2026-11-25.
-    FIELDS = (("t850", "t", "850", lambda v: v - 273.15), ("t2m", "2t", None, lambda v: v - 273.15),
-              ("z500", "gh", "500", lambda v: v), ("z500", "z", "500", lambda v: v / G))
+    FIELDS = (("t850", "t", "850", lambda v, u="": v - 273.15), ("t2m", "2t", None, lambda v, u="": v - 273.15),
+              ("z500", "gh", "500", lambda v, u="": v), ("z500", "z", "500", lambda v, u="": v / G),
+              ("t925", "t", "925", lambda v, u="": v), ("q850", "q", "850", lambda v, u="": v),
+              ("q925", "q", "925", lambda v, u="": v), ("tp", "tp", None, _tp_mm))
 
     def _wanted(self, msg: dict):
         for key, param, level, conv in self.FIELDS:
@@ -132,6 +172,7 @@ class EnsSource:
                                 "jDirectionIncrementInDegrees", "iDirectionIncrementInDegrees", "jScansPositively")}
                             if g["jScansPositively"]:
                                 raise RuntimeError("unexpected S->N grid")
+                            units = eccodes.codes_get(h, "units")
                             vals = eccodes.codes_get_values(h)
                         finally:
                             eccodes.codes_release(h)
@@ -140,7 +181,7 @@ class EnsSource:
                             out[pt["id"]][key][member] = conv(bilinear(
                                 vals, g["Ni"], g["Nj"], pt["lat"], pt["lon"], g["latitudeOfFirstGridPointInDegrees"],
                                 g["longitudeOfFirstGridPointInDegrees"], g["jDirectionIncrementInDegrees"],
-                                g["iDirectionIncrementInDegrees"]))
+                                g["iDirectionIncrementInDegrees"]), units)
                 return out
             except Exception as e:  # noqa: BLE001
                 last = e
@@ -148,18 +189,26 @@ class EnsSource:
         raise RuntimeError(f"AIFS-ENS step {step} failed on every source: {last!r}")
 
 
-def plume(cfg: dict, run: dt.datetime, series: dict, name: str) -> bytes:
-    """Three panels (500 hPa height, 850 hPa T, 2 m T): every member grey, control blue, mean black, 10-90 % band.
-    Series without z500 (stored before 2026-11-25) get the two temperature panels only."""
+def plume(cfg: dict, run: dt.datetime, series: dict, name: str, chart: str = "plume") -> bytes:
+    """Three panels of one chart (CHARTS): every member grey, control blue, mean black, 10-90 % band.
+    plume: 500 hPa height, 850 hPa T, 2 m T (series without z500, stored before 2026-11-25: the two temperature
+    panels only); rain: 850 / 925 hPa theta-e and 6 h precipitation (series needs t925 / q / tp, see derived)."""
     e = cfg["ens"]
+    title_key, all_panels = CHARTS[chart]
     st = sorted(series)
     kst = dt.timedelta(hours=cfg["style"]["kst_offset_h"])
-    x = [run + dt.timedelta(hours=s) + kst for s in st]
-    panels = [p for p in PANELS if any(series[s].get(p[0]) for s in st)]
-    fig, axes = plt.subplots(len(panels), 1, figsize=(10.56, 4.0 + 2.6 * len(panels)), dpi=100, sharex=True)
+    panels = [p for p in all_panels if any(series[s].get(p[0]) for s in st)]
+    if not panels:
+        raise ValueError(f"{chart}: no data for any panel")
+    fig, axes = plt.subplots(len(panels), 1, figsize=(10.56, 4.0 + 2.6 * len(panels)), dpi=100, sharex=True,
+                             squeeze=False)
+    axes = axes[:, 0]
+    xlim = (run + kst, run + dt.timedelta(hours=st[-1]) + kst)
     for ax, (key, label) in zip(axes, panels):
-        members = sorted({m for s in st for m in series[s][key]})
-        a = np.array([[series[s][key].get(m, np.nan) for s in st] for m in members])
+        ks = [s for s in st if series[s].get(key)]            # pr6: 6-hourly steps only
+        x = [run + dt.timedelta(hours=s) + kst for s in ks]
+        members = sorted({m for s in ks for m in series[s][key]})
+        a = np.array([[series[s][key].get(m, np.nan) for s in ks] for m in members])
         pf = a[[i for i, m in enumerate(members) if m != 0]]
         for row in pf:
             ax.plot(x, row, color="#9a9a9a", lw=0.5, alpha=0.6)
@@ -168,6 +217,8 @@ def plume(cfg: dict, run: dt.datetime, series: dict, name: str) -> bytes:
         if 0 in members:
             ax.plot(x, a[members.index(0)], color="#1f5fbf", lw=1.4, label="control")
         ax.plot(x, np.nanmean(pf, axis=0), color="k", lw=2.0, label="mean")
+        if key == "pr6":
+            ax.set_ylim(0, max(1.0, ax.get_ylim()[1]))           # dry runs: a 0-1 mm axis, not a flat line at 0
         lo, hi = ax.get_ylim()                 # reference lines only where the data already reaches
         for ref, alpha, *col in e.get("ref_lines", {}).get(key, []):
             if lo <= ref <= hi:
@@ -176,13 +227,14 @@ def plume(cfg: dict, run: dt.datetime, series: dict, name: str) -> bytes:
         ax.set_ylabel(label)
         ax.grid(alpha=0.3)
         ax.legend(loc="upper right", fontsize=8, ncol=3)
+    axes[-1].set_xlim(*xlim)
     axes[-1].xaxis.set_major_locator(mdates.DayLocator())
     axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
     axes[-1].set_xlabel("valid time (KST, 00 KST ticks)")
-    mem = {m for s in st for m in series[s]["t850"]}
+    mem = {m for s in st for m in series[s].get(panels[0][0], {})}
     n = len(mem - {0})
     ctl = " + control" if 0 in mem else ""
-    fig.suptitle(f"{e['title'].format(name=name)}   {n} members{ctl}\n"
+    fig.suptitle(f"{e[title_key].format(name=name)}   {n} members{ctl}\n"
                  f"{cfg['style']['model_label']}   run {run:%Y-%m-%d %H}UTC ({run + kst:%m-%d %H}KST)", fontsize=11)
     fig.text(0.01, 0.005, cfg["style"]["credit"], fontsize=6.5, color="#555")
     fig.tight_layout(rect=(0, 0.015, 1, 1))
@@ -209,16 +261,24 @@ def render_run(cfg: dict, src: EnsSource, run: dt.datetime, site: pathlib.Path, 
     dl = time.monotonic() - t0
     out = cfg["output"]
     nbytes = 0
+    want = {c["id"] for c in cfg["site"]["charts"]}
+    charts = []
     for pt in cfg["ens"]["points"]:
-        ps = {s: v[pt["id"]] for s, v in series.items()}
-        data = encode.encode(plume(cfg, run, ps, pt["name"]), out["format"], out["png8_colors"], out["webp_quality"])
-        (rdir / f"plume_{pt['id']}_000.png").write_bytes(data)
-        nbytes += len(data)
+        ps = derived({s: v[pt["id"]] for s, v in series.items()})
+        for chart in CHARTS:
+            cid = f"{chart}_{pt['id']}"
+            if cid not in want:
+                continue
+            data = encode.encode(plume(cfg, run, ps, pt["name"], chart), out["format"], out["png8_colors"],
+                                 out["webp_quality"])
+            (rdir / f"{cid}_000.png").write_bytes(data)
+            nbytes += len(data)
+            charts.append(cid)
     (rdir / "series.json").write_text(json.dumps({str(s): v for s, v in series.items()}))
     meta = {"model": model, "run": run_s, "steps": [0], "missing_steps": [], "wpsh": None,
             "render_version": cfg["site"]["render_version"],
             "rendered_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "sources": sorted(src.order), "images": len(cfg["ens"]["points"]), "bytes": nbytes,
+            "sources": sorted(src.order), "images": len(charts), "charts": charts, "bytes": nbytes,
             "download_seconds": round(dl, 1), "wall_seconds": round(time.monotonic() - t0, 1),
             "render_seconds_sum": 0.0,
             "points": {p["id"]: [p["lat"], p["lon"]] for p in cfg["ens"]["points"]}}

@@ -341,6 +341,14 @@ charts = [
   { id = "plume_gwangju", title = "Gwangju Z500 / T850 / T2m plume", domain = "graph" },
   { id = "plume_busan", title = "Busan Z500 / T850 / T2m plume", domain = "graph" },
   { id = "plume_jeju", title = "Jeju Z500 / T850 / T2m plume", domain = "graph" },
+  { id = "rain_seoul", title = "Seoul theta-e 850 / 925, 6 h precipitation plume", domain = "graph" },
+  { id = "rain_cheongju", title = "Cheongju theta-e 850 / 925, 6 h precipitation plume", domain = "graph" },
+  { id = "rain_daejeon", title = "Daejeon theta-e 850 / 925, 6 h precipitation plume", domain = "graph" },
+  { id = "rain_gangneung", title = "Gangneung theta-e 850 / 925, 6 h precipitation plume", domain = "graph" },
+  { id = "rain_daegu", title = "Daegu theta-e 850 / 925, 6 h precipitation plume", domain = "graph" },
+  { id = "rain_gwangju", title = "Gwangju theta-e 850 / 925, 6 h precipitation plume", domain = "graph" },
+  { id = "rain_busan", title = "Busan theta-e 850 / 925, 6 h precipitation plume", domain = "graph" },
+  { id = "rain_jeju", title = "Jeju theta-e 850 / 925, 6 h precipitation plume", domain = "graph" },
 ]
 
 # ---------------------------------------------------------------------------------------------
@@ -432,7 +440,8 @@ credit = "Adapted from 'ECMWF AIFS Single Forecast Data' by ECMWF, CC BY 4.0 (ht
 id = "aifsens"
 label = "AIFS-ENS"
 # Owner 2026-11-25: every member's 850 hPa and 2 m temperature as a graph (plume). One image per point and run.
-charts = ["plume_seoul", "plume_cheongju", "plume_daejeon", "plume_gangneung", "plume_daegu", "plume_gwangju", "plume_busan", "plume_jeju"]
+charts = ["plume_seoul", "plume_cheongju", "plume_daejeon", "plume_gangneung", "plume_daegu", "plume_gwangju", "plume_busan", "plume_jeju",
+          "rain_seoul", "rain_cheongju", "rain_daejeon", "rain_gangneung", "rain_daegu", "rain_gwangju", "rain_busan", "rain_jeju"]   # 강수 graphs (owner 2026-11-27)
 [models.override.data]
 source = "ens"
 model = "aifs-ens"
@@ -456,6 +465,7 @@ every_h = 6
 parallel_steps = 6
 source_order = ["google", "ecmwf"]  # azure answered 409 for aifs-ens (measured)
 title = "{name} 500hPa Height, 850hPa / 2m Temperature, all members"
+title_rain = "{name} 850 / 925hPa Equivalent Potential Temperature, 6h Precipitation, all members"
 # [value, opacity, colour (default red)], drawn only inside the plotted range: -8 C at 850 hPa fainter; 500 hPa 5880 gpm
 # (red, WPSH edge) and 5400 gpm (blue, cold trough) half transparent (owner 2026-11-25)
 ref_lines = { t850 = [[0.0, 1.0], [-8.0, 0.4]], t2m = [[0.0, 1.0]], z500 = [[5880.0, 0.5, "#e00000"], [5400.0, 0.5, "#1f4fd0"]] }
@@ -469,7 +479,8 @@ credit = "Adapted from 'ECMWF AIFS Ensemble Forecast Data' by ECMWF, CC BY 4.0 (
 id = "ifsens"
 label = "ECMWF ENS"
 # Owner 2026-11-25: the same plume from the ECMWF (IFS) ensemble. Same chart ids as AIFS-ENS, so a switch keeps the city.
-charts = ["plume_seoul", "plume_cheongju", "plume_daejeon", "plume_gangneung", "plume_daegu", "plume_gwangju", "plume_busan", "plume_jeju"]
+charts = ["plume_seoul", "plume_cheongju", "plume_daejeon", "plume_gangneung", "plume_daegu", "plume_gwangju", "plume_busan", "plume_jeju",
+          "rain_seoul", "rain_cheongju", "rain_daejeon", "rain_gangneung", "rain_daegu", "rain_gwangju", "rain_busan", "rain_jeju"]   # 강수 graphs (owner 2026-11-27)
 [models.override.data]
 source = "ens"
 model = "ifs"
@@ -496,6 +507,7 @@ every_h = 3
 parallel_steps = 8
 source_order = ["google", "ecmwf"]
 title = "{name} 500hPa Height, 850hPa / 2m Temperature, all members"
+title_rain = "{name} 850 / 925hPa Equivalent Potential Temperature, 6h Precipitation, all members"
 # [value, opacity, colour (default red)], drawn only inside the plotted range: -8 C at 850 hPa fainter; 500 hPa 5880 gpm
 # (red, WPSH edge) and 5400 gpm (blue, cold trough) half transparent (owner 2026-11-25)
 ref_lines = { t850 = [[0.0, 1.0], [-8.0, 0.4]], t2m = [[0.0, 1.0]], z500 = [[5880.0, 0.5, "#e00000"], [5400.0, 0.5, "#1f4fd0"]] }
