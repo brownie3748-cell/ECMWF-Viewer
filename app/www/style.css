@@ -73,9 +73,16 @@ button, select, input { font: inherit; color: inherit; }
 .model:disabled { opacity: .35; cursor: default; border-style: dashed; }
 .model.other:not(.on) { border-style: dashed; }
 .ens-models { padding-top: 5px; }
-.ens-models::before { content: "앙상블"; align-self: center; font-size: .72rem; font-weight: 700; color: var(--muted, #888);
+.ens-models::before { content: "그래프"; align-self: center; font-size: .72rem; font-weight: 700; color: var(--muted, #888);
   padding-right: 4px; white-space: nowrap; }
 .ens-models .model { flex: 0 1 50%; }
+/* ENS model: the name as plain text, then a two-part button 기온 | 강수 */
+.model-split { flex: 1 1 50%; min-width: 0; display: flex; align-items: stretch; }
+.model-split .ms-name { align-self: center; padding: 0 5px 0 2px; font-size: .74rem; font-weight: 700;
+  color: var(--accent-strong); white-space: nowrap; }
+.ens-models .model-split .model.seg { flex: 1 1 0; border-radius: 0; }
+.ens-models .model-split .model.seg:first-of-type { border-radius: 10px 0 0 10px; }
+.ens-models .model-split .model.seg:last-of-type { border-radius: 0 10px 10px 0; border-left-width: 0; }
 .chip[hidden], .ens-models[hidden], #controls[hidden], #slider[hidden], #steps-card[hidden], #toggles[hidden] { display: none; }
 
 main { padding: 2px var(--gap) 24px; }

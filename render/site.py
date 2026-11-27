@@ -27,6 +27,8 @@ def run_entry(meta: dict) -> dict:
          "rv": meta.get("render_version", 1), "bytes": meta.get("bytes", 0)}
     if meta.get("hourly_steps"):
         e["hourly_steps"] = meta["hourly_steps"]     # surface-only steps; old apps ignore them
+    if meta.get("charts"):
+        e["charts"] = meta["charts"]                 # ENS: the graphs this run has (rain_* from 2026-11-27)
     return e
 
 
@@ -52,6 +54,8 @@ def manifest(cfg: dict, runs: dict[str, dict[str, dict]]) -> dict:
             r.pop("bytes", None)
             if mc["data"].get("source") == "ens":        # plume: the app shows "<last valid time>까지"
                 r["end_step"] = config_mod.ens_last_step(mc, int(r["run"][8:10]))
+                # runs rendered before the rain_* graphs (2026-11-27) have the temperature graphs only
+                r.setdefault("charts", [c["id"] for c in mc["site"]["charts"] if c["id"].startswith("plume_")])
         models.append({
             "id": mid,
             "label": mc["model_label_short"],

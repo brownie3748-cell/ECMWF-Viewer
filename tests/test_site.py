@@ -376,7 +376,7 @@ class AifsEns(unittest.TestCase):
         from render import ens, sources
         e = config.for_model(CFG, "aifsens")
         ids = [c["id"] for c in e["site"]["charts"]]
-        self.assertEqual(ids, [f"plume_{p['id']}" for p in e["ens"]["points"]])     # one chart per point
+        self.assertEqual(ids, [f"{g}_{p['id']}" for g in ("plume", "rain") for p in e["ens"]["points"]])  # 2 per point
         for city in ("seoul", "cheongju", "daejeon", "gangneung", "jeju"):
             self.assertIn(f"plume_{city}", ids)
         self.assertEqual(len(ens.steps(e)), 61)                       # 0-360 h every 6 h (measured)
@@ -404,6 +404,44 @@ class AifsEns(unittest.TestCase):
         self.assertEqual(png[:4], b"\x89PNG")
         old = {s: {k: v for k, v in x.items() if k != "z500"} for s, x in series.items()}   # stored before z500
         self.assertEqual(ens.plume(e, dt.datetime(2026, 11, 25, 0), old, "Seoul")[:4], b"\x89PNG")
+
+    def test_rain_graph(self):
+        """850 / 925 hPa theta-e and 6 h precipitation (owner 2026-11-27); tp accumulated from the start."""
+        import datetime as dt
+        from render import ens
+        e = config.for_model(CFG, "ifsens")
+        st = ens.steps(e, 0)                                           # 3-hourly to +144 h, then 6-hourly
+        series = {s: {"t850": {m: 5.0 for m in range(1, 51)}, "t925": {m: 283.15 for m in range(1, 51)},
+                      "q850": {m: 0.006 for m in range(1, 51)}, "q925": {m: 0.008 for m in range(1, 51)},
+                      "tp": {m: 0.5 * s + (m % 3) for m in range(1, 51)}} for s in st}
+        d = ens.derived(series)
+        self.assertNotIn("pr6", d[0])
+        self.assertNotIn("pr6", d[3])                                  # 6-hourly amounts only
+        self.assertAlmostEqual(d[6]["pr6"][1], 3.0)
+        self.assertAlmostEqual(d[150]["pr6"][2], 3.0)
+        self.assertTrue(300 < d[24]["te850"][1] < 320, d[24]["te850"][1])   # ~305 K for 5 C, 6 g/kg
+        png = ens.plume(e, dt.datetime(2026, 11, 26, 0), d, "Seoul", "rain")
+        self.assertEqual(png[:4], b"\x89PNG")
+
+    def test_tp_units(self):
+        """tp: IFS ENS in m, AIFS-ENS in kg m-2 (measured 2026-11-26)."""
+        from render import ens
+        src = ens.EnsSource(config.for_model(CFG, "aifsens"))
+        k, conv = src._wanted({"param": "tp", "levelist": None})
+        self.assertEqual((k, conv(0.0015, "m"), conv(1.5, "kg m**-2")), ("tp", 1.5, 1.5))
+        with self.assertRaises(RuntimeError):
+            conv(1.0, "kg m**-2 s**-1")
+        self.assertEqual(src._wanted({"param": "q", "levelist": "925"})[0], "q925")
+
+    def test_manifest_charts_per_run(self):
+        e = {"steps": [0], "wpsh": None, "rv": 3}
+        m = site.manifest(CFG, {"aifsens": {"2026112600": dict(e, run="2026112600"),
+                                            "2026112700": dict(e, run="2026112700",
+                                                               charts=["plume_seoul", "rain_seoul"])}})
+        r = next(x for x in m["models"] if x["id"] == "aifsens")["runs"]
+        self.assertFalse(any(c.startswith("rain_") for c in r[0]["charts"]))      # rendered before rain_*
+        self.assertEqual(r[1]["charts"], ["plume_seoul", "rain_seoul"])
+        self.assertEqual(site.run_entry({"run": "x", "steps": [0], "wpsh": None, "charts": ["a"]})["charts"], ["a"])
 
     def test_z500_fields(self):
         """500 hPa height: IFS ENS gh (gpm), AIFS-ENS z (geopotential / g), measured 2026-11-25."""

@@ -22,7 +22,12 @@ const CHIPS = [
   ["gz300", "300"], ["gz200", "200"],
   // Ensemble meteograms (lower model row): only these chips show while an ensemble model is open.
   ["plume_seoul", "서울"], ["plume_cheongju", "청주"], ["plume_daejeon", "대전"], ["plume_gangneung", "강릉"], ["plume_daegu", "대구"], ["plume_gwangju", "광주"], ["plume_busan", "부산"], ["plume_jeju", "제주"],
+  ["rain_seoul", "서울"], ["rain_cheongju", "청주"], ["rain_daejeon", "대전"], ["rain_gangneung", "강릉"], ["rain_daegu", "대구"], ["rain_gwangju", "광주"], ["rain_busan", "부산"], ["rain_jeju", "제주"],
 ];
+// Ensemble meteogram groups: each ENS model button is split into these halves (chart id = <group>_<city>).
+const ENS_GROUPS = [["plume", "기온"], ["rain", "강수"]];
+const ensGroup = (id) => (id || "").split("_")[0];
+const ensCity = (id) => (id || "").split("_").slice(1).join("_");
 const LABELS = Object.fromEntries(CHIPS);
 
 const $ = (id) => document.getElementById(id);
@@ -104,6 +109,7 @@ function overlayOf(id) {
 const run = () => M().runs[state.runIdx];
 // Hourly charts (KIM 한반도 surface charts) also have the run's surface-only hourly steps.
 function stepsFor(r, chartId) {
+  if (r.charts && !r.charts.includes(chartId)) return [];   // ENS: a run rendered before this graph existed
   if (r.urls) return Object.keys(r.urls[chartId] || {}).map(Number).sort((a, b) => a - b);   // 예보: per-chart frames
   const c = chartDef(chartId);
   const min = c.min_step || 0;
@@ -126,6 +132,7 @@ function wpshFor(r, step) {
   if (!v) return { drawn: false, why: "이 시각엔 고기압 중심이 없어요" };
   return { drawn: true, H: v[0], line: v[1] };
 }
+function ensGroupLabel(id) { return (ENS_GROUPS.find(([g]) => g === ensGroup(id)) || [])[1] || ""; }
 function chartLabel(id) { return LABELS[id] || (chartDef(id) || {}).title || id; }
 function chartTitle(id) {
   for (const mod of state.m.models) { const c = mod.charts.find((x) => x.id === id); if (c) return c.title || id; }
@@ -254,6 +261,11 @@ function selectModel(id, keepRun, keepValid, findValid) {
       : chartIn(mod, "gz500") ? "gz500" : mod.charts.find((c) => !c.overlay_of).id;
   }
   if (kind === "dfs") state.runIdx = Math.min(+(localStorage.getItem("dfs_mode") || 0), mod.runs.length - 1);
+  if (kind === "ens" && !keepRun) {             // newest run that has this graph (강수: runs from 2026-11-27 on)
+    for (let i = mod.runs.length - 1; i >= 0; i--) {
+      if (stepsFor(mod.runs[i], state.chart).length) { state.runIdx = i; break; }
+    }
+  }
   if (findValid && keepValid) {
     for (let i = mod.runs.length - 1; i >= 0; i--) {
       if (hasValid(mod.runs[i], keepValid)) { state.runIdx = i; break; }
@@ -281,7 +293,8 @@ function buildModels() {
   $("models").innerHTML = "";
   $("ens-models").innerHTML = "";
   state.m.models.forEach((mod) => {
-    const nav = $(isEns(mod) ? "ens-models" : "models");
+    if (isEns(mod)) { $("ens-models").appendChild(ensButton(mod)); return; }
+    const nav = $("models");
     const b = document.createElement("button");
     b.className = "model";
     b.textContent = mod.label;
@@ -298,6 +311,34 @@ function buildModels() {
   $("ens-models").hidden = !$("ens-models").children.length;
 }
 
+// ENS model: one pill split in two halves, 기온 (plume_<city>) | 강수 (rain_<city>); the city is kept.
+function ensButton(mod) {
+  const box = document.createElement("div");
+  box.className = "model-split";
+  const name = document.createElement("span");
+  name.className = "ms-name";
+  name.textContent = mod.label;
+  box.appendChild(name);
+  ENS_GROUPS.forEach(([g, label]) => {
+    const b = document.createElement("button");
+    b.className = "model seg";
+    b.textContent = label;
+    b.dataset.id = mod.id;
+    b.dataset.group = g;
+    b.onclick = () => {
+      if (b.disabled || (mod.id === state.model && ensGroup(state.chart) === g)) return;
+      stop();
+      const prev = isEns(M()) ? state.chart : localStorage.getItem("chart_ens");
+      const want = `${g}_${ensCity(prev) || "seoul"}`;
+      const target = chartIn(mod, want) ? want : (mod.charts.find((c) => ensGroup(c.id) === g) || {}).id;
+      if (target) { state.chart = target; localStorage.setItem("chart_ens", target); }
+      selectModel(mod.id, null, null, false);
+    };
+    box.appendChild(b);
+  });
+  return box;
+}
+
 // A model button is disabled only while it has no runs. A model without the chart on screen stays
 // selectable and opens its nearest chart (KIM on 강설 -> 지상·강수); the button is marked .other.
 function updateModels() {
@@ -307,7 +348,14 @@ function updateModels() {
     b.disabled = !mod.runs.length;
     b.classList.toggle("other", !!mod.runs.length && !has);
     b.title = !mod.runs.length ? "자료 준비 중" : (has ? "" : `${mod.label}에는 이 차트가 없어 비슷한 차트로 열어요`);
-    b.classList.toggle("on", mod.id === state.model);
+    b.classList.toggle("on", mod.id === state.model && (!b.dataset.group || b.dataset.group === ensGroup(state.chart)));
+    if (b.dataset.group) {                      // 강수: disabled until a run has the graph (runs from 2026-11-27 on)
+      const g = mod.charts.filter((c) => ensGroup(c.id) === b.dataset.group);
+      if (!mod.runs.some((r) => g.some((c) => !r.charts || r.charts.includes(c.id)))) {
+        b.disabled = true;
+        b.title = "다음 런부터 나와요";
+      }
+    }
   });
 }
 
@@ -341,7 +389,8 @@ function buildChartPicker() {
 function updateChartPicker() {
   document.querySelectorAll(".chip").forEach((b) => {
     const ok = !!chartIn(M(), b.dataset.id);
-    b.hidden = chartKind(b.dataset.id) !== kindOf(M());     // map chips / cities (meteograms) / 예보 elements
+    b.hidden = chartKind(b.dataset.id) !== kindOf(M())      // map chips / cities (meteograms) / 예보 elements
+      || (isEns(M()) && ensGroup(b.dataset.id) !== ensGroup(state.chart));   // ENS: cities of 기온 or 강수 only
     b.disabled = !ok;
     b.title = ok ? "" : `${M().label}에는 없는 차트`;
     b.classList.toggle("on", b.dataset.id === state.chart);
@@ -456,10 +505,11 @@ function render() {
     $("steps").innerHTML = "";
     $("steps-count").textContent = "0";
     gridKey = "";
-    setStatus("이 방식의 예보 그림이 아직 없어요. 잠시 뒤 ⟳ 를 눌러 주세요.");
+    setStatus(isEns(M()) ? "이 런에는 이 그래프가 없어요. 다른 런을 골라 주세요."
+      : "이 방식의 예보 그림이 아직 없어요. 잠시 뒤 ⟳ 를 눌러 주세요.");
     return;
   }
-  if ($("status").textContent.startsWith("이 방식의")) setStatus("");
+  if (/^이 (방식의|런에는)/.test($("status").textContent)) setStatus("");
   const i = Math.max(0, steps.indexOf(state.step));
   state.step = steps[i];
 
@@ -480,7 +530,7 @@ function render() {
   // meteogram: the end of the forecast ("12/11(금) 3시까지"); older manifests without end_step: the run time
   $("valid-kst").textContent = ens && r.end_step != null ? `${fmtKst(addH(parseRun(r.run), r.end_step))}까지`
     : fmtKst(valid);
-  $("valid-sub").textContent = ens ? `${fmtUtc(valid)} 런 · ${M().label} ${chartLabel(state.chart)} 앙상블`
+  $("valid-sub").textContent = ens ? `${fmtUtc(valid)} 런 · ${M().label} ${chartLabel(state.chart)} ${ensGroupLabel(state.chart)} 앙상블`
     : r.srcs ? `${chartLabel(state.chart)} · ${(r.srcs[state.chart] || {})[state.step] || ""}`
     : `${fmtUtc(valid)} · +${state.step}h · ${M().label} ${chartLabel(state.chart)}`;
 
@@ -551,7 +601,7 @@ function openCompare() {
   }
   state.cmp.frames = frames;                       // oldest -> newest
   state.cmp.idx = frames.length - 1;
-  $("cmp-title").textContent = `과거 런 비교 · ${M().label} ${chartLabel(state.chart)}`;
+  $("cmp-title").textContent = `과거 런 비교 · ${M().label} ${chartLabel(state.chart)}${ens ? " " + ensGroupLabel(state.chart) : ""}`;
   $("cmp-sub").textContent = ens ? `런별 앙상블 그래프 · 런 ${frames.length}개`
     : `${fmtKst(valid)} (${fmtUtc(valid)}) 예상 · 런 ${frames.length}개`;
   const dots = $("cmp-dots");
