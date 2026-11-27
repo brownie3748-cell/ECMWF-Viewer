@@ -285,11 +285,16 @@ anchors = [
 # 편차 maps (owner 2026-11-27): model field minus the ERA5 1990-2019 climatology of the valid day and hour
 # (clim/grid/, 0.25 deg, interpolated to the model grid). Theta-e climate = theta-e of the mean T and q.
 # Shading: blue (below normal) - white - red (above), symmetric fixed levels; black lines: the model's own field.
-colors = ["#08306b", "#1f5fa8", "#4a90c8", "#86bde0", "#c3def0", "#ffffff", "#fdd5c2", "#f8a183", "#e8604b", "#c22a2a", "#7d0b0b"]
-t = { title = "{level}hPa Temperature Anomaly (C), GPH (gpm)", levels = [-12, -9, -6, -4, -2, -1, 1, 2, 4, 6, 9, 12], unit = "C" }
-t2m = { title = "2m Temperature Anomaly (C), MSLP (hPa)", levels = [-12, -9, -6, -4, -2, -1, 1, 2, 4, 6, 9, 12], unit = "C" }
-gz500 = { title = "500hPa Height Anomaly (gpm), GPH (gpm)", levels = [-300, -240, -180, -120, -60, -30, 30, 60, 120, 180, 240, 300], unit = "gpm" }
-ept = { title = "{level}hPa Theta-e Anomaly (K), GPH (gpm)", levels = [-24, -18, -12, -8, -4, -2, 2, 4, 8, 12, 18, 24], unit = "K" }
+# Owner 2026-11-27 (second pass): wider range; beyond the darkest blue / red the bands turn purple -> lavender (cold)
+# and magenta -> pink -> pale pink (warm), so extreme anomalies stay distinguishable. 17 bands + under / over.
+colors = ["#c9a8e6", "#9467c9", "#5b2c9a", "#08306b", "#1f5fa8", "#4a90c8", "#86bde0", "#c3def0", "#ffffff",
+          "#fdd5c2", "#f8a183", "#e8604b", "#c22a2a", "#7d0b0b", "#b0127a", "#e055b4", "#f5a6dc"]
+under = "#ead9f6"
+over = "#fde0f2"
+t = { title = "{level}hPa Temperature Anomaly (C), GPH (gpm)", levels = [-21, -18, -15, -12, -9, -6, -4, -2, -1, 1, 2, 4, 6, 9, 12, 15, 18, 21], unit = "C" }
+t2m = { title = "2m Temperature Anomaly (C), MSLP (hPa)", levels = [-21, -18, -15, -12, -9, -6, -4, -2, -1, 1, 2, 4, 6, 9, 12, 15, 18, 21], unit = "C" }
+gz500 = { title = "500hPa Height Anomaly (gpm), GPH (gpm)", levels = [-480, -420, -360, -300, -240, -180, -120, -60, -30, 30, 60, 120, 180, 240, 300, 360, 420, 480], unit = "gpm" }
+ept = { title = "{level}hPa Theta-e Anomaly (K), GPH (gpm)", levels = [-42, -36, -30, -24, -18, -12, -8, -4, -2, 2, 4, 8, 12, 18, 24, 30, 36, 42], unit = "K" }
 msl_interval = 4                  # hPa, black isobars on the 2 m chart
 smooth_sigma = 1.0                # grid points, on the anomaly (the 0.25 deg climatology is smooth already)
 credit = "Anomaly vs ERA5 1990-2019 climatology: contains modified Copernicus Climate Change Service information 2026 (CC BY 4.0)."

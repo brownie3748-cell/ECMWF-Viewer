@@ -734,8 +734,7 @@ def chart_anom(cfg, F, kind, level, run, step, clim):
         fr.ax.set_facecolor(c["mask_color"])              # below ground: grey, not "normal" white
     lv = s["levels"]
     cmap = mcolors.ListedColormap(c["colors"])
-    cmap.set_under(c["colors"][0])
-    cmap.set_over(c["colors"][-1])
+    cmap = cmap.with_extremes(under=c.get("under", c["colors"][0]), over=c.get("over", c["colors"][-1]))
     cf = _contourf(fr, S, a, levels=lv, cmap=cmap, norm=mcolors.BoundaryNorm(lv, cmap.N), extend="both",
                    transform=PC, zorder=1)
     fr.colorbar(cf, label=s["unit"], ticks=lv)
