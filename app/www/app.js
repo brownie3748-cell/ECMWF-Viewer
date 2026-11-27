@@ -337,13 +337,31 @@ function selectChart(id) {
 
 // 차트 | 편차 tab: back to the last chart of that tab, on the newest run that has it at the same valid time
 // (runs rendered before the 편차 maps have none).
+// 차트 <-> 편차 (owner 2026-11-27): the other tab opens on the same level. 상당온위 <-> 상당온위 편차; any other chart
+// of a level <-> that level's 기온 편차 (지상 강수 / 강설 / 기온 -> 지상 기온 편차; 500 고도 / 광역 -> 500 고도 편차;
+// 300 / 200 -> 500 고도 편차, the nearest level with one). Back from 편차: 기온 -> the level's 고도 (지상: 기온).
+function tabLink(id) {
+  if (isAnom(id)) {
+    const m = id.match(/^a_(t|ept|gz)(\d+)$/);
+    if (id === "a_t2m") return "t2m";
+    if (!m) return null;
+    return m[1] === "ept" ? `ept${m[2]}` : `gz${m[2]}`;
+  }
+  if (["msl", "snow", "t2m"].includes(id)) return "a_t2m";
+  if (["gz500", "gz500_wide", "gz300", "gz200"].includes(id)) return "a_gz500";
+  const m = id.match(/^(gz|mfc|rh|ept)(\d+)$/);
+  if (!m) return null;
+  return m[1] === "ept" ? `a_ept${m[2]}` : `a_t${m[2]}`;
+}
+
 function selectTab(tab) {
   if ((tab === "anom") === isAnom(state.chart)) return;
   stop();
   const v = currentValid();
   const last = localStorage.getItem("chart_tab_" + tab);
   const first = M().charts.find((c) => !c.overlay_of && isAnom(c.id) === (tab === "anom"));
-  const id = last && chartIn(M(), last) ? last : first && first.id;
+  const link = tabLink(state.chart);               // same level (and element where there is one)
+  const id = link && chartIn(M(), link) ? link : last && chartIn(M(), last) ? last : first && first.id;
   if (!id) return;
   state.chart = id;
   localStorage.setItem("chart", id);
