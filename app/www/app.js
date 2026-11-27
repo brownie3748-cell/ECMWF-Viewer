@@ -31,6 +31,21 @@ const ANOM_CHIPS = [
   ["a_ept925", "925 상당온위"], ["a_ept850", "850 상당온위"], ["a_ept700", "700 상당온위"],
 ];
 const isAnom = (id) => (id || "").startsWith("a_");
+// Chips of one level form one long button: the level on the left, its elements as segments (owner 2026-11-27).
+// [group label, [[chart id, segment label], ...]]; charts in no group stay single chips (cities, 예보 elements).
+const CHIP_GROUPS = [
+  ["500", [["gz500", "고도"], ["gz500_wide", "광역"]]],
+  ["지상", [["msl", "강수"], ["snow", "강설"], ["t2m", "기온"]]],
+  ["925", [["gz925", "고도"], ["mfc925", "수분속"], ["ept925", "상당온위"]]],
+  ["850", [["gz850", "고도"], ["mfc850", "수분속"], ["ept850", "상당온위"]]],
+  ["700", [["gz700", "고도"], ["rh700", "습도"], ["ept700", "상당온위"]]],
+  ["상층", [["gz300", "300"], ["gz200", "200"]]],
+  ["지상", [["a_t2m", "기온"]]],
+  ["500", [["a_gz500", "고도"]]],
+  ["925", [["a_t925", "기온"], ["a_ept925", "상당온위"]]],
+  ["850", [["a_t850", "기온"], ["a_ept850", "상당온위"]]],
+  ["700", [["a_t700", "기온"], ["a_ept700", "상당온위"]]],
+];
 // Ensemble meteogram groups: each ENS model button is split into these halves (chart id = <group>_<city>).
 const ENS_GROUPS = [["plume", "기온"], ["rain", "강수"]];
 const ensGroup = (id) => (id || "").split("_")[0];
@@ -407,15 +422,32 @@ function buildChartPicker() {
   nav.innerHTML = "";
   const all = [];
   state.m.models.forEach((mod) => mod.charts.forEach((c) => { if (!c.overlay_of && !all.includes(c.id)) all.push(c.id); }));
+  const chip = (id, text, seg) => {
+    const b = document.createElement("button");
+    b.className = seg ? "chip seg" : "chip";
+    b.dataset.id = id;
+    b.textContent = text;
+    b.onclick = () => { if (!b.disabled && id !== state.chart) selectChart(id); };
+    return b;
+  };
+  const grouped = new Set(CHIP_GROUPS.flatMap(([, items]) => items.map(([id]) => id)));
+  const done = new Set();
   const order = CHIPS.concat(ANOM_CHIPS).map(([id]) => id).filter((id) => all.includes(id))
     .concat(all.filter((id) => !LABELS[id]));
   order.forEach((id) => {
-    const b = document.createElement("button");
-    b.className = "chip";
-    b.dataset.id = id;
-    b.textContent = LABELS[id] || chartTitle(id);
-    b.onclick = () => { if (!b.disabled && id !== state.chart) selectChart(id); };
-    nav.append(b);
+    if (!grouped.has(id)) { nav.append(chip(id, LABELS[id] || chartTitle(id), false)); return; }
+    const g = CHIP_GROUPS.findIndex(([, items]) => items.some(([x]) => x === id));
+    if (done.has(g)) return;
+    done.add(g);
+    const [label, items] = CHIP_GROUPS[g];
+    const box = document.createElement("div");
+    box.className = "chip-group";
+    const name = document.createElement("span");
+    name.className = "cg-name";
+    name.textContent = label;
+    box.append(name);
+    items.filter(([x]) => all.includes(x)).forEach(([x, text]) => box.append(chip(x, text, true)));
+    nav.append(box);
   });
 }
 
@@ -428,6 +460,10 @@ function updateChartPicker() {
     b.disabled = !ok;
     b.title = ok ? "" : `${M().label}에는 없는 차트`;
     b.classList.toggle("on", b.dataset.id === state.chart);
+  });
+  document.querySelectorAll(".chip-group").forEach((g) => {      // a group shows while any of its chips shows
+    g.hidden = [...g.querySelectorAll(".chip")].every((b) => b.hidden);
+    g.classList.toggle("on", !!g.querySelector(".chip.on"));
   });
   const tabs = $("map-tabs");                    // 차트 | 편차: map models that have anomaly maps
   tabs.hidden = kindOf(M()) !== "map" || !M().charts.some((c) => isAnom(c.id));

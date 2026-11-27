@@ -115,7 +115,7 @@ kma_url = "https://apihub.kma.go.kr/api/typ01/url/sfc_norm1.php?norm=D&tmst={tms
 kma_tmst = [2021, 2011]            # 1991-2020 normals; 1981-2010 where a station has no newer ones
 parallel = 8
 color = "#ff5a1f"
-credit = "Climate lines: ERA5 1990-2019 climatology via WeatherBench2 (contains modified Copernicus Climate Change Service information); KMA ASOS daily normals (KOGL Type 1)."
+credit = "Climate lines: contains modified Copernicus Climate Change Service information 2026 (ERA5 1990-2019 climatology, CC BY 4.0); KMA ASOS daily normals (KOGL Type 1)."
 
 [style]
 font_family = "DejaVu Sans"
@@ -292,7 +292,7 @@ gz500 = { title = "500hPa Height Anomaly (gpm), GPH (gpm)", levels = [-300, -240
 ept = { title = "{level}hPa Theta-e Anomaly (K), GPH (gpm)", levels = [-24, -18, -12, -8, -4, -2, 2, 4, 8, 12, 18, 24], unit = "K" }
 msl_interval = 4                  # hPa, black isobars on the 2 m chart
 smooth_sigma = 1.0                # grid points, on the anomaly (the 0.25 deg climatology is smooth already)
-credit = "Anomaly vs ERA5 1990-2019 climatology (WeatherBench2), contains modified Copernicus C3S information."
+credit = "Anomaly vs ERA5 1990-2019 climatology: contains modified Copernicus Climate Change Service information 2026 (CC BY 4.0)."
 mask_color = "#d4d4d4"            # 925 / 850 hPa below ground
 
 [charts.ept]
