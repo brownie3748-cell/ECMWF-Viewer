@@ -507,6 +507,16 @@ class AifsEns(unittest.TestCase):
             for kind, lev in (("t2m", None), ("gz500", None), ("t", 850), ("ept", 700)):
                 fr = plot.chart_anom(c, F, kind, lev, dt.datetime(2026, 11, 27, 0), 21, g)
                 self.assertEqual(fr.png_bytes()[:4], b"\x89PNG")
+            # KIM 한반도 (Korea map, q from its own field, owner 2026-11-27: "KIM still has no anomaly images")
+            k = config.for_model(CFG, "kimr")
+            self.assertTrue(any(x["id"] == "a_t850" for x in k["site"]["charts"]))
+            for kind, lev in (("t2m", None), ("ept", 850)):
+                self.assertEqual(plot.chart_anom(k, F, kind, lev, dt.datetime(2026, 11, 27, 12), 6, g)
+                                 .png_bytes()[:4], b"\x89PNG")
+        lv, cols = plot.anom_bands(CFG["charts"]["anom"]["t"]["levels"], CFG["charts"]["anom"]["colors"], 1)
+        self.assertEqual((lv[0], lv[-1], len(cols)), (-21.0, 21.0, 42))           # 1 C bands
+        self.assertEqual(cols[20:22], ["#ffffff", "#ffffff"])                     # -1..1 stays white
+        self.assertEqual(cols[22], "#fdd5c2")                                     # 1..2: the old first warm colour
         reg = clim.regrid({"lat": lat, "lon": lon, "x": np.add.outer(lat, lon * 0)}, "x",
                           np.array([30.1]), np.array([120.3]))
         self.assertAlmostEqual(float(reg[0, 0]), 30.1, places=3)
