@@ -27,8 +27,12 @@ class Steps(unittest.TestCase):
         self.assertEqual(fetch.published_steps(18, CFG)[-1], 144)
         self.assertEqual(fetch.published_steps(0, CFG)[47:51], [141, 144, 150, 156])
         aifs = config.for_model(CFG, "aifs")
-        self.assertEqual(len(fetch.published_steps(0, aifs)), 41)
-        self.assertEqual(len(fetch.published_steps(6, aifs)), 41)      # AIFS 06/18Z to +240 h as well
+        self.assertEqual(len(fetch.published_steps(0, aifs)), 61)      # owner 2026-11-27: every run to +360 h
+        self.assertEqual(fetch.published_steps(6, aifs)[-1], 360)
+        ifs = config.for_model(CFG, "ifs")
+        self.assertEqual((len(fetch.published_steps(0, ifs)), fetch.published_steps(12, ifs)[-1]), (85, 360))
+        self.assertEqual(fetch.published_steps(18, ifs)[-1], 144)       # 06/18Z: +144 h (+150 h: 404, measured)
+        self.assertEqual(fetch.published_steps(0, config.for_model(CFG, "ifs01"))[-1], 240)   # 0.1 deg: +240 h
 
     def test_tp_window(self):
         self.assertEqual(fetch.tp_window(144, CFG), 3)

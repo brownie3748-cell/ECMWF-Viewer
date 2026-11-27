@@ -351,7 +351,10 @@ function buildModels() {
       stop();
       if (isEns(mod)) selectModel(mod.id, null, null, false);     // meteograms: newest run
       else if (mod.kind === "dfs") selectModel(mod.id, null, isEns(M()) ? null : currentValid(), false);
-      else selectModel(mod.id, run() ? run().run : null, isEns(M()) || M().kind === "dfs" ? null : currentValid(), true);
+      // from another map model: keep the run and valid time; from a graph or 예보: the newest run (owner 2026-11-27:
+      // AIFS-ENS 18Z -> AIFS stayed on 18Z although 00Z was there)
+      else if (kindOf(M()) === "map") selectModel(mod.id, run() ? run().run : null, currentValid(), true);
+      else selectModel(mod.id, null, null, false);
     };
     nav.appendChild(b);
   });
