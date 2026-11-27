@@ -224,6 +224,11 @@ def plume(cfg: dict, run: dt.datetime, series: dict, name: str, chart: str = "pl
             if cv:
                 ax.plot(x, cv, color=ccol, lw=1.6, label="clim (ERA5 1990-2019)")
                 clim_drawn = True
+        if clim and key in ("te850", "te925"):            # theta-e of the ERA5 mean T and q
+            cv = clim_mod.theta_e_at(clim, key[2:], [run + dt.timedelta(hours=s) for s in ks])
+            if cv:
+                ax.plot(x, cv, color=ccol, lw=1.6, label="clim (ERA5 1990-2019)")
+                clim_drawn = True
         if clim and key == "t2m":                          # KMA daily normal max / min, per KST day
             days = [x[0].replace(hour=0) + dt.timedelta(days=i) for i in range((x[-1] - x[0]).days + 2)]
             kv = clim_mod.kma_at(clim, days)

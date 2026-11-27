@@ -99,6 +99,10 @@ era5_base = "https://storage.googleapis.com/weatherbench2/datasets/era5-hourly-c
 era5_fields = [
   { key = "t850", var = "temperature", level = 850, scale = 1.0, offset = -273.15 },
   { key = "z500", var = "geopotential", level = 500, scale = 0.10197162, offset = 0.0 },   # m2 s-2 / g = gpm
+  # theta-e climate on the 강수 graphs: theta-e of the mean T and q (an approximation of the mean theta-e)
+  { key = "t925", var = "temperature", level = 925, scale = 1.0, offset = -273.15 },
+  { key = "q850", var = "specific_humidity", level = 850, scale = 1.0, offset = 0.0 },
+  { key = "q925", var = "specific_humidity", level = 925, scale = 1.0, offset = 0.0 },
 ]
 kma_url = "https://apihub.kma.go.kr/api/typ01/url/sfc_norm1.php?norm=D&tmst={tmst}&stn=0&MM1=1&DD1=1&MM2=12&DD2=31"
 kma_tmst = [2021, 2011]            # 1991-2020 normals; 1981-2010 where a station has no newer ones

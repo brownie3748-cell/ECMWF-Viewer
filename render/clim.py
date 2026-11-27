@@ -78,7 +78,8 @@ def era5(cfg: dict, pts: dict) -> dict:
                 v = a[h, d].ravel()
                 for pid, p in pts.items():
                     x = bilinear(v, NLON, NLAT, p["lat"], p["lon"], 90.0, 0.0, 0.25, 0.25)
-                    out[pid][f["key"]][di][hi] = round(x * f["scale"] + f["offset"], 2)
+                    y = x * f["scale"] + f["offset"]
+                    out[pid][f["key"]][di][hi] = float(f"{y:.5g}") if abs(y) < 1 else round(y, 2)   # q: kg/kg
 
     jobs = [(f, hc, dc) for f in c["era5_fields"] for hc in range(-(-NHOUR // CH)) for dc in range(-(-NDOY // CH))]
     with cf.ThreadPoolExecutor(c["parallel"]) as ex:
@@ -159,6 +160,16 @@ def era5_at(clim_pt: dict, key: str, valid_utc: list[dt.datetime]) -> list[float
         vb = v[b.timetuple().tm_yday - 1][b.hour // 6]
         out.append(va * (1 - w) + vb * w)
     return out
+
+
+def theta_e_at(clim_pt: dict, lev: str, valid_utc: list[dt.datetime]) -> list[float] | None:
+    """Theta-e (K) of the climatological mean T and q at 850 / 925 hPa: an approximation of the mean theta-e
+    (theta-e is not linear in T and q; estimated error well under 1 K)."""
+    from .derive import theta_e
+    t, q = era5_at(clim_pt, "t" + lev, valid_utc), era5_at(clim_pt, "q" + lev, valid_utc)
+    if not t or not q:
+        return None
+    return [float(theta_e(np.float64(a + 273.15), np.float64(b), float(lev))) for a, b in zip(t, q)]
 
 
 def kma_at(clim_pt: dict, valid_kst: list[dt.datetime]) -> tuple[list, list, int] | None:
