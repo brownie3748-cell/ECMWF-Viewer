@@ -390,7 +390,8 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   `compare/radar/now/<w>h_<YYYYMMDDHHMM>` with `compare/now.json` (`tm`, `slot`, `frames`); the previous frames are
   deleted. The app shows it at `slot`, the model hour nearest its end (22:40-23:40 -> 24시, 22:10-23:10 -> 23시,
   :30 -> the later hour), in place of that hour's frame, and the forecast frames include the hour after the last
-  radar hour so the slot has them. Measured 2026-11-29 (sandbox): the 00:30 1 h image was there at 00:34; a time the
+  radar hour so the slot has them. Measured 2026-11-29 (sandbox): the 00:30 1 h image was there at 00:34, the 00:40 one between 00:41:36 and
+  00:42:42 and unchanged (same size) for the next 8 min, so 4 min is enough; a time the
   Radar Center does not have yet returns a 4242-byte image without the coverage mask (`radar_ready` rejects it,
   which also guards the hourly frames) and the next older 10-minute time is tried. Estimated cost: ~5 R2 writes per run, ~700 a day; ~130 kB stored.
 - API Hub HSP composite (measured, for reference): `typ04/url/rdr_cmp_file.php?tm=<KST>&data=bin&cmp=hsp`, 289 kB
