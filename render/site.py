@@ -30,6 +30,8 @@ def run_entry(meta: dict) -> dict:
         e["hourly_steps"] = meta["hourly_steps"]     # surface-only steps; old apps ignore them
     if meta.get("charts"):
         e["charts"] = meta["charts"]                 # ENS: the graphs this run has (rain_* from 2026-11-27)
+    if meta.get("cmp"):
+        e["cmp"] = meta["cmp"]                       # 강수 비교 maps: {window h: [steps]} (2026-11-28; app 0.13)
     if meta.get("ext", "png") != "png":
         e["ext"] = meta["ext"]                       # image file type of this run (webp from 2026-11-27; app 0.12)
     if meta.get("partial"):

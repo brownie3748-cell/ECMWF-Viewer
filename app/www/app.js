@@ -24,6 +24,8 @@ const CHIPS = [
   ["plume_seoul", "서울"], ["plume_cheongju", "청주"], ["plume_daejeon", "대전"], ["plume_gangneung", "강릉"], ["plume_daegu", "대구"], ["plume_gwangju", "광주"], ["plume_busan", "부산"], ["plume_jeju", "제주"],
   ["rain_seoul", "서울"], ["rain_cheongju", "청주"], ["rain_daejeon", "대전"], ["rain_gangneung", "강릉"], ["rain_daegu", "대구"], ["rain_gwangju", "광주"], ["rain_busan", "부산"], ["rain_jeju", "제주"],
 ];
+// 강수 비교 (owner 2026-11-28): accumulation window chips of the radar / model / forecast comparison.
+const CMP_CHIPS = [["cmp1", "1시간"], ["cmp3", "3시간"]];
 // 편차 tab (anomaly maps a_*): the map chips are split into two tabs, 차트 and 편차.
 const ANOM_CHIPS = [
   ["a_t2m", "지상 기온"], ["a_gz500", "500 고도"],
@@ -45,12 +47,13 @@ const CHIP_GROUPS = [
   ["925", [["a_t925", "기온"], ["a_ept925", "상당온위"]]],
   ["850", [["a_t850", "기온"], ["a_ept850", "상당온위"]]],
   ["700", [["a_t700", "기온"], ["a_ept700", "상당온위"]]],
+  ["누적", CMP_CHIPS],
 ];
 // Ensemble meteogram groups: each ENS model button is split into these halves (chart id = <group>_<city>).
 const ENS_GROUPS = [["plume", "기온"], ["rain", "강수"]];
 const ensGroup = (id) => (id || "").split("_")[0];
 const ensCity = (id) => (id || "").split("_").slice(1).join("_");
-const LABELS = Object.fromEntries(CHIPS.concat(ANOM_CHIPS));
+const LABELS = Object.fromEntries(CHIPS.concat(ANOM_CHIPS, CMP_CHIPS));
 
 const $ = (id) => document.getElementById(id);
 
@@ -70,6 +73,7 @@ const state = {
   wpsh: localStorage.getItem("wpsh") !== "0",
   timer: null,
   cmp: { frames: [], idx: 0, timer: null },
+  views: {},          // main tab -> {model, run, valid, chart} of its last view
 };
 
 // ------------------------------------------------------------------ theme
@@ -117,7 +121,10 @@ const chartDef = (id) => M().charts.find((c) => c.id === id);
 // Ensemble meteogram models (graph charts only): lower model row, own chips, always the newest run.
 const isEns = (mod) => mod.charts.length > 0 && mod.charts.every((c) => c.domain === "graph");
 // Model kinds: map charts, ensemble meteograms (lower row), KMA forecast images (예보). Each kind has its own chips.
-const kindOf = (mod) => (mod.kind === "dfs" ? "dfs" : isEns(mod) ? "ens" : "map");
+const kindOf = (mod) => (mod.kind === "dfs" ? "dfs" : mod.kind === "cmp" ? "cmp" : isEns(mod) ? "ens" : "map");
+// Main tabs (owner 2026-11-28): 차트 (map models and 예보), 앙상블 (meteograms), 강수 비교. Each tab keeps its own view
+// (model, run, valid time, chart) while another tab is open.
+const tabOf = (mod) => ({ ens: "ens", cmp: "cmp" })[kindOf(mod)] || "map";
 function chartKind(id) {
   const mod = state.m.models.find((x) => x.charts.some((c) => c.id === id));
   return mod ? kindOf(mod) : "map";
@@ -232,6 +239,111 @@ async function addForecastModel(m) {
   }
 }
 
+// ------------------------------------------------------------------ 강수 비교 (radar vs models vs 예보)
+// compare/index.json (forecast.yml): the Radar Center's 1 h / 3 h accumulation images and the KMA forecast-grid maps
+// per issuance, for the last hours (KST). Model maps (cmp<window>_<step>) are in each run (manifest r.cmp). Every
+// source becomes one model of kind "cmp" with runs whose urls are keyed by step; the valid time is kept when the
+// source changes, so 레이더 -> KIM shows the same hour.
+const CMP_SOURCES = [["radar", "레이더"], ["kimr", "KIM"], ["ifs", "IFS"], ["shrt", "단기"], ["vsrt", "초단기"]];
+const pad3 = (n) => String(n).padStart(3, "0");
+const nowHm = (tm) => `${+tm.slice(8, 10)}:${tm.slice(10, 12)}`;          // "202611290030" -> "0:30"
+function nowRange(tm, w) {                                                 // KST "23:30~0:30"
+  const end = new Date(Date.UTC(+tm.slice(0, 4), +tm.slice(4, 6) - 1, +tm.slice(6, 8), +tm.slice(8, 10), +tm.slice(10, 12)));
+  const st = addH(end, -w);
+  return `${st.getUTCHours()}:${String(st.getUTCMinutes()).padStart(2, "0")}~${nowHm(tm)}`;
+}
+function utcKey(d) {
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}${String(d.getUTCHours()).padStart(2, "0")}`;
+}
+// compare/now.json (radar.yml, every 10 min): the newest 1 h / 3 h radar accumulation to a 10-minute time (tm), shown at
+// the model hour nearest its end (slot: 22:40-23:40 -> 24시, 22:10-23:10 -> 23시), in place of that hour's frame.
+function cmpNowOk(idx, now) {
+  return now && now.slot && now.frames && kstKeyDate(now.slot) >= kstKeyDate(idx.hours[idx.hours.length - 1]);
+}
+function buildCompareModels(m, idx, now) {
+  if (!idx || !idx.hours || !idx.hours.length) return [];
+  const hours = new Set(idx.hours.map((h) => kstKeyDate(h).getTime()));
+  if (cmpNowOk(idx, now)) hours.add(kstKeyDate(now.slot).getTime());
+  const charts = (ws) => ws.map((w) => ({ id: "cmp" + w, title: `${w}시간 누적`, domain: "cmp" }));
+  const ext = idx.ext || "png";
+  const out = [];
+  const model = (id, label, attribution, runs) => {
+    runs = runs.filter((r) => r.steps.length);
+    const ws = [...new Set(runs.flatMap((r) => Object.keys(r.urls).filter((k) => Object.keys(r.urls[k]).length)))]
+      .map((k) => +k.slice(3)).sort((a, b) => a - b);
+    if (runs.length) out.push({ id: "cmp_" + id, kind: "cmp", label, attribution, runs, charts: charts(ws), latest: null });
+  };
+  const finish = (r) => {
+    r.steps = [...new Set(Object.values(r.urls).flatMap((u) => Object.keys(u).map(Number)))].sort((a, b) => a - b);
+    return r;
+  };
+  // radar: one "run" starting at the first hour, a step per hour
+  const r0 = kstKeyDate(idx.hours[0]);
+  const radar = { run: utcKey(r0), label: "레이더 관측", urls: {}, wpsh: null };
+  for (const [w, frames] of Object.entries(idx.radar || {})) {
+    const u = (radar.urls["cmp" + w] = {});
+    for (const [h, path] of Object.entries(frames)) u[Math.round((kstKeyDate(h) - r0) / 3600e3)] = state.base + "compare/" + path;
+  }
+  if (cmpNowOk(idx, now)) {                // 최신: replaces its slot hour's frame
+    const s = Math.round((kstKeyDate(now.slot) - r0) / 3600e3);
+    for (const [w, path] of Object.entries(now.frames)) (radar.urls["cmp" + w] ||= {})[s] = state.base + "compare/" + path;
+    radar.nowStep = s;
+    radar.nowTm = now.tm;
+  }
+  model("radar", "레이더", idx.radar_credit, [finish(radar)]);
+  // models: the runs' own 강수 비교 maps whose valid hour is among the radar hours
+  for (const mid of Object.keys(idx.models || {})) {
+    const mod = m.models.find((x) => x.id === mid);
+    if (!mod) continue;
+    const runs = mod.runs.filter((r) => r.cmp).map((r) => {
+      const rr = { run: r.run, urls: {}, wpsh: null };
+      const t0 = parseRun(r.run).getTime();
+      for (const [w, steps] of Object.entries(r.cmp)) {
+        const u = (rr.urls["cmp" + w] = {});
+        for (const s of steps) {
+          if (hours.has(t0 + s * 3600e3)) u[s] = state.base + `${mid}/${r.run}/cmp${w}_${pad3(s)}.${r.ext || "png"}`;
+        }
+      }
+      return finish(rr);
+    });
+    const label = (CMP_SOURCES.find(([k]) => k === mid) || [])[1] || mod.label;
+    model(mid, label, mod.attribution, runs);
+  }
+  // KMA forecast issuances (초단기 at HH:30: the run is the hour before, the label tells the issue time)
+  for (const p of ["shrt", "vsrt"]) {
+    const runs = Object.entries((idx.forecast || {})[p] || {}).sort().map(([fc, ent]) => {
+      const t0 = kstKeyDate(fc.slice(0, 10));
+      const rr = { run: utcKey(t0) + "f" + p, label: issueLabel(p, fc), urls: {}, wpsh: null };
+      for (const [w, efs] of Object.entries(ent)) {
+        const u = (rr.urls["cmp" + w] = {});
+        for (const ef of efs) u[Math.round((kstKeyDate(ef) - t0) / 3600e3)] = state.base + `compare/fcst/${p}/${fc}/${w}h_${ef}.${ext}`;
+      }
+      return finish(rr);
+    });
+    model(p, (CMP_SOURCES.find(([k]) => k === p) || [])[1], idx.forecast_credit, runs);
+  }
+  return out;
+}
+async function fetchCmpNow() {
+  try {
+    const res = await fetch(state.base + "compare/now.json?t=" + Date.now(), { cache: "no-store" });
+    return res.ok ? await res.json() : null;
+  } catch (e) {
+    return null;
+  }
+}
+async function addCompareModels(m) {
+  try {
+    const res = await fetch(state.base + "compare/index.json?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+    state.cmpIndex = await res.json();
+    state.cmpNow = await fetchCmpNow();
+    m.models.push(...buildCompareModels(m, state.cmpIndex, state.cmpNow));
+  } catch (e) {
+    console.warn("강수 비교 자료 없음", e);   // the other models work without it
+  }
+}
+
 // keepView: stay on the same run and valid time (app resume). toLatest: jump to the newest run but keep the
 // valid time as close as possible (the ⟳ button).
 async function init(keepView, toLatest) {
@@ -240,6 +352,7 @@ async function init(keepView, toLatest) {
     const prevValid = state.m && prev ? addH(parseRun(prev), state.step) : null;
     state.m = await loadManifest();
     await addForecastModel(state.m);
+    await addCompareModels(state.m);
     $("notice-link").href = state.base + "NOTICE.txt";
     buildModels();
     buildChartPicker();
@@ -261,6 +374,7 @@ async function refreshLive() {
     if (m.generated_utc === state.m.generated_utc) return;
     const dfs = state.m.models.find((x) => x.kind === "dfs");
     if (dfs) m.models.push(dfs);                // 예보 has its own index (forecast.yml), kept as it is
+    m.models.push(...buildCompareModels(m, state.cmpIndex, state.cmpNow));   // model maps of the new runs, same radar hours
     const prev = run() ? run().run : null;
     const prevValid = prev ? addH(parseRun(prev), state.step) : null;
     if (state.timer || $("compare-dlg").open) return;      // started while the manifest loaded
@@ -271,6 +385,22 @@ async function refreshLive() {
   } catch (e) {
     console.warn("새로고침 실패", e);
   }
+}
+
+// 강수 비교 open: fetch compare/now.json every minute; a new 최신 frame rebuilds the 강수 비교 sources. Whoever was on
+// the newest radar frame moves on to the new one.
+async function refreshCmpNow() {
+  if (document.hidden || state.timer || $("compare-dlg").open || !state.m || kindOf(M()) !== "cmp" || !state.cmpIndex) return;
+  const now = await fetchCmpNow();
+  if (!now || (state.cmpNow && now.tm === state.cmpNow.tm) || state.timer || kindOf(M()) !== "cmp") return;
+  const r = run();
+  const onNewest = r && r.nowStep != null && state.step === r.nowStep;
+  const prevValid = r ? currentValid() : null;
+  state.cmpNow = now;
+  state.m.models = state.m.models.filter((x) => x.kind !== "cmp").concat(buildCompareModels(state.m, state.cmpIndex, now));
+  buildModels();
+  buildChartPicker();
+  selectModel(state.model, r ? r.run : null, onNewest && cmpNowOk(state.cmpIndex, now) ? kstKeyDate(now.slot) : prevValid);
 }
 
 // True if run r has an image for exactly this valid time on the current chart.
@@ -288,6 +418,7 @@ function selectModel(id, keepRun, keepValid, findValid) {
   if (!has(mod)) mod = state.m.models.find((x) => x.id === state.m.default_model && has(x)) || state.m.models.find(has);
   state.model = mod.id;
   localStorage.setItem("model", mod.id);
+  localStorage.setItem("model_" + tabOf(mod), mod.id);
   $("attribution").textContent = mod.attribution || state.m.attribution;
   buildRuns();
   state.runIdx = mod.runs.length - 1;
@@ -375,15 +506,34 @@ function selectTab(tab) {
   render();
 }
 
+// Main tab: back to that tab's last view; the first time, its last model (강수 비교: 레이더) at its newest time.
+function selectMain(tab) {
+  if (tabOf(M()) === tab) return;
+  stop();
+  if (run()) state.views[tabOf(M())] = { model: state.model, run: run().run, valid: currentValid(), chart: state.chart };
+  const mods = state.m.models.filter((x) => tabOf(x) === tab && x.runs.length);
+  if (!mods.length) return;
+  const v = state.views[tab];
+  const want = v ? v.model : localStorage.getItem("model_" + tab);
+  const def = mods.find((x) => x.id === state.m.default_model) || mods[0];
+  const id = mods.some((x) => x.id === want) ? want : def.id;
+  if (v) { state.chart = v.chart; selectModel(id, v.run, v.valid); return; }
+  if (tab === "cmp") {
+    const hours = (state.cmpIndex || {}).hours || [];
+    selectModel(id, null, hours.length ? kstKeyDate(hours[hours.length - 1]) : null, true);
+  } else selectModel(id, null, null, false);
+}
+
 function setStatus(msg) { const s = $("status"); s.textContent = msg; s.hidden = !msg; }
 
 // ------------------------------------------------------------------ UI builders
 function buildModels() {
   $("models").innerHTML = "";
   $("ens-models").innerHTML = "";
+  $("cmp-models").innerHTML = "";
   state.m.models.forEach((mod) => {
     if (isEns(mod)) { $("ens-models").appendChild(ensButton(mod)); return; }
-    const nav = $("models");
+    const nav = mod.kind === "cmp" ? $("cmp-models") : $("models");
     const b = document.createElement("button");
     b.className = "model";
     b.textContent = mod.label;
@@ -393,6 +543,8 @@ function buildModels() {
       stop();
       if (isEns(mod)) selectModel(mod.id, null, null, false);     // meteograms: newest run
       else if (mod.kind === "dfs") selectModel(mod.id, null, isEns(M()) ? null : currentValid(), false);
+      // 강수 비교: the same valid hour in the newest run of the new source that has it
+      else if (mod.kind === "cmp") selectModel(mod.id, null, kindOf(M()) === "cmp" ? currentValid() : null, true);
       // from another map model: keep the run and valid time; from a graph or 예보: the newest run (owner 2026-11-27:
       // AIFS-ENS 18Z -> AIFS stayed on 18Z although 00Z was there)
       else if (kindOf(M()) === "map") selectModel(mod.id, run() ? run().run : null, currentValid(), true);
@@ -400,7 +552,6 @@ function buildModels() {
     };
     nav.appendChild(b);
   });
-  $("ens-models").hidden = !$("ens-models").children.length;
 }
 
 // ENS model: one pill split in two halves, 기온 (plume_<city>) | 강수 (rain_<city>); the city is kept.
@@ -434,6 +585,14 @@ function ensButton(mod) {
 // A model button is disabled only while it has no runs. A model without the chart on screen stays
 // selectable and opens its nearest chart (KIM on 강설 -> 지상·강수); the button is marked .other.
 function updateModels() {
+  const tab = tabOf(M());
+  $("models").hidden = tab !== "map";
+  $("ens-models").hidden = tab !== "ens";
+  $("cmp-models").hidden = tab !== "cmp";
+  document.querySelectorAll("#main-tabs button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.main === tab);
+    b.disabled = !state.m.models.some((x) => tabOf(x) === b.dataset.main && x.runs.length);
+  });
   document.querySelectorAll(".model").forEach((b) => {
     const mod = state.m.models.find((x) => x.id === b.dataset.id);
     const has = chartIn(mod, state.chart) || kindOf(mod) !== kindOf(M());   // other kind: no "nearest chart" mark
@@ -477,7 +636,7 @@ function buildChartPicker() {
   };
   const grouped = new Set(CHIP_GROUPS.flatMap(([, items]) => items.map(([id]) => id)));
   const done = new Set();
-  const order = CHIPS.concat(ANOM_CHIPS).map(([id]) => id).filter((id) => all.includes(id))
+  const order = CHIPS.concat(ANOM_CHIPS, CMP_CHIPS).map(([id]) => id).filter((id) => all.includes(id))
     .concat(all.filter((id) => !LABELS[id]));
   order.forEach((id) => {
     if (!grouped.has(id)) { nav.append(chip(id, LABELS[id] || chartTitle(id), false)); return; }
@@ -553,7 +712,9 @@ function buildStepGrid() {
     const b = document.createElement("button");
     b.className = "step";
     b.dataset.step = String(s);
-    b.textContent = String(s).padStart(3, "0");
+    // 강수 비교: the hour (KST) the accumulation ends, e.g. "21시"; elsewhere the forecast hour (+h)
+    b.textContent = M().kind !== "cmp" ? String(s).padStart(3, "0")
+      : s === r.nowStep ? nowHm(r.nowTm) : `${addH(parseRun(r.run), s + 9).getUTCHours()}시`;
     if (!avail.has(s)) { b.classList.add("na"); b.disabled = true; }
     b.onclick = () => { if (!b.disabled) { stop(); state.step = s; render(); } };
     grid.append(b);
@@ -644,13 +805,16 @@ function render() {
   const valid = addH(parseRun(r.run), state.step);
   const ens = isEns(M());                     // meteogram: one image per run, no time controls / WPSH
   ["controls", "slider", "steps-card", "toggles"].forEach((id) => { $(id).hidden = ens; });
-  $("compare").hidden = M().kind === "dfs";   // 예보: one forecast per mode, nothing to compare
+  if (M().kind === "cmp") $("toggles").hidden = true;      // no WPSH line on the 강수 비교 maps
+  $("compare").hidden = M().kind === "dfs" || M().kind === "cmp";   // 예보 / 강수 비교: nothing to compare
   $("compare").textContent = ens ? "과거 런 비교" : "과거 런 비교 (같은 시각)";
   // meteogram: the end of the forecast ("12/11(금) 3시까지"); older manifests without end_step: the run time
   $("valid-kst").textContent = ens && r.end_step != null ? `${fmtKst(addH(parseRun(r.run), r.end_step))}까지`
     : fmtKst(valid);
   $("valid-sub").textContent = ens ? `${fmtUtc(valid)} 런 · ${M().label} ${chartLabel(state.chart)} ${ensGroupLabel(state.chart)} 앙상블`
     : r.srcs ? `${chartLabel(state.chart)} · ${(r.srcs[state.chart] || {})[state.step] || ""}`
+    : M().kind === "cmp" && state.step === r.nowStep ? `${nowRange(r.nowTm, +state.chart.slice(3))} ${chartLabel(state.chart)} 누적 · 레이더 최신 (10분마다)`
+    : M().kind === "cmp" ? `${fmtUtc(valid)}까지 ${chartLabel(state.chart)} 누적 · ${M().label} · ${r.label || runShort(r.run) + " 런"}`
     : `${fmtUtc(valid)} · +${state.step}h · ${M().label} ${chartLabel(state.chart)}`
       + (r.partial && r.steps.length ? ` · 나오는 중 (+${Math.max(...r.steps)}h / +${r.final_step}h)` : "");
 
@@ -669,7 +833,7 @@ function render() {
   const baseUrl = url(r.run, state.chart, state.step);
   showImages($("img-base"), $("img-overlay"), baseUrl, overlayUrl(r, state.step), true);
 
-  const key = `${M().id}|${r.run}|${state.chart}|${state.wpsh}|${steps.length}`;   // a live run gains steps
+  const key = `${M().id}|${r.run}|${state.chart}|${state.wpsh}|${steps.length}|${r.nowTm || ""}`;   // a live run gains steps
   if (key !== gridKey) { gridKey = key; buildStepGrid(); prefetch(); } else updateStepGrid();
 }
 
@@ -873,6 +1037,7 @@ function wire() {
   };
   $("reload").onclick = () => { stop(); init(true, true); };
   document.querySelectorAll("#map-tabs button").forEach((b) => { b.onclick = () => selectTab(b.dataset.tab); });
+  document.querySelectorAll("#main-tabs button").forEach((b) => { b.onclick = () => { if (!b.disabled) selectMain(b.dataset.main); }; });
   $("prev").onclick = () => { stop(); move(-1); };
   $("next").onclick = () => { stop(); move(1); };
   $("play").onclick = togglePlay;
@@ -904,3 +1069,4 @@ function wire() {
 wire();
 init(false);
 setInterval(refreshLive, LIVE_REFRESH_MS);
+setInterval(refreshCmpNow, LIVE_REFRESH_MS);

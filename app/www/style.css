@@ -72,10 +72,15 @@ button, select, input { font: inherit; color: inherit; }
 .model.on { background: var(--accent); color: var(--accent-ink); }
 .model:disabled { opacity: .35; cursor: default; border-style: dashed; }
 .model.other:not(.on) { border-style: dashed; }
-.ens-models { padding-top: 5px; }
-.ens-models::before { content: "그래프"; align-self: center; font-size: .72rem; font-weight: 700; color: var(--muted, #888);
-  padding-right: 4px; white-space: nowrap; }
 .ens-models .model { flex: 0 1 50%; }
+.cmp-models .model { flex: 1 1 0; }
+/* main tabs 차트 | 앙상블 | 강수 비교 (owner 2026-11-28: one segmented bar, as in the OBSERVE mobile app) */
+.main-tabs { display: flex; gap: 4px; margin: 8px var(--gap) 0; padding: 4px; background: var(--soft);
+  border: 1px solid var(--line); border-radius: 16px; }
+.main-tabs button { flex: 1 1 0; border: 1.5px solid transparent; background: none; color: var(--accent-strong);
+  padding: 8px 0; border-radius: 12px; font-size: .98rem; font-weight: 700; cursor: pointer; }
+.main-tabs button.on { background: var(--accent); border-color: var(--accent-strong); color: var(--accent-ink); }
+.main-tabs button:disabled { opacity: .35; cursor: default; }
 /* ENS model: the name as plain text, then a two-part button 기온 | 강수 */
 .model-split { flex: 1 1 50%; min-width: 0; display: flex; align-items: stretch; }
 .model-split .ms-name { align-self: center; padding: 0 5px 0 2px; font-size: .74rem; font-weight: 700;
@@ -83,7 +88,7 @@ button, select, input { font: inherit; color: inherit; }
 .ens-models .model-split .model.seg { flex: 1 1 0; border-radius: 0; }
 .ens-models .model-split .model.seg:first-of-type { border-radius: 10px 0 0 10px; }
 .ens-models .model-split .model.seg:last-of-type { border-radius: 0 10px 10px 0; border-left-width: 0; }
-.chip[hidden], .ens-models[hidden], #controls[hidden], #slider[hidden], #steps-card[hidden], #toggles[hidden] { display: none; }
+.chip[hidden], .models[hidden], .ens-models[hidden], .cmp-models[hidden], #controls[hidden], #slider[hidden], #steps-card[hidden], #toggles[hidden] { display: none; }
 
 main { padding: 2px var(--gap) 24px; }
 .status { margin: 0 0 6px; padding: 10px 12px; border-radius: var(--radius); background: var(--warn-bg); color: var(--warn-ink); }

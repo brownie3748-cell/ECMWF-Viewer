@@ -705,6 +705,27 @@ def overlay_wpsh(cfg, F, run, step, domain="default"):
     return fr, res
 
 
+def compare_cmap(cfg):
+    """The Radar Center's accumulation colours (config compare.levels / colors): (cmap, norm, levels)."""
+    c = cfg["compare"]
+    cmap = mcolors.ListedColormap(c["colors"][:-1]).with_extremes(over=c["colors"][-1])
+    return cmap, mcolors.BoundaryNorm(c["levels"], cmap.N), c["levels"]
+
+
+def chart_compare(cfg, lat, lon, acc_mm, run, step, window):
+    """강수 비교 map: precipitation of the `window` hours ending at step, on the KIM Korea map, in the colours of
+    the Radar Center's accumulation images (so the model maps and the radar image read the same)."""
+    c = cfg["compare"]
+    fr = Frame(cfg, c["domain"], strong_coast=True)
+    cmap, norm, lv = compare_cmap(cfg)
+    lon2, lat2 = np.meshgrid(lon, lat)
+    cf = fr.ax.contourf(lon2, lat2, np.asarray(acc_mm, dtype=np.float64), levels=lv, cmap=cmap, norm=norm,
+                        extend="max", transform=PC, transform_first=True, zorder=1)
+    fr.colorbar(cf, label="mm", ticks=lv)
+    fr.header(c["title"].format(window=window), run, step)
+    return fr
+
+
 def anom_bands(anchors, colors, step=None):
     """(levels, colours) of the 편차 shading: the anchor bands split into bands of `step`, each coloured by linear
     interpolation (RGB) between the anchor bands' middles; a white anchor band stays white edge to edge."""

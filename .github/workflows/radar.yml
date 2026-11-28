@@ -1,0 +1,46 @@
+name: radar
+
+# 강수 비교 최신 (owner 2026-11-28): every 10 minutes, the newest 1 h / 3 h radar accumulation from the KMA Weather
+# Radar Center, drawn on the KIM Korea map and uploaded to R2 (compare/now.json); the previous frame is deleted.
+# Own concurrency group (forecast.yml can run for 30+ min). Main only. GitHub may start scheduled runs late.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radar
+  cancel-in-progress: false
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  now:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Cache Natural Earth coastlines (cartopy)
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/cartopy
+          key: cartopy-naturalearth-v2
+      - name: Install
+        run: pip install -r requirements.lock
+      - name: Newest radar accumulation, compare/now.json
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m render radar-now --store r2

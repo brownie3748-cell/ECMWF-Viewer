@@ -374,3 +374,43 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   its 00Z steps say 05:45 ... 07:34, but the run to +240 h had been rendered here by 05:34 (measured).
 - `output.format = "webp8"`: quantised like PNG8, saved as lossless WebP (14 % smaller, measured). File names follow
   the format (`msl_024.webp`); the manifest entry of such a run has `ext: "webp"` and the app swaps the extension.
+
+## 강수 비교 tab (owner 2026-11-28)
+
+- Map: the KIM Korea map (`domains.korea`) for every source, colours from the Radar Center's accumulation images
+  (`[compare]`: <= 20 mm read from the image itself against the HSP composite at the same pixels, above 20 mm from
+  the site legend).
+- Radar (`render/compare.py`): `radar_comp_gis_realtime_hsp?...&ACC=60|180&DATE=<KST>` with the map's upper-left
+  lon/lat and its size in metres (LCC 30/60N 126E lat_0 38N WGS84). Measured M10: requesting exactly the KIM map gave
+  a 900 x 1023 PNG whose radar-coverage edge matched the API Hub HSP composite (2026-11-28 22:50 KST) with IoU 0.99
+  (best shift 1-2 px). The image is drawn on our map with our coastlines; frames per hour for the last 24 h.
+  `compare.radar_enabled = true`: the owner confirmed the images are KOGL Type 1 (2026-11-28).
+- 최신 radar frame (owner 2026-11-28; `compare.run_now`, radar.yml every 10 min): the 1 h / 3 h accumulation ending
+  at the newest 10-minute time the Radar Center has (`now_delay_min` = 4 before now, then older times), uploaded as
+  `compare/radar/now/<w>h_<YYYYMMDDHHMM>` with `compare/now.json` (`tm`, `slot`, `frames`); the previous frames are
+  deleted. The app shows it at `slot`, the model hour nearest its end (22:40-23:40 -> 24시, 22:10-23:10 -> 23시,
+  :30 -> the later hour), in place of that hour's frame, and the forecast frames include the hour after the last
+  radar hour so the slot has them. Measured 2026-11-29 (sandbox): the 00:30 1 h image was there at 00:34, the 00:40 one between 00:41:36 and
+  00:42:42 and unchanged (same size) for the next 8 min, so 4 min is enough; a time the
+  Radar Center does not have yet returns a 4242-byte image without the coverage mask (`radar_ready` rejects it,
+  which also guards the hourly frames) and the next older 10-minute time is tried. Estimated cost: ~5 R2 writes per run, ~700 a day; ~130 kB stored.
+- API Hub HSP composite (measured, for reference): `typ04/url/rdr_cmp_file.php?tm=<KST>&data=bin&cmp=hsp`, 289 kB
+  gzip, 1024-byte header (time, nx 2305, ny 2881, 500 m) + int16 rain rate (0.01 mm/h), -30000 outside coverage,
+  -25000 no echo; LCC 30/60N 126E, origin 38N 126E at grid (1121, 1681). Not used: the owner wants the Radar Center's
+  accumulation image, not a sum of 5-minute rates.
+- Models (`pipeline.keep_tp_for_compare` / `compare_charts`): each worker keeps the step's cumulative tp on the map's
+  box; after the run a post-pass draws `cmp<window>_<step>` for every step whose window start was rendered too
+  (KIM 1 h and 3 h, IFS 3 h; steps to `compare.max_step` = 72). Manifest: `r.cmp = {window: [steps]}`. Measured:
+  one IFS 3 h map 65 kB. Runs resumed after a stopped job lack the maps of the steps rendered before.
+- 예보 (`render/forecast_grid.py`): `nph-dfs_shrt_grd?tmfc=YYYYMMDDHH&tmef=YYYYMMDDHH&vars=PCP` and
+  `nph-dfs_vsrt_grd?tmfc=YYYYMMDDHH30&tmef=YYYYMMDDHH&vars=RN1`. Measured round 2: 149 x 253 comma-separated values,
+  row 0 = south, -99 off the land / near-coast area, values 0 and 1 seen (mm, owner
+  2026-11-28); 2-75 s per call, 504 / 503 on about half the calls. 5 km grid, LCC 30/60N 126E, origin 38N 126E at
+  x 43, y 136. Each grid is cached as `compare/grid/<product>/<fc>/<ef>.npz` (3 h = sum of three 1 h grids); frames
+  `compare/fcst/<product>/<fc>/<w>h_<ef>.webp`. Issuances: 단기 whose first 24 h reach the last 24 radar hours,
+  초단기 every hour (HH:30, to +6 h). Calls count in the 예보 job's daily file (`_ops/kmadfs-<day>.json`).
+- `python -m render compare` runs in forecast.yml after the 예보 images; `compare/index.json` lists hours, radar
+  frames and forecast frames. Estimated steady state: ~14 grids an hour (~340 calls a day), ~75 MB in R2.
+- App 0.13: kind `cmp`, one synthetic model per source; radar = one run with a step per hour; step boxes show the
+  KST hour the accumulation ends.
+

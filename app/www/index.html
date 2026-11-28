@@ -22,8 +22,12 @@
     <button id="info" class="icon-btn" aria-label="앱 정보" title="앱 정보">ⓘ</button>
   </header>
 
+  <nav id="main-tabs" class="main-tabs" aria-label="화면 선택">
+    <button data-main="map">차트</button><button data-main="ens">앙상블</button><button data-main="cmp">강수 비교</button>
+  </nav>
   <nav id="models" class="models" aria-label="모델 선택"></nav>
   <nav id="ens-models" class="models ens-models" aria-label="앙상블 메테오그램 선택" hidden></nav>
+  <nav id="cmp-models" class="models cmp-models" aria-label="강수 비교 선택" hidden></nav>
   <nav id="map-tabs" class="tabs" aria-label="차트 종류" hidden>
     <button data-tab="map">차트</button><button data-tab="anom">편차</button>
   </nav>
@@ -79,11 +83,11 @@
         <tr><td>AIFS</td><td>14:20</td><td>20:25</td><td>02:25</td><td>08:25</td></tr>
         <tr><td>IFS 0.25°</td><td>16:35</td><td>21:30</td><td>04:35</td><td>09:30</td></tr>
         <tr><td>IFS 0.1°</td><td>18:40</td><td>23:30</td><td>06:40</td><td>11:30</td></tr>
-        <tr><td>KIM 한반도</td><td>14:25경</td><td>–</td><td>다음 날 02:11경</td><td>–</td></tr>
+        <tr><td>KIM</td><td>14:25경</td><td>–</td><td>다음 날 02:11경</td><td>–</td></tr>
       </table>
       ECMWF 공개자료 미러(Google Cloud)에 런 전체가 올라온 시각을 2026-11-14~15에 잰 값이에요(날마다 몇 분씩 달라질 수 있어요).
       ECMWF 자료가 앱에 반영되기까지는 10분~1시간쯤 더 걸려요.<br>
-      KIM 한반도(지역예보)는 2026년 11월 17일 00Z·12Z 예보에서 기상청 API허브의 +84시간 해면기압 자료를 받을 수 있었던 시각이에요.
+      KIM(한반도 지역예보)은 2026년 11월 17일 00Z·12Z 예보에서 기상청 API허브의 +84시간 해면기압 자료를 받을 수 있었던 시각이에요.
       00Z 시각은 실행 기록으로 추정했어요. 실제 공개는 더 빨랐을 수 있어요.
     </section>
   </main>
@@ -101,7 +105,7 @@
           새 런은 발표 후 약 7시간 뒤에 모든 예보시간이 갖춰지고, 그 뒤 30분~1시간 안에 반영됩니다. 최근 3일(12개 런)을 보관합니다.</p>
       </details>
       <details>
-        <summary>모델 (IFS 0.25° · IFS 0.1° · AIFS · AIFS-ENS · ECMWF ENS · KIM 한반도)</summary>
+        <summary>모델 (IFS 0.25° · IFS 0.1° · AIFS · AIFS-ENS · ECMWF ENS · KIM)</summary>
         <ul>
           <li><b>IFS 0.25°</b>: ECMWF 수치모델(IFS) 결정론 예보를 0.25° 격자로 받은 자료. +144h까지 3시간, 그 뒤 6시간 간격.</li>
           <li><b>IFS 0.1°</b>: 같은 IFS 예보의 0.1° 격자 자료(시간 간격은 0.25°와 같음). 지형·해안선 근처 표현이 더 세밀해요.
@@ -113,13 +117,13 @@
             빨간 점선은 0°C, 연한 빨간 점선은 850 hPa −8°C(눈·비 참고선)예요.</li>
           <li><b>ECMWF ENS</b>: ECMWF 수치모델(IFS) 앙상블 50개 멤버로 그린 같은 도시별 그래프(0.25° 자료에는 대조 런이 없어요).
             +144h까지 3시간, 그 뒤 6시간 간격, 00·12 UTC 런만 +360h까지. AIFS-ENS와 칩이 같아서 모델만 바꿔 비교할 수 있어요.
-            두 앙상블 버튼은 모델 버튼 아래 줄에 있고, 앙상블을 보는 동안에는 위 차트 칩 대신 도시 칩만 보여요.</li>
+            두 앙상블은 맨 위 <b>앙상블</b> 탭에 있고, 거기서는 차트 칩 대신 도시 칩만 보여요.</li>
           <li><b>예보</b>: 기상청 API허브의 초단기예보·단기예보 격자 그림(기상청이 만든 그림 그대로)을 지금 시각부터 보여줘요.
             위 런 선택 칸에서 두 방식을 고를 수 있어요. <b>초단기 → 단기</b>: 앞의 몇 시간(+0~+5h)은 매시 발표되는 초단기예보,
             그 뒤는 단기예보. <b>단기만</b>: 처음부터 단기예보만. 단기예보는 하루 8번(02·05·08·11·14·17·20·23시) 발표되고
             글피(20·23시 발표는 그다음 날)까지 1시간 간격이에요. 강수확률·적설은 단기예보에만 있어요.
             강수량·적설은 단기예보에서 6시간 누적, 초단기예보에서 1시간 강수량이에요. 기상청 그림에 범례가 없어 범례는 표시하지 않아요.</li>
-          <li><b>KIM 한반도</b>: KIM 지역예보(3 km)를 한반도 중심 지도(약 119.5~132.5°E, 31~42.9°N, 북한 거의 전체 포함)에
+          <li><b>KIM</b>: KIM 지역예보(3 km)를 한반도 중심 지도(약 119.5~132.5°E, 31~42.9°N, 북한 거의 전체 포함)에
             그린 것. 00·12 UTC 런만, 3시간 간격 +84h까지(지상·강수와 지상 기온은 2026-11-24 12 UTC 런부터, 강설은 2026-11-25 런부터 1시간 간격). 기상청 API허브 하루 한도 때문에 한반도 주변만 잘라 받아요(2026-11-24부터,
             그 전 런은 넓은 지도). 500, 지상·강수, 강설, 지상 기온, 925·850(+수분속, 상당온위), 700(+습도, 상당온위)이에요.</li>
         </ul>

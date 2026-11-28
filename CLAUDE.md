@@ -30,7 +30,8 @@ Full project brief: [docs/SPEC.md](docs/SPEC.md). Read it first.
 - Workflows: `publish.yml` (main only: poll ECMWF models, render, upload to R2), `kim.yml` (main only: the same for
   the KMA API Hub KIM models, `poll --models kim`), `pages.yml` (main only: web app to Pages), `ci.yml` (branches: tests + smoke render),
   `android.yml` (debug APK on branches; signed release from main only),
-  `forecast.yml` (main only: KMA 초단기/단기 images for the 예보 tab, `render/dfs.py`),
+  `forecast.yml` (main only: KMA 초단기/단기 images for the 예보 tab, `render/dfs.py`, then the 강수 비교 frames, `render/compare.py`),
+  `radar.yml` (main only, every 10 min: the newest radar accumulation for 강수 비교, `python -m render radar-now`),
   `clim.yml` (main only, manual: climate for the ENS graph lines and the 편차 maps, `render/clim.py`),
   `measure.yml` (Stage 0 measurements, manual), `pages-test.yml` (M6, manual).
 - Design notes: `docs/STAGE1.md`; decisions: `docs/DECISIONS.md`.

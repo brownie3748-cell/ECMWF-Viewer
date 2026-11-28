@@ -13,6 +13,12 @@ on:
       m9_round:
         description: "M9: measurement round (1, 2 or 3)"
         default: "1"
+      m10_round:
+        description: "M10: measurement round (1 or 2)"
+        default: "1"
+      m10_urls:
+        description: "M10: extra radar / grid URL(s) to try, without the authKey (space separated)"
+        default: ""
 
 permissions:
   contents: read
@@ -101,6 +107,15 @@ jobs:
           KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
           M9_ROUND: ${{ inputs.m9_round }}
         run: python -m measure.m9_kma_dfs
+
+      - name: M10 radar / forecast-grid sources (강수 비교)
+        if: inputs.only == 'm10'
+        continue-on-error: true
+        env:
+          KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
+          M10_URLS: ${{ inputs.m10_urls }}
+          M10_ROUND: ${{ inputs.m10_round }}
+        run: python -m measure.m10_radar
 
       - name: Report to job summary
         if: always()

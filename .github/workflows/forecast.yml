@@ -1,6 +1,7 @@
 name: forecast
 
-# KMA forecast images for the "예보" tab (초단기예보 / 단기예보 from the KMA API Hub), copied to R2 under dfs/.
+# KMA forecast images for the "예보" tab (초단기예보 / 단기예보 from the KMA API Hub), copied to R2 under dfs/,
+# then the 강수 비교 frames (Radar Center accumulation images + KMA forecast grids) under compare/.
 # Own schedule and concurrency group: a two-hour KIM run in publish.yml never holds it back. Main only.
 on:
   schedule:
@@ -34,6 +35,11 @@ jobs:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: requirements.lock
+      - name: Cache Natural Earth coastlines (cartopy)
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/cartopy
+          key: cartopy-naturalearth-v2
       - name: Install
         run: pip install -r requirements.lock
       - name: Fetch, upload to R2, prune, dfs/index.json
@@ -44,3 +50,12 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
         run: python -m render dfs --store r2 ${{ inputs.force && '--force' || '' }}
+      - name: 강수 비교 (radar accumulation + forecast grids), compare/index.json
+        if: always()
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
+        run: python -m render compare --store r2
