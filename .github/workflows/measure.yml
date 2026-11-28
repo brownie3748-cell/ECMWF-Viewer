@@ -13,6 +13,9 @@ on:
       m9_round:
         description: "M9: measurement round (1, 2 or 3)"
         default: "1"
+      m10_round:
+        description: "M10: measurement round (1 or 2)"
+        default: "1"
       m10_urls:
         description: "M10: extra radar / grid URL(s) to try, without the authKey (space separated)"
         default: ""
@@ -111,6 +114,7 @@ jobs:
         env:
           KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
           M10_URLS: ${{ inputs.m10_urls }}
+          M10_ROUND: ${{ inputs.m10_round }}
         run: python -m measure.m10_radar
 
       - name: Report to job summary

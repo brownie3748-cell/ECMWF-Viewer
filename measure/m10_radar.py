@@ -26,7 +26,7 @@ import requests
 
 from measure.common import IMAGES, guarded, md_table, save
 
-TIMEOUT = 60
+TIMEOUT = 120
 KST = dt.timezone(dt.timedelta(hours=9))
 HUB = "https://apihub.kma.go.kr/api/"
 RADAR_CGI = ("https://radar.kma.go.kr/cgi-bin/com_gis/radar_comp_gis_realtime_hsp?D_VER=HSP&D_TYPE=RN&COMP_MIX=2"
@@ -58,7 +58,7 @@ def _inspect(b: bytes) -> dict:
         pass
     txt = b[:4000].decode("utf-8", "replace") if b else ""
     lines = b.decode("utf-8", "replace").splitlines() if len(b) < 5_000_000 else []
-    info.update(kind="text", lines=len(lines), head=txt[:240].replace("\n", " / "))
+    info.update(kind="text", lines=len(lines), head=txt[:400].replace("\n", " / "))
     if lines:
         nums = [ln.replace(",", " ").split() for ln in lines if ln and ln[0] not in "#"]
         widths = sorted({len(n) for n in nums})
@@ -66,8 +66,34 @@ def _inspect(b: bytes) -> dict:
     return info
 
 
+def _round2(now: dt.datetime) -> list[tuple[str, str, str, bool]]:
+    """Round 2 (owner's grid URLs, 2026-11-28): 단기 PCP / 초단기 RN1 grids as numbers, an older issuance (archive),
+    and the grid-number <-> lon/lat helper at the grid corners and at the documented origin."""
+    d = now.replace(minute=0)
+    while d.hour not in SHRT_ISSUE_H or now - d < dt.timedelta(minutes=40):
+        d -= dt.timedelta(hours=1)
+    g = HUB + "typ01/cgi-bin/url/"
+    out = []
+    for f, tag in ((d, "latest"), (d - dt.timedelta(hours=24), "24 h older")):
+        for h in (1, 3):
+            out.append(("F shrt grid", f"PCP {tag} +{h}h",
+                        g + f"nph-dfs_shrt_grd?tmfc={f:%Y%m%d%H}&tmef={f + dt.timedelta(hours=h):%Y%m%d%H}&vars=PCP", True))
+    v = now.replace(minute=0) - dt.timedelta(hours=1)
+    for m in (0, 10, 30, 40):
+        out.append(("G vsrt grid", f"RN1 tmfc HH{m:02d} +1h",
+                    g + f"nph-dfs_vsrt_grd?tmfc={v:%Y%m%d%H}{m:02d}&tmef={v + dt.timedelta(hours=1):%Y%m%d%H}&vars=RN1",
+                    True))
+    out.append(("G vsrt grid", "RN1 24 h older", g + f"nph-dfs_vsrt_grd?tmfc={v - dt.timedelta(hours=24):%Y%m%d%H}10"
+                f"&tmef={v - dt.timedelta(hours=23):%Y%m%d%H}&vars=RN1", True))
+    for x, y in ((1, 1), (149, 253), (43, 136)):
+        out.append(("H grid lonlat", f"x={x} y={y}", g + f"nph-dfs_xy_lonlat?x={x}&y={y}&help=1", True))
+    return out
+
+
 def _requests(now: dt.datetime) -> list[tuple[str, str, str, bool]]:
     """(group, label, url, needs_key)."""
+    if os.environ.get("M10_ROUND") == "2":
+        return _round2(now)
     tm = now.replace(minute=(now.minute // 10) * 10) - dt.timedelta(minutes=10)
     tm_h = now.replace(minute=0) - dt.timedelta(hours=1)
     d = now.replace(minute=0)
@@ -117,6 +143,8 @@ def main():
             b = r.content
             rec.update(status=r.status_code, ctype=r.headers.get("Content-Type"), bytes=len(b),
                        seconds=round(time.monotonic() - t0, 2), sha=hashlib.sha1(b).hexdigest()[:10], **_inspect(b))
+            if rec.get("kind") == "text" and b and r.status_code == 200:      # grids: kept whole for a look
+                (out_dir / f"{i:02d}_{''.join(c if c.isalnum() else '_' for c in label)}.txt").write_bytes(b)
             if rec.get("kind") not in (None, "text") and b:
                 ext = {"PNG": "png", "GIF": "gif", "JPEG": "jpg"}.get(rec["kind"], "bin")
                 (out_dir / f"{i:02d}_{''.join(c if c.isalnum() else '_' for c in label)}.{ext}").write_bytes(b)
