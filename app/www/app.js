@@ -73,6 +73,7 @@ const state = {
   wpsh: localStorage.getItem("wpsh") !== "0",
   timer: null,
   cmp: { frames: [], idx: 0, timer: null },
+  views: {},          // main tab -> {model, run, valid, chart} of its last view
 };
 
 // ------------------------------------------------------------------ theme
@@ -121,6 +122,9 @@ const chartDef = (id) => M().charts.find((c) => c.id === id);
 const isEns = (mod) => mod.charts.length > 0 && mod.charts.every((c) => c.domain === "graph");
 // Model kinds: map charts, ensemble meteograms (lower row), KMA forecast images (예보). Each kind has its own chips.
 const kindOf = (mod) => (mod.kind === "dfs" ? "dfs" : mod.kind === "cmp" ? "cmp" : isEns(mod) ? "ens" : "map");
+// Main tabs (owner 2026-11-28): 차트 (map models and 예보), 앙상블 (meteograms), 강수 비교. Each tab keeps its own view
+// (model, run, valid time, chart) while another tab is open.
+const tabOf = (mod) => ({ ens: "ens", cmp: "cmp" })[kindOf(mod)] || "map";
 function chartKind(id) {
   const mod = state.m.models.find((x) => x.charts.some((c) => c.id === id));
   return mod ? kindOf(mod) : "map";
@@ -371,6 +375,7 @@ function selectModel(id, keepRun, keepValid, findValid) {
   if (!has(mod)) mod = state.m.models.find((x) => x.id === state.m.default_model && has(x)) || state.m.models.find(has);
   state.model = mod.id;
   localStorage.setItem("model", mod.id);
+  localStorage.setItem("model_" + tabOf(mod), mod.id);
   $("attribution").textContent = mod.attribution || state.m.attribution;
   buildRuns();
   state.runIdx = mod.runs.length - 1;
@@ -458,6 +463,24 @@ function selectTab(tab) {
   render();
 }
 
+// Main tab: back to that tab's last view; the first time, its last model (강수 비교: 레이더) at its newest time.
+function selectMain(tab) {
+  if (tabOf(M()) === tab) return;
+  stop();
+  if (run()) state.views[tabOf(M())] = { model: state.model, run: run().run, valid: currentValid(), chart: state.chart };
+  const mods = state.m.models.filter((x) => tabOf(x) === tab && x.runs.length);
+  if (!mods.length) return;
+  const v = state.views[tab];
+  const want = v ? v.model : localStorage.getItem("model_" + tab);
+  const def = mods.find((x) => x.id === state.m.default_model) || mods[0];
+  const id = mods.some((x) => x.id === want) ? want : def.id;
+  if (v) { state.chart = v.chart; selectModel(id, v.run, v.valid); return; }
+  if (tab === "cmp") {
+    const hours = (state.cmpIndex || {}).hours || [];
+    selectModel(id, null, hours.length ? kstKeyDate(hours[hours.length - 1]) : null, true);
+  } else selectModel(id, null, null, false);
+}
+
 function setStatus(msg) { const s = $("status"); s.textContent = msg; s.hidden = !msg; }
 
 // ------------------------------------------------------------------ UI builders
@@ -486,8 +509,6 @@ function buildModels() {
     };
     nav.appendChild(b);
   });
-  $("ens-models").hidden = !$("ens-models").children.length;
-  $("cmp-models").hidden = !$("cmp-models").children.length;
 }
 
 // ENS model: one pill split in two halves, 기온 (plume_<city>) | 강수 (rain_<city>); the city is kept.
@@ -521,6 +542,14 @@ function ensButton(mod) {
 // A model button is disabled only while it has no runs. A model without the chart on screen stays
 // selectable and opens its nearest chart (KIM on 강설 -> 지상·강수); the button is marked .other.
 function updateModels() {
+  const tab = tabOf(M());
+  $("models").hidden = tab !== "map";
+  $("ens-models").hidden = tab !== "ens";
+  $("cmp-models").hidden = tab !== "cmp";
+  document.querySelectorAll("#main-tabs button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.main === tab);
+    b.disabled = !state.m.models.some((x) => tabOf(x) === b.dataset.main && x.runs.length);
+  });
   document.querySelectorAll(".model").forEach((b) => {
     const mod = state.m.models.find((x) => x.id === b.dataset.id);
     const has = chartIn(mod, state.chart) || kindOf(mod) !== kindOf(M());   // other kind: no "nearest chart" mark
@@ -963,6 +992,7 @@ function wire() {
   };
   $("reload").onclick = () => { stop(); init(true, true); };
   document.querySelectorAll("#map-tabs button").forEach((b) => { b.onclick = () => selectTab(b.dataset.tab); });
+  document.querySelectorAll("#main-tabs button").forEach((b) => { b.onclick = () => { if (!b.disabled) selectMain(b.dataset.main); }; });
   $("prev").onclick = () => { stop(); move(-1); };
   $("next").onclick = () => { stop(); move(1); };
   $("play").onclick = togglePlay;

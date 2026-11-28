@@ -3,8 +3,8 @@ on the KIM Korea map in the radar's colours, per issuance (= the forecast's "run
 
 Grid (measured M10 round 2, 2026-11-28): 149 x 253 comma-separated values, row 0 = south, -99 = no value (the
 forecast covers land and the near coast only); the 5 km KMA forecast grid, LCC 30/60N 126E, origin 38N 126E at
-x = 43, y = 136 (1-based), earth radius 6371.00877 km. Values are KMA's precipitation classes (only 0 and 1 were seen
-on the measurement night; how the classes map to mm is UNVERIFIED and they are drawn as given).
+x = 43, y = 136 (1-based), earth radius 6371.00877 km. Values are mm (owner 2026-11-28, from the KMA forecast legend;
+only 0 and 1 were seen on the measurement night) and are drawn as given.
 The hub is slow and flaky (measured: 2-75 s per call, 504 / 503 on about half the calls), hence retries and a time
 budget; every grid is cached in the store (compare/grid/...) so 3 h sums and later runs do not ask again.
 """

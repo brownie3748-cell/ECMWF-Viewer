@@ -641,7 +641,7 @@ credit = "Source: KMA API Hub, KIM global model (KOGL Type 1, Korea Meteorologic
 
 [[models]]
 id = "kimr"
-label = "KIM 한반도"
+label = "KIM"                      # owner 2026-11-28: was "KIM 한반도"
 min_step = { snow = 1 }            # 1 h window: snowfall from +1 h
 charts = ["gz500", "msl", "snow", "t2m", "gz925", "mfc925", "ept925", "gz850", "mfc850", "ept850", "gz700", "rh700", "ept700",
           "a_t2m", "a_gz500", "a_t925", "a_t850", "a_t700", "a_ept925", "a_ept850", "a_ept700"]   # owner 2026-11-24: Korea map only
@@ -759,16 +759,15 @@ models = { kimr = [1, 3], ifs = [3] }   # windows (h) per model; AIFS left out (
 title = "{window}h Precipitation (mm)"
 windows = [1, 3]
 prefix = "compare/"
-# OFF until the owner confirms the licence (2026-11-28): radar.kma.go.kr's copyright page allows free reuse only of
-# material marked 공공누리 Type 1, otherwise after agreement with KMA; the radar pages carry no such mark. The API Hub
-# data used elsewhere here is KOGL Type 1. With false, the 강수 비교 tab has the models and the KMA forecast only.
-radar_enabled = false
+# Licence: the owner confirmed (2026-11-28) that the Radar Center images are KOGL (공공누리) Type 1, like the API Hub
+# data used elsewhere here: reuse with attribution (radar_credit, NOTICE).
+radar_enabled = true
 keep_hours = 24                     # radar / forecast frames kept (owner: "recent 6 h or older")
 radar_delay_min = 12                # the hour's accumulation is drawn from about HH:10 (5-minute radar data)
 timeout_s = 40
 radar_title = "Radar {window}h Accumulated Precipitation (mm)"
 radar_label = "KMA Weather Radar Center"
-radar_credit = "Source: KMA Weather Radar Center (radar.kma.go.kr), radar composite accumulation image. Placed on this map unmodified."
+radar_credit = "Source: KMA Weather Radar Center (radar.kma.go.kr), radar composite accumulation image (KOGL Type 1, Korea Meteorological Administration). Placed on this map unmodified."
 radar_url = "https://radar.kma.go.kr/cgi-bin/com_gis/radar_comp_gis_realtime_hsp?D_VER=HSP&D_TYPE=RN&COMP_MIX=2&IS_SMOOTH=1&FLICKER=0&HT=0&ACC={acc}&DATE={tm}&LU_LON={lu_lon}&LU_LAT={lu_lat}&RL_LON={rl_lon}&RL_LAT={rl_lat}&IMG_XDIM={w}&IMG_YDIM={h}&X_DIST={x_dist}&Y_DIST={y_dist}&UNIT_BAR=0&ECHO_OPACITY=1"
 # Colours: <= 20 mm read from the radar image itself (each image colour against the HSP composite at the same pixels,
 # 2026-11-28 22:50 KST); above 20 mm from the site's legend (radar.kma.go.kr/openlayer/mobileImages/HSP.png).
@@ -778,7 +777,8 @@ colors = ["#00c8ff", "#009bf5", "#0033f5", "#00ff00", "#00be00", "#008c00", "#00
           "#aa2eff", "#9600d3", "#b4b4e4", "#464cac", "#00038b", "#333333"]
 
 [compare.forecast]
-# KMA forecast rainfall as grid numbers (owner's API Hub URLs, 2026-11-28; measured M10 round 2): 단기 PCP / 초단기 RN1
+# KMA forecast rainfall as grid numbers (owner's API Hub URLs, 2026-11-28; measured M10 round 2): 단기 PCP / 초단기 RN1,
+# values in mm (owner 2026-11-28, with the KMA forecast legend 0.0 / 0.2 / ... / 100 mm)
 url = "https://apihub.kma.go.kr/api/typ01/cgi-bin/url/{cgi}?tmfc={tmfc}&tmef={tmef}&vars={var}"
 shrt = { cgi = "nph-dfs_shrt_grd", horizon_h = 24 }    # issuances whose first 24 h reach the radar hours
 vsrt = { cgi = "nph-dfs_vsrt_grd", horizon_h = 6 }     # 초단기: issued every hour (tmfc HH30), to +6 h

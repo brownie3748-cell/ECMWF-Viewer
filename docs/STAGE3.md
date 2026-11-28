@@ -384,7 +384,7 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   lon/lat and its size in metres (LCC 30/60N 126E lat_0 38N WGS84). Measured M10: requesting exactly the KIM map gave
   a 900 x 1023 PNG whose radar-coverage edge matched the API Hub HSP composite (2026-11-28 22:50 KST) with IoU 0.99
   (best shift 1-2 px). The image is drawn on our map with our coastlines; frames per hour for the last 24 h.
-  `compare.radar_enabled = false` until the owner confirms the licence (see DECISIONS).
+  `compare.radar_enabled = true`: the owner confirmed the images are KOGL Type 1 (2026-11-28).
 - API Hub HSP composite (measured, for reference): `typ04/url/rdr_cmp_file.php?tm=<KST>&data=bin&cmp=hsp`, 289 kB
   gzip, 1024-byte header (time, nx 2305, ny 2881, 500 m) + int16 rain rate (0.01 mm/h), -30000 outside coverage,
   -25000 no echo; LCC 30/60N 126E, origin 38N 126E at grid (1121, 1681). Not used: the owner wants the Radar Center's
@@ -395,8 +395,8 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   one IFS 3 h map 65 kB. Runs resumed after a stopped job lack the maps of the steps rendered before.
 - 예보 (`render/forecast_grid.py`): `nph-dfs_shrt_grd?tmfc=YYYYMMDDHH&tmef=YYYYMMDDHH&vars=PCP` and
   `nph-dfs_vsrt_grd?tmfc=YYYYMMDDHH30&tmef=YYYYMMDDHH&vars=RN1`. Measured round 2: 149 x 253 comma-separated values,
-  row 0 = south, -99 off the land / near-coast area, values 0 and 1 seen (KMA classes; the mm meaning of each class is
-  UNVERIFIED); 2-75 s per call, 504 / 503 on about half the calls. 5 km grid, LCC 30/60N 126E, origin 38N 126E at
+  row 0 = south, -99 off the land / near-coast area, values 0 and 1 seen (mm, owner
+  2026-11-28); 2-75 s per call, 504 / 503 on about half the calls. 5 km grid, LCC 30/60N 126E, origin 38N 126E at
   x 43, y 136. Each grid is cached as `compare/grid/<product>/<fc>/<ef>.npz` (3 h = sum of three 1 h grids); frames
   `compare/fcst/<product>/<fc>/<w>h_<ef>.webp`. Issuances: 단기 whose first 24 h reach the last 24 radar hours,
   초단기 every hour (HH:30, to +6 h). Calls count in the 예보 job's daily file (`_ops/kmadfs-<day>.json`).

@@ -81,6 +81,6 @@ KMA forecast rainfall: 단기예보 (PCP) and 초단기예보 (RN1) grid values 
 (https://apihub.kma.go.kr/). Source: Korea Meteorological Administration (기상청), KOGL Type 1 - attribution
 required. Modifications: 1 h values summed to 3 h; drawn on the KIM Korea map. Not an official KMA product.
 Model maps on this tab are derived from the ECMWF IFS and KIM data credited above.
-Radar accumulation images (only when enabled in render/config.toml, compare.radar_enabled): KMA Weather Radar
-Center (기상레이더센터, https://radar.kma.go.kr/), radar composite accumulation images, placed unmodified on the map.
+Radar accumulation images: KMA Weather Radar Center (기상레이더센터, https://radar.kma.go.kr/), radar composite
+accumulation images, KOGL Type 1 - attribution required. Placed unmodified on the map.
 
