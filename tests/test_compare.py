@@ -35,6 +35,60 @@ class RadarBox(unittest.TestCase):
         self.assertEqual(h[-1], dt.datetime(2026, 11, 28, 22))       # 23 h not finished before HH:12
 
 
+class RadarNow(unittest.TestCase):
+    """최신 radar frame (owner 2026-11-28): 22:40-23:40 goes with 24:00, 22:10-23:10 with 23:00."""
+
+    def test_slot(self):
+        d = dt.datetime
+        self.assertEqual(compare.now_slot(d(2026, 11, 28, 23, 40)), d(2026, 11, 29, 0))
+        self.assertEqual(compare.now_slot(d(2026, 11, 28, 23, 10)), d(2026, 11, 28, 23))
+        self.assertEqual(compare.now_slot(d(2026, 11, 28, 23, 30)), d(2026, 11, 29, 0))
+        self.assertEqual(compare.now_slot(d(2026, 11, 28, 23, 0)), d(2026, 11, 28, 23))
+
+    def test_times(self):
+        t = compare.now_times(CFG, dt.datetime(2026, 11, 28, 23, 25))
+        self.assertEqual(t[0], dt.datetime(2026, 11, 28, 23, 20))      # as of 23:25: 22:20-23:20
+        self.assertEqual(t[1], dt.datetime(2026, 11, 28, 23, 10))
+
+    @staticmethod
+    def _png(mask: bool) -> bytes:
+        import io
+        from PIL import Image
+        a = np.zeros((40, 40, 4), np.uint8)
+        a[..., :3] = 255
+        if mask:
+            a[:20] = (0, 0, 0, 54)                          # outside radar coverage
+        b = io.BytesIO()
+        Image.fromarray(a).save(b, "PNG")
+        return b.getvalue()
+
+    def test_ready(self):
+        self.assertTrue(compare.radar_ready(self._png(True)))
+        self.assertFalse(compare.radar_ready(self._png(False)))   # "not there yet" image
+        self.assertFalse(compare.radar_ready(b"junk"))
+
+    def test_run_now(self):
+        cfg = dict(CFG, compare=dict(CFG["compare"], radar_enabled=True))
+        got = []
+
+        def fake(c, t, w, session=None, tries=3):
+            got.append((t, w))
+            return None if t.minute == 20 else self._png(True)   # 23:20 not there yet -> 23:10
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(compare, "fetch_radar", fake), \
+                mock.patch.object(compare, "radar_frame", lambda c, png, t, w: f"{t:%H%M}-{w}".encode()):
+            st = store_mod.LocalStore(cfg, tmp)
+            compare.run_now(cfg, st, dt.datetime(2026, 11, 28, 23, 25))
+            doc = st.get_json("compare/now.json")
+            self.assertEqual((doc["tm"], doc["slot"]), ("202611282310", "2026112823"))
+            self.assertEqual(st.get_bytes("compare/" + doc["frames"]["3"]), b"2310-3")
+            lines = compare.run_now(cfg, st, dt.datetime(2026, 11, 28, 23, 26))     # nothing newer: no upload
+            self.assertIn("still the newest", lines[0])
+            compare.run_now(cfg, st, dt.datetime(2026, 11, 28, 23, 45))              # 23:40 -> 24시, old deleted
+            doc = st.get_json("compare/now.json")
+            self.assertEqual((doc["tm"], doc["slot"]), ("202611282340", "2026112900"))
+            self.assertIsNone(st.get_bytes("compare/radar/now/1h_202611282310." + doc["frames"]["1"].rsplit(".", 1)[1]))
+
+
 class ForecastGrid(unittest.TestCase):
     def test_parse(self):
         v = np.full(forecast_grid.NX * forecast_grid.NY, -99.0)

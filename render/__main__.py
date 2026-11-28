@@ -48,7 +48,7 @@ def process_order(cfg) -> list[str]:
 
 GROUPS = ("all", "ecmwf", "kim")
 # Each group's request counter in _ops/ (store.month): the jobs never write the same counter file.
-COUNTERS = {"all": "", "ecmwf": "", "kim": "kim-", "dfs": "dfs-", "clim": "clim-"}
+COUNTERS = {"all": "", "ecmwf": "", "kim": "kim-", "dfs": "dfs-", "clim": "clim-", "radar": "radar-"}
 
 
 def group_models(cfg, group: str) -> list[str]:
@@ -535,6 +535,19 @@ def cmd_compare(args, cfg):
         _summary("\n".join(lines))
 
 
+def cmd_radar_now(args, cfg):
+    """강수 비교 최신: the newest 1 h / 3 h radar accumulation (every 10 min, radar.yml), compare/now.json."""
+    from . import compare
+    st = store_mod.open_store(cfg, args.store)
+    use_own_counter(st, "radar")
+    lines = ["## 강수 비교 최신 radar frame", ""]
+    try:
+        lines += compare.run_now(cfg, st)
+    finally:
+        st.save_ops()
+        _summary("\n".join(lines))
+
+
 def cmd_clim(args, cfg):
     """Build clim/points.json (ERA5 climatology + KMA normals at the ENS points) and upload it to the store."""
     from . import clim as clim_mod
@@ -590,13 +603,15 @@ def main(argv=None):
     p.add_argument("--force", action="store_true", help="fetch the newest issuances even if published")
     p = sub.add_parser("compare", help="강수 비교: radar accumulation + KMA forecast-grid frames (compare/)")
     p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
+    p = sub.add_parser("radar-now", help="강수 비교: the newest 1 h / 3 h radar accumulation (compare/now.json)")
+    p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
     p = sub.add_parser("clim", help="climate lines for the ENS graphs (ERA5 climatology + KMA normals), once")
     p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = config.load(args.config)
     {"poll": cmd_poll, "render-run": cmd_render_run, "latest": cmd_latest, "dfs": cmd_dfs, "compare": cmd_compare,
-     "clim": cmd_clim}[args.cmd](args, cfg)
+     "radar-now": cmd_radar_now, "clim": cmd_clim}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

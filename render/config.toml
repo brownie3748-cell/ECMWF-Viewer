@@ -764,6 +764,9 @@ prefix = "compare/"
 radar_enabled = true
 keep_hours = 24                     # radar / forecast frames kept (owner: "recent 6 h or older")
 radar_delay_min = 12                # the hour's accumulation is drawn from about HH:10 (5-minute radar data)
+now_every_min = 10                  # 최신 frame (radar.yml, owner 2026-11-28): end times on 10-minute marks
+now_delay_min = 4                   # measured 2026-11-29: the HH:30 accumulation was there at HH:34; older times are
+                                    # tried when the newest is not there yet (compare.radar_ready)
 timeout_s = 40
 radar_title = "Radar {window}h Accumulated Precipitation (mm)"
 radar_label = "KMA Weather Radar Center"

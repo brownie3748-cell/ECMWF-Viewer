@@ -385,6 +385,14 @@ so two runs did not fit under 4.5 GB. Owner: drop the wide KIM charts and keep t
   a 900 x 1023 PNG whose radar-coverage edge matched the API Hub HSP composite (2026-11-28 22:50 KST) with IoU 0.99
   (best shift 1-2 px). The image is drawn on our map with our coastlines; frames per hour for the last 24 h.
   `compare.radar_enabled = true`: the owner confirmed the images are KOGL Type 1 (2026-11-28).
+- 최신 radar frame (owner 2026-11-28; `compare.run_now`, radar.yml every 10 min): the 1 h / 3 h accumulation ending
+  at the newest 10-minute time the Radar Center has (`now_delay_min` = 4 before now, then older times), uploaded as
+  `compare/radar/now/<w>h_<YYYYMMDDHHMM>` with `compare/now.json` (`tm`, `slot`, `frames`); the previous frames are
+  deleted. The app shows it at `slot`, the model hour nearest its end (22:40-23:40 -> 24시, 22:10-23:10 -> 23시,
+  :30 -> the later hour), in place of that hour's frame, and the forecast frames include the hour after the last
+  radar hour so the slot has them. Measured 2026-11-29 (sandbox): the 00:30 1 h image was there at 00:34; a time the
+  Radar Center does not have yet returns a 4242-byte image without the coverage mask (`radar_ready` rejects it,
+  which also guards the hourly frames) and the next older 10-minute time is tried. Estimated cost: ~5 R2 writes per run, ~700 a day; ~130 kB stored.
 - API Hub HSP composite (measured, for reference): `typ04/url/rdr_cmp_file.php?tm=<KST>&data=bin&cmp=hsp`, 289 kB
   gzip, 1024-byte header (time, nx 2305, ny 2881, 500 m) + int16 rain rate (0.01 mm/h), -30000 outside coverage,
   -25000 no echo; LCC 30/60N 126E, origin 38N 126E at grid (1121, 1681). Not used: the owner wants the Radar Center's

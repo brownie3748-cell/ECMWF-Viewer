@@ -246,12 +246,24 @@ async function addForecastModel(m) {
 // source changes, so 레이더 -> KIM shows the same hour.
 const CMP_SOURCES = [["radar", "레이더"], ["kimr", "KIM"], ["ifs", "IFS"], ["shrt", "단기"], ["vsrt", "초단기"]];
 const pad3 = (n) => String(n).padStart(3, "0");
+const nowHm = (tm) => `${+tm.slice(8, 10)}:${tm.slice(10, 12)}`;          // "202611290030" -> "0:30"
+function nowRange(tm, w) {                                                 // KST "23:30~0:30"
+  const end = new Date(Date.UTC(+tm.slice(0, 4), +tm.slice(4, 6) - 1, +tm.slice(6, 8), +tm.slice(8, 10), +tm.slice(10, 12)));
+  const st = addH(end, -w);
+  return `${st.getUTCHours()}:${String(st.getUTCMinutes()).padStart(2, "0")}~${nowHm(tm)}`;
+}
 function utcKey(d) {
   return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}${String(d.getUTCHours()).padStart(2, "0")}`;
 }
-function buildCompareModels(m, idx) {
+// compare/now.json (radar.yml, every 10 min): the newest 1 h / 3 h radar accumulation to a 10-minute time (tm), shown at
+// the model hour nearest its end (slot: 22:40-23:40 -> 24시, 22:10-23:10 -> 23시), in place of that hour's frame.
+function cmpNowOk(idx, now) {
+  return now && now.slot && now.frames && kstKeyDate(now.slot) >= kstKeyDate(idx.hours[idx.hours.length - 1]);
+}
+function buildCompareModels(m, idx, now) {
   if (!idx || !idx.hours || !idx.hours.length) return [];
   const hours = new Set(idx.hours.map((h) => kstKeyDate(h).getTime()));
+  if (cmpNowOk(idx, now)) hours.add(kstKeyDate(now.slot).getTime());
   const charts = (ws) => ws.map((w) => ({ id: "cmp" + w, title: `${w}시간 누적`, domain: "cmp" }));
   const ext = idx.ext || "png";
   const out = [];
@@ -271,6 +283,12 @@ function buildCompareModels(m, idx) {
   for (const [w, frames] of Object.entries(idx.radar || {})) {
     const u = (radar.urls["cmp" + w] = {});
     for (const [h, path] of Object.entries(frames)) u[Math.round((kstKeyDate(h) - r0) / 3600e3)] = state.base + "compare/" + path;
+  }
+  if (cmpNowOk(idx, now)) {                // 최신: replaces its slot hour's frame
+    const s = Math.round((kstKeyDate(now.slot) - r0) / 3600e3);
+    for (const [w, path] of Object.entries(now.frames)) (radar.urls["cmp" + w] ||= {})[s] = state.base + "compare/" + path;
+    radar.nowStep = s;
+    radar.nowTm = now.tm;
   }
   model("radar", "레이더", idx.radar_credit, [finish(radar)]);
   // models: the runs' own 강수 비교 maps whose valid hour is among the radar hours
@@ -306,12 +324,21 @@ function buildCompareModels(m, idx) {
   }
   return out;
 }
+async function fetchCmpNow() {
+  try {
+    const res = await fetch(state.base + "compare/now.json?t=" + Date.now(), { cache: "no-store" });
+    return res.ok ? await res.json() : null;
+  } catch (e) {
+    return null;
+  }
+}
 async function addCompareModels(m) {
   try {
     const res = await fetch(state.base + "compare/index.json?t=" + Date.now(), { cache: "no-store" });
     if (!res.ok) return;
     state.cmpIndex = await res.json();
-    m.models.push(...buildCompareModels(m, state.cmpIndex));
+    state.cmpNow = await fetchCmpNow();
+    m.models.push(...buildCompareModels(m, state.cmpIndex, state.cmpNow));
   } catch (e) {
     console.warn("강수 비교 자료 없음", e);   // the other models work without it
   }
@@ -347,7 +374,7 @@ async function refreshLive() {
     if (m.generated_utc === state.m.generated_utc) return;
     const dfs = state.m.models.find((x) => x.kind === "dfs");
     if (dfs) m.models.push(dfs);                // 예보 has its own index (forecast.yml), kept as it is
-    m.models.push(...buildCompareModels(m, state.cmpIndex));   // model maps of the new runs, same radar hours
+    m.models.push(...buildCompareModels(m, state.cmpIndex, state.cmpNow));   // model maps of the new runs, same radar hours
     const prev = run() ? run().run : null;
     const prevValid = prev ? addH(parseRun(prev), state.step) : null;
     if (state.timer || $("compare-dlg").open) return;      // started while the manifest loaded
@@ -358,6 +385,22 @@ async function refreshLive() {
   } catch (e) {
     console.warn("새로고침 실패", e);
   }
+}
+
+// 강수 비교 open: fetch compare/now.json every minute; a new 최신 frame rebuilds the 강수 비교 sources. Whoever was on
+// the newest radar frame moves on to the new one.
+async function refreshCmpNow() {
+  if (document.hidden || state.timer || $("compare-dlg").open || !state.m || kindOf(M()) !== "cmp" || !state.cmpIndex) return;
+  const now = await fetchCmpNow();
+  if (!now || (state.cmpNow && now.tm === state.cmpNow.tm) || state.timer || kindOf(M()) !== "cmp") return;
+  const r = run();
+  const onNewest = r && r.nowStep != null && state.step === r.nowStep;
+  const prevValid = r ? currentValid() : null;
+  state.cmpNow = now;
+  state.m.models = state.m.models.filter((x) => x.kind !== "cmp").concat(buildCompareModels(state.m, state.cmpIndex, now));
+  buildModels();
+  buildChartPicker();
+  selectModel(state.model, r ? r.run : null, onNewest && cmpNowOk(state.cmpIndex, now) ? kstKeyDate(now.slot) : prevValid);
 }
 
 // True if run r has an image for exactly this valid time on the current chart.
@@ -670,7 +713,8 @@ function buildStepGrid() {
     b.className = "step";
     b.dataset.step = String(s);
     // 강수 비교: the hour (KST) the accumulation ends, e.g. "21시"; elsewhere the forecast hour (+h)
-    b.textContent = M().kind === "cmp" ? `${addH(parseRun(r.run), s + 9).getUTCHours()}시` : String(s).padStart(3, "0");
+    b.textContent = M().kind !== "cmp" ? String(s).padStart(3, "0")
+      : s === r.nowStep ? nowHm(r.nowTm) : `${addH(parseRun(r.run), s + 9).getUTCHours()}시`;
     if (!avail.has(s)) { b.classList.add("na"); b.disabled = true; }
     b.onclick = () => { if (!b.disabled) { stop(); state.step = s; render(); } };
     grid.append(b);
@@ -769,6 +813,7 @@ function render() {
     : fmtKst(valid);
   $("valid-sub").textContent = ens ? `${fmtUtc(valid)} 런 · ${M().label} ${chartLabel(state.chart)} ${ensGroupLabel(state.chart)} 앙상블`
     : r.srcs ? `${chartLabel(state.chart)} · ${(r.srcs[state.chart] || {})[state.step] || ""}`
+    : M().kind === "cmp" && state.step === r.nowStep ? `${nowRange(r.nowTm, +state.chart.slice(3))} ${chartLabel(state.chart)} 누적 · 레이더 최신 (10분마다)`
     : M().kind === "cmp" ? `${fmtUtc(valid)}까지 ${chartLabel(state.chart)} 누적 · ${M().label} · ${r.label || runShort(r.run) + " 런"}`
     : `${fmtUtc(valid)} · +${state.step}h · ${M().label} ${chartLabel(state.chart)}`
       + (r.partial && r.steps.length ? ` · 나오는 중 (+${Math.max(...r.steps)}h / +${r.final_step}h)` : "");
@@ -788,7 +833,7 @@ function render() {
   const baseUrl = url(r.run, state.chart, state.step);
   showImages($("img-base"), $("img-overlay"), baseUrl, overlayUrl(r, state.step), true);
 
-  const key = `${M().id}|${r.run}|${state.chart}|${state.wpsh}|${steps.length}`;   // a live run gains steps
+  const key = `${M().id}|${r.run}|${state.chart}|${state.wpsh}|${steps.length}|${r.nowTm || ""}`;   // a live run gains steps
   if (key !== gridKey) { gridKey = key; buildStepGrid(); prefetch(); } else updateStepGrid();
 }
 
@@ -1024,3 +1069,4 @@ function wire() {
 wire();
 init(false);
 setInterval(refreshLive, LIVE_REFRESH_MS);
+setInterval(refreshCmpNow, LIVE_REFRESH_MS);

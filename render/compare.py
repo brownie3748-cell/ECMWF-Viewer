@@ -7,6 +7,10 @@
 - KMA forecast (단기 PCP / 초단기 RN1 grids from the API Hub): drawn on the same map in the same colours, per
   issuance and valid hour (see forecast_frames).
 
+- Radar 최신 (owner 2026-11-28): every 10 min (radar.yml, `python -m render radar-now`) the newest 1 h / 3 h
+  accumulation ending at the newest 10-minute radar time, in compare/now.json. The app shows it at the model hour
+  nearest its end (22:40-23:40 -> 24:00, 22:10-23:10 -> 23:00; :30 -> the later hour), see now_slot.
+
 Everything goes under compare/ with compare/index.json; `python -m render compare` (forecast.yml) keeps it current.
 Measured numbers are in docs/STAGE3.md.
 """
@@ -74,7 +78,9 @@ def _header(cfg, fr, title, right, valid_kst, credit):
     f.text(L / W, (H - 26) / H, title, fontsize=st["title_size"], fontweight="bold", ha="left", va="baseline")
     f.text((L + fr.mw) / W, (H - 26) / H, right, fontsize=st["label_size"] + 1, ha="right", va="baseline")
     utc = valid_kst - dt.timedelta(hours=9)
-    f.text(L / W, 24 / H, f"VALID: {utc:%Y-%m-%d %H}UTC ({valid_kst:%Y-%m-%d %H}KST)", color=st["utc_color"],
+    hm = "%H:%M" if valid_kst.minute else "%H"
+    f.text(L / W, 24 / H, f"VALID: {utc:%Y-%m-%d {hm}}UTC ({valid_kst:%Y-%m-%d {hm}}KST)",
+           color=st["utc_color"],
            fontsize=st["footer_size"], fontweight="bold", ha="left", va="baseline")
     f.text(L / W, 7 / H, credit, fontsize=st["credit_size"], color="#444444", ha="left", va="baseline")
 
@@ -92,19 +98,36 @@ def radar_frame(cfg: dict, png: bytes, valid_kst: dt.datetime, window_h: int) ->
     cmap, norm, lv = plot.compare_cmap(cfg)
     import matplotlib.cm as mcm
     fr.colorbar(mcm.ScalarMappable(norm=norm, cmap=cmap), label="mm", ticks=lv)
-    _header(cfg, fr, c["radar_title"].format(window=window_h), c["radar_label"], valid_kst, c["radar_credit"])
+    right = c["radar_label"]
+    if valid_kst.minute:                                   # 최신 frame: say which minutes it covers
+        right += f"  {valid_kst - dt.timedelta(hours=window_h):%H:%M}-{valid_kst:%H:%M} KST"
+    _header(cfg, fr, c["radar_title"].format(window=window_h), right, valid_kst, c["radar_credit"])
     fmt = cfg["output"]["format"]
     return encode.encode(fr.png_bytes(), fmt, cfg["output"]["png8_colors"], cfg["output"]["webp_quality"])
 
 
-def fetch_radar(cfg: dict, valid_kst: dt.datetime, window_h: int, session=None) -> bytes | None:
+def radar_ready(png: bytes) -> bool:
+    """A real accumulation image has the grey outside-coverage mask (RGBA 0,0,0,54; measured M10). For a time the
+    Radar Center does not have yet it returns a small image without it (measured 2026-11-29: 4242 bytes)."""
+    from PIL import Image
+    try:
+        a = np.asarray(Image.open(io.BytesIO(png)).convert("RGBA"))
+    except Exception:  # noqa: BLE001
+        return False
+    return float(np.mean((a[..., 3] == 54) & (a[..., :3].max(axis=-1) == 0))) > 0.05
+
+
+def fetch_radar(cfg: dict, valid_kst: dt.datetime, window_h: int, session=None, tries: int = 3) -> bytes | None:
     s = session or requests
     u = radar_url(cfg, valid_kst, window_h)
-    for attempt in range(3):
+    for attempt in range(tries):
         try:
             r = s.get(u, timeout=cfg["compare"]["timeout_s"])
             if r.status_code == 200 and r.content[:4] == b"\x89PNG":
-                return r.content
+                if radar_ready(r.content):
+                    return r.content
+                log.info("radar %s %dh: not there yet", f"{valid_kst:%m%d%H%M}", window_h)
+                return None
             log.warning("radar %s %dh: HTTP %s %r", f"{valid_kst:%m%d%H}", window_h, r.status_code, r.content[:80])
         except Exception as e:  # noqa: BLE001
             log.warning("radar %s %dh: %r", f"{valid_kst:%m%d%H}", window_h, e)
@@ -122,6 +145,58 @@ def wanted_hours(cfg: dict, now_kst: dt.datetime) -> list[dt.datetime]:
     c = cfg["compare"]
     last = (now_kst - dt.timedelta(minutes=c["radar_delay_min"])).replace(minute=0)
     return [last - dt.timedelta(hours=i) for i in range(c["keep_hours"])][::-1]
+
+
+def now_slot(t: dt.datetime) -> dt.datetime:
+    """The model hour a 최신 frame ending at t is shown at: the hour nearest its end, i.e. the hour that holds more of
+    the window's last hour (22:40-23:40 -> 24:00, 22:10-23:10 -> 23:00; 23:30 -> 24:00)."""
+    return (t + dt.timedelta(minutes=30)).replace(minute=0, second=0, microsecond=0)
+
+
+def now_times(cfg: dict, now_kst: dt.datetime) -> list[dt.datetime]:
+    """Candidate end times for the 최신 frame, newest first: 10-minute times from now - now_delay_min back 30 min."""
+    c = cfg["compare"]
+    t = now_kst - dt.timedelta(minutes=c["now_delay_min"])
+    t = t.replace(minute=t.minute - t.minute % c["now_every_min"], second=0, microsecond=0)
+    return [t - dt.timedelta(minutes=c["now_every_min"] * i) for i in range(4)]
+
+
+def run_now(cfg: dict, st, now: dt.datetime | None = None) -> list[str]:
+    """The 최신 radar frames (1 h / 3 h to the newest 10-minute time the Radar Center has) and compare/now.json;
+    the previous 최신 frames are deleted."""
+    c = cfg["compare"]
+    if not c.get("radar_enabled", False):
+        return ["- radar 최신: radar off (compare.radar_enabled)"]
+    now = now or kst_now()
+    key = c["prefix"] + "now.json"
+    prev = st.get_json(key) or {}
+    session = requests.Session()
+    t0 = time.monotonic()
+    ext = encode.EXT[cfg["output"]["format"]]
+    for t in now_times(cfg, now):
+        tm = f"{t:%Y%m%d%H%M}"
+        if tm <= prev.get("tm", ""):
+            return [f"- radar 최신: {prev.get('tm')} is still the newest ({time.monotonic() - t0:.0f} s)"]
+        pngs = {w: fetch_radar(cfg, t, w, session, tries=2) for w in c["windows"]}
+        if all(pngs.values()):
+            break
+    else:
+        return [f"- radar 최신: nothing newer than {prev.get('tm')} ({time.monotonic() - t0:.0f} s)"]
+    frames = {}
+    st.check_budget(len(pngs) + 2)
+    for w, png in pngs.items():
+        k = f"{c['prefix']}radar/now/{w}h_{tm}.{ext}"
+        st.put_bytes(k, radar_frame(cfg, png, t, w), cfg["storage"]["image_cache_control"])
+        frames[str(w)] = k.split("/", 1)[1]
+    doc = {"schema": 1, "generated_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+           "tz": "KST", "tm": tm, "slot": f"{now_slot(t):%Y%m%d%H}", "frames": frames}
+    st.put_bytes(key, json.dumps(doc, separators=(",", ":")).encode(), "no-cache, max-age=0")
+    old = [c["prefix"] + p for p in prev.get("frames", {}).values() if p not in frames.values()]
+    if old:
+        st.delete_keys(old, {})
+    lag = (now - t).total_seconds() / 60
+    return [f"- radar 최신: {t:%H:%M} KST (slot {now_slot(t):%H}시), {lag:.0f} min behind now, "
+            f"{time.monotonic() - t0:.0f} s (measured)"]
 
 
 def run(cfg: dict, st, now: dt.datetime | None = None) -> list[str]:
@@ -160,7 +235,8 @@ def run(cfg: dict, st, now: dt.datetime | None = None) -> list[str]:
     for w in c["windows"]:
         for k in [k for k in radar[w] if k not in keep]:
             gone.append(c["prefix"] + radar[w].pop(k))
-    fc_lines, fcst = forecast_grid.run(cfg, st, man.get("forecast", {}), hours, sizes)
+    fc_hours = hours + [hours[-1] + dt.timedelta(hours=1)]      # the 최신 frame's slot (now_slot) can be the next hour
+    fc_lines, fcst = forecast_grid.run(cfg, st, man.get("forecast", {}), fc_hours, sizes)
     lines += fc_lines
     if gone:
         st.delete_keys(gone, sizes)
