@@ -14,6 +14,8 @@ import pathlib
 import shutil
 import time
 
+import numpy as np
+
 from . import config as config_mod
 from . import derive, encode, fetch, grib, plot
 
@@ -59,6 +61,62 @@ def chart_jobs(cfg, F, P, run, step, clim=None):
     return jobs
 
 
+def compare_windows(cfg: dict) -> list[int]:
+    """강수 비교 windows (h) this model draws: config compare.models (KIM 1 / 3 h, IFS 3 h)."""
+    return list((cfg.get("compare") or {}).get("models", {}).get(cfg["model_id"], []))
+
+
+def keep_tp_for_compare(cfg: dict, F, step: int, gdir: pathlib.Path) -> None:
+    """Worker: the step's cumulative precipitation on the KIM map's lat/lon box (tp/<step>.npz next to the GRIB),
+    read by compare_charts once every step is done (a window spans steps rendered by different workers)."""
+    if not compare_windows(cfg) or step > cfg["compare"]["max_step"] or ("tp", 0) not in F.data:
+        return
+    b = plot.domain_geometry(cfg["domains"][cfg["compare"]["domain"]])["bbox"]
+    S = F.crop(b["lat_min"] - 0.5, b["lat_max"] + 0.5, b["lon_min"] - 0.5, b["lon_max"] + 0.5)
+    d = gdir / "tp"
+    d.mkdir(exist_ok=True)
+    np.savez(d / f"{step}.npz", lat=S.lat, lon=S.lon, tp=S[("tp", 0)])
+
+
+def render_compare(run_s: str, step: int, window: int, now_path: str, prev_path: str, outdir: str) -> dict:
+    """Worker: one 강수 비교 map (precipitation of `window` hours ending at step, the radar's colours)."""
+    cfg = _CFG
+    run = dt.datetime.strptime(run_s, "%Y%m%d%H")
+    a, b = np.load(now_path), np.load(prev_path)
+    acc = derive.tp_accum_mm(a["tp"], b["tp"])
+    fr = plot.chart_compare(cfg, a["lat"], a["lon"], acc, run, step, window)
+    fmt = cfg["output"]["format"]
+    data = encode.encode(fr.png_bytes(), fmt, cfg["output"]["png8_colors"], cfg["output"]["webp_quality"])
+    path = pathlib.Path(outdir) / f"cmp{window}_{step:03d}.{encode.EXT[fmt]}"
+    path.write_bytes(data)
+    return {"step": step, "window": window, "bytes": len(data)}
+
+
+def compare_charts(cfg: dict, pool, run: dt.datetime, gdir: pathlib.Path, rdir: pathlib.Path) -> dict:
+    """강수 비교 maps of a finished run: for each window, every step whose window start was also rendered here.
+    Returns {"cmp": {window: [steps]}, "images", "bytes"} (empty for a model without compare windows)."""
+    tdir = gdir / "tp"
+    have = {int(p.stem): p for p in tdir.glob("*.npz")} if tdir.exists() else {}
+    futs = []
+    for w in compare_windows(cfg):
+        for s in sorted(have):
+            if s - w in have and s > 0:
+                futs.append(pool.submit(render_compare, f"{run:%Y%m%d%H}", s, w, str(have[s]), str(have[s - w]),
+                                        str(rdir)))
+    out = {}
+    nbytes = 0
+    for f in futs:
+        try:
+            r = f.result()
+        except Exception as e:  # noqa: BLE001        # a 강수 비교 map never fails the run
+            log.warning("%s %s: 강수 비교 map skipped (%r)", cfg["model_id"], f"{run:%Y%m%d%H}", e)
+            continue
+        out.setdefault(str(r["window"]), []).append(r["step"])
+        nbytes += r["bytes"]
+    return {"cmp": {k: sorted(v) for k, v in sorted(out.items())}, "images": sum(len(v) for v in out.values()),
+            "bytes": nbytes} if out else {}
+
+
 def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None, outdir: str) -> dict:
     """Worker: render all charts of one step, write images, delete the GRIB inputs."""
     cfg = _CFG
@@ -69,6 +127,7 @@ def render_step(run_s: str, step: int, grib_path: str, tp_prev_path: str | None,
     F = grib.read(grib_path, cfg["data"]["read_region"])
     P = grib.read(tp_prev_path, cfg["data"]["read_region"]) if tp_prev_path else None
     derive.ensure_rh(F, 700)
+    keep_tp_for_compare(cfg, F, step, pathlib.Path(grib_path).parent)
     sizes = {}
     want = [c["id"] for c in cfg["site"]["charts"]]
     hourly_only = fetch.is_hourly_only(step, cfg)
@@ -240,6 +299,7 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
         missing = pending
         if len(missing) > allow:
             raise RuntimeError(f"{len(missing)} steps failed to download: {missing}")
+        cmp = compare_charts(cfg, pool, run, gdir, rdir)
     shutil.rmtree(gdir, ignore_errors=True)
     meta = dict(run_summary(cfg, run, results), **{
         "model": model,
@@ -252,6 +312,10 @@ def render_run(cfg: dict, sources, run: dt.datetime, site: pathlib.Path, work: p
         "wall_seconds": round(time.monotonic() - t0, 1),
         "render_seconds_sum": round(sum(r["seconds"] for r in results), 1),
     })
+    if cmp:                                              # 강수 비교 maps (cmp<window>_<step>), app 0.13
+        meta["cmp"] = cmp["cmp"]
+        meta["images"] += cmp["images"]
+        meta["bytes"] += cmp["bytes"]
     if getattr(sources, "stats", None):
         meta["field_ranges"] = dict(sources.stats)      # KIM: min/max per field, a units sanity check
     if hasattr(sources, "request_summary"):

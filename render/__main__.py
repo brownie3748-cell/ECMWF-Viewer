@@ -522,6 +522,19 @@ def cmd_dfs(args, cfg):
         _summary("\n".join(lines))
 
 
+def cmd_compare(args, cfg):
+    """강수 비교: radar accumulation frames and KMA forecast-grid frames for the last hours (compare/index.json)."""
+    from . import compare
+    st = store_mod.open_store(cfg, args.store)
+    use_own_counter(st, "dfs")                       # runs in forecast.yml: the 예보 job's counter
+    lines = ["## 강수 비교 (radar / forecast frames)", ""]
+    try:
+        lines += compare.run(cfg, st)
+    finally:
+        st.save_ops()
+        _summary("\n".join(lines))
+
+
 def cmd_clim(args, cfg):
     """Build clim/points.json (ERA5 climatology + KMA normals at the ENS points) and upload it to the store."""
     from . import clim as clim_mod
@@ -575,12 +588,15 @@ def main(argv=None):
     p = sub.add_parser("dfs", help="KMA forecast images (초단기 / 단기) for the 예보 tab")
     p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
     p.add_argument("--force", action="store_true", help="fetch the newest issuances even if published")
+    p = sub.add_parser("compare", help="강수 비교: radar accumulation + KMA forecast-grid frames (compare/)")
+    p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
     p = sub.add_parser("clim", help="climate lines for the ENS graphs (ERA5 climatology + KMA normals), once")
     p.add_argument("--store", default="r2", help="r2 (credentials from env) or local:<dir>")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = config.load(args.config)
-    {"poll": cmd_poll, "render-run": cmd_render_run, "latest": cmd_latest, "dfs": cmd_dfs, "clim": cmd_clim}[args.cmd](args, cfg)
+    {"poll": cmd_poll, "render-run": cmd_render_run, "latest": cmd_latest, "dfs": cmd_dfs, "compare": cmd_compare,
+     "clim": cmd_clim}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

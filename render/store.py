@@ -81,6 +81,16 @@ class _Base:
         self.ops["class_a"] += max(1, -(-len(sizes) // 1000))
         return sizes
 
+    def delete_keys(self, keys: list[str], sizes: dict[str, int]) -> int:
+        """Delete these objects (1000 per call) and drop them from sizes."""
+        keys = list(keys)
+        for i in range(0, len(keys), 1000):
+            self._delete(keys[i:i + 1000])
+            self.ops["class_a"] += 1
+        for k in keys:
+            sizes.pop(k, None)
+        return len(keys)
+
     def delete_prefix(self, prefix: str, sizes: dict[str, int]) -> int:
         keys = [k for k in sizes if k.startswith(prefix)]
         for i in range(0, len(keys), 1000):
